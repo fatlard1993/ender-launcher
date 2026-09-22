@@ -6,19 +6,37 @@ import * as fabric from './fabric';
 import * as mojang from './mojang';
 import { applicableArguments } from './rules';
 
-/**
- * What `resolvePlan` can actually build. Quilt, Forge and NeoForge each need their own loader
- * metadata and their own launch shape; until that exists, naming one is refused rather than
- * quietly answered with a vanilla launch.
- */
-export const SUPPORTED_LOADERS = new Set(['fabric', 'vanilla']);
+/** Loaders mcm understands well enough to hold an instance and manage its mods. */
+export const KNOWN_LOADERS = new Set(['fabric', 'quilt', 'forge', 'neoforge', 'vanilla']);
 
-export const assertSupportedLoader = loader => {
+/**
+ * Loaders mcm can build a launch command for.
+ *
+ * Holding an instance and launching it are separate abilities, and only the second one needs the
+ * loader's own metadata and launch shape. An instance on a loader mcm cannot start is still worth
+ * keeping: it lists, it reports, and its mods resolve, because every mod source narrows by loader
+ * already. Refusing it at the door would only mean it lives nowhere.
+ */
+export const LAUNCHABLE_LOADERS = new Set(['fabric', 'vanilla']);
+
+export const isLaunchable = type => LAUNCHABLE_LOADERS.has(type ?? 'vanilla');
+
+export const assertKnownLoader = loader => {
 	const type = loader?.type ?? 'vanilla';
 
-	if (SUPPORTED_LOADERS.has(type)) return type;
+	if (KNOWN_LOADERS.has(type)) return type;
 
-	throw new Error(`mcm has no support for the ${type} loader. It builds fabric and vanilla launches.`);
+	throw new Error(`"${type}" is not a Minecraft loader mcm knows. It knows: ${[...KNOWN_LOADERS].join(', ')}.`);
+};
+
+export const assertLaunchableLoader = loader => {
+	const type = assertKnownLoader(loader);
+
+	if (isLaunchable(type)) return type;
+
+	throw new Error(
+		`mcm cannot build a ${type} launch yet, so this instance can be managed here but must be started elsewhere. It builds fabric and vanilla launches.`,
+	);
 };
 
 /** Arguments older manifests assume rather than state. */
@@ -48,7 +66,7 @@ const dedupeLibraries = jobs => {
 
 /** Everything needed to install and launch a pairing of game version and loader. */
 export const resolvePlan = async ({ minecraft, loader, side = 'client', donors = {} }) => {
-	assertSupportedLoader(loader);
+	assertLaunchableLoader(loader);
 
 	const libraryDonors = donors.libraries ?? [];
 	const { meta } = await mojang.versionMeta(minecraft);

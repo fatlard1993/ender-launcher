@@ -2,7 +2,7 @@ import { readdir, realpath } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 
 import { fetchWithRetry, sha1 } from '../download';
-import { assertSupportedLoader } from '../meta/resolve';
+import { assertKnownLoader } from '../meta/resolve';
 import { readJson } from '../json';
 
 const LOADER_UIDS = {
@@ -85,8 +85,7 @@ export const fromPrism = async (directory, { name } = {}) => {
 
 	const loader = loaderUid ? { type: LOADER_UIDS[loaderUid], version: components[loaderUid] } : { type: 'vanilla' };
 
-	// Refused at the door rather than imported into an instance that would launch as vanilla.
-	assertSupportedLoader(loader);
+	assertKnownLoader(loader);
 
 	const gameDir = await realpath(join(directory, '.minecraft')).catch(() => join(directory, '.minecraft'));
 

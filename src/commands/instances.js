@@ -8,10 +8,18 @@ import { readPack, unpackInto } from '../instance/pack';
 import { entryKey, resolveAll } from '../mods';
 import { latestLoader } from '../meta/fabric';
 import { resolveVersionId } from '../meta/mojang';
-import { assertSupportedLoader } from '../meta/resolve';
+import { assertKnownLoader, isLaunchable } from '../meta/resolve';
 import { done, info, paint, plural, step, warn } from '../out';
 import { parseModSpec, syncInstance } from './mods';
 import { targetInstance, targetName } from './context';
+
+/** Said once, where the instance is made, rather than left for a failed launch to explain. */
+const warnIfUnlaunchable = manifest => {
+	if (isLaunchable(manifest.loader?.type)) return;
+
+	warn(`mcm cannot start a ${manifest.loader.type} instance yet.`);
+	info(paint.dim('  Its mods are managed here as usual; launch it from another launcher.'));
+};
 
 export const ls = async () => {
 	const [found, config] = await Promise.all([instances.list(), readConfig()]);
@@ -27,7 +35,7 @@ export const ls = async () => {
 		const loader =
 			manifest.loader?.type === 'vanilla'
 				? 'vanilla'
-				: `${manifest.loader.type} ${manifest.loader.version ?? 'latest'}`;
+				: `${manifest.loader.type}${manifest.loader.version ? ` ${manifest.loader.version}` : ''}`;
 
 		info(
 			`${active ? paint.green('*') : ' '} ${paint.bold(manifest.name.padEnd(16))} ${manifest.minecraft.padEnd(10)} ${loader.padEnd(18)} ${paint.dim(`${plural(manifest.mods.length, 'mod')}, ${manifest.type}`)}`,
@@ -43,11 +51,14 @@ export const create = async ({ positionals, flags }) => {
 	if (name === undefined) throw new Error('mcm new <name> [mod...]');
 
 	const minecraft = await resolveVersionId(flags.minecraft);
-	const loaderType = assertSupportedLoader({ type: flags.loader ?? 'fabric' });
-	const loader =
-		loaderType === 'vanilla'
-			? { type: 'vanilla' }
-			: { type: loaderType, version: flags.loaderVersion ?? (await latestLoader(minecraft)) };
+	const loaderType = assertKnownLoader({ type: flags.loader ?? 'fabric' });
+	const loader = { type: loaderType };
+
+	if (loaderType !== 'vanilla') {
+		// meta.fabricmc.net answers for fabric alone, so no other loader gets a version invented
+		// for it; whoever knows it can pass --loader-version.
+		loader.version = flags.loaderVersion ?? (loaderType === 'fabric' ? await latestLoader(minecraft) : undefined);
+	}
 
 	const mods = specs.map(spec => {
 		const entry = parseModSpec(spec);
@@ -79,6 +90,8 @@ export const create = async ({ positionals, flags }) => {
 
 	done(`Created ${name} :: Minecraft ${minecraft}, ${loader.type}${loader.version ? ` ${loader.version}` : ''}`);
 	info(paint.dim(`  ${manifest.gameDir}`));
+
+	warnIfUnlaunchable(manifest);
 
 	await activateIfFirst(name);
 
@@ -156,9 +169,13 @@ export const set = async ({ positionals, flags }) => {
 	if (key === 'minecraft') return bump({ positionals: [raw], flags });
 
 	if (key === 'loader') {
-		const type = assertSupportedLoader({ type: raw });
+		const type = assertKnownLoader({ type: raw });
 
-		manifest.loader = type === 'vanilla' ? { type } : { type, version: await latestLoader(manifest.minecraft) };
+		manifest.loader = { type };
+
+		if (type === 'fabric') manifest.loader.version = await latestLoader(manifest.minecraft);
+
+		warnIfUnlaunchable(manifest);
 	} else if (key === 'loaderVersion') {
 		manifest.loader = { ...manifest.loader, version: raw };
 	} else if (key === 'gameDir') {
@@ -191,11 +208,10 @@ export const bump = async ({ positionals, flags }) => {
 
 	manifest.minecraft = minecraft;
 
-	if (manifest.loader?.type && manifest.loader.type !== 'vanilla') {
-		manifest.loader = {
-			...manifest.loader,
-			version: flags.loaderVersion ?? (await latestLoader(minecraft)),
-		};
+	if (manifest.loader?.type === 'fabric') {
+		manifest.loader = { ...manifest.loader, version: flags.loaderVersion ?? (await latestLoader(minecraft)) };
+	} else if (flags.loaderVersion) {
+		manifest.loader = { ...manifest.loader, version: flags.loaderVersion };
 	}
 
 	await instances.write(manifest);
@@ -277,13 +293,13 @@ const importPack = async (path, flags) => {
 		loader: flags.loader ? { type: flags.loader } : undefined,
 	});
 
-	assertSupportedLoader(pack.manifest.loader);
+	assertKnownLoader(pack.manifest.loader);
 
 	if (await instances.exists(pack.manifest.name))
 		throw new Error(`An instance named "${pack.manifest.name}" already exists`);
 
 	// A pack may name a loader without pinning it; the instance should still say which one it got.
-	if (pack.manifest.loader.type !== 'vanilla' && !pack.manifest.loader.version) {
+	if (pack.manifest.loader.type === 'fabric' && !pack.manifest.loader.version) {
 		pack.manifest.loader.version = await latestLoader(pack.manifest.minecraft);
 	}
 
@@ -316,6 +332,8 @@ const importPack = async (path, flags) => {
 
 	reportUnmanaged(unmatched, manifest.gameDir);
 
+	warnIfUnlaunchable(manifest);
+
 	info('');
 	info(paint.dim(`  mcm sync -i ${manifest.name}   to fetch what the pack references`));
 
@@ -340,6 +358,8 @@ const importPrismInstance = async (directory, flags) => {
 	info(paint.dim(`  ${plural(manifest.mods.length, 'mod')} identified on Modrinth`));
 
 	reportUnmanaged(unmatched, manifest.gameDir);
+
+	warnIfUnlaunchable(manifest);
 
 	await activateIfFirst(manifest.name);
 

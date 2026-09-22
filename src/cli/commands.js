@@ -22,7 +22,7 @@ export const commands = {
 		flags: {
 			...depsFlag,
 			minecraft: { alias: 'm', description: 'Game version, or "release" / "snapshot"' },
-			loader: { alias: 'l', description: 'fabric (default) or vanilla' },
+			loader: { alias: 'l', description: 'fabric (default), vanilla, quilt, forge, neoforge' },
 			loaderVersion: { description: 'Pin the loader version' },
 			gameDir: { description: 'Use an existing directory as the game directory' },
 			server: { type: 'boolean', description: 'Make it a server instance' },

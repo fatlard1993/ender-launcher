@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 
 import { ensureFile } from '../src/download';
 import { coordinateToPath } from '../src/meta/maven';
-import { assertSupportedLoader } from '../src/meta/resolve';
+import { assertKnownLoader, assertLaunchableLoader, isLaunchable } from '../src/meta/resolve';
 import { chooseAsset } from '../src/mods/github';
 import { extractArchive } from '../src/archive';
 
@@ -29,16 +29,33 @@ describe('maven coordinates cannot leave the repository root', () => {
 	});
 });
 
-describe('loaders mcm cannot build are refused, not faked', () => {
-	test('fabric and vanilla pass', () => {
-		expect(assertSupportedLoader({ type: 'fabric' })).toBe('fabric');
-		expect(assertSupportedLoader(undefined)).toBe('vanilla');
+describe('holding an instance and launching it are separate abilities', () => {
+	test('every real loader can be held', () => {
+		for (const type of ['fabric', 'quilt', 'forge', 'neoforge', 'vanilla']) {
+			expect(assertKnownLoader({ type })).toBe(type);
+		}
+
+		expect(assertKnownLoader(undefined)).toBe('vanilla');
 	});
 
-	test('everything else throws rather than resolving to a vanilla launch', () => {
-		for (const type of ['quilt', 'forge', 'neoforge', 'banana']) {
-			expect(() => assertSupportedLoader({ type })).toThrow(`no support for the ${type} loader`);
+	test('something that is not a loader at all is still refused', () => {
+		expect(() => assertKnownLoader({ type: 'banana' })).toThrow('not a Minecraft loader');
+	});
+
+	test('only fabric and vanilla can be launched', () => {
+		expect(isLaunchable('fabric')).toBe(true);
+		expect(isLaunchable('vanilla')).toBe(true);
+		expect(isLaunchable(undefined)).toBe(true);
+
+		for (const type of ['quilt', 'forge', 'neoforge']) expect(isLaunchable(type)).toBe(false);
+	});
+
+	test('asking for a launch mcm cannot build says so, rather than answering with vanilla', () => {
+		for (const type of ['quilt', 'forge', 'neoforge']) {
+			expect(() => assertLaunchableLoader({ type })).toThrow(`cannot build a ${type} launch`);
 		}
+
+		expect(assertLaunchableLoader({ type: 'fabric' })).toBe('fabric');
 	});
 });
 
