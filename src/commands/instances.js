@@ -6,7 +6,7 @@ import * as instances from '../instance';
 import { fromPrism, identifyMods } from '../instance/import';
 import { readPack, unpackInto } from '../instance/pack';
 import { entryKey, resolveAll } from '../mods';
-import { latestLoader } from '../meta/fabric';
+import { LOADER_SERVICES } from '../meta/resolve';
 import { resolveVersionId } from '../meta/mojang';
 import { assertKnownLoader, isLaunchable } from '../meta/resolve';
 import { done, info, paint, plural, step, warn } from '../out';
@@ -55,9 +55,7 @@ export const create = async ({ positionals, flags }) => {
 	const loader = { type: loaderType };
 
 	if (loaderType !== 'vanilla') {
-		// meta.fabricmc.net answers for fabric alone, so no other loader gets a version invented
-		// for it; whoever knows it can pass --loader-version.
-		loader.version = flags.loaderVersion ?? (loaderType === 'fabric' ? await latestLoader(minecraft) : undefined);
+		loader.version = flags.loaderVersion ?? (await LOADER_SERVICES[loaderType].latestLoader(minecraft));
 	}
 
 	const mods = specs.map(spec => {
@@ -173,7 +171,7 @@ export const set = async ({ positionals, flags }) => {
 
 		manifest.loader = { type };
 
-		if (type === 'fabric') manifest.loader.version = await latestLoader(manifest.minecraft);
+		if (LOADER_SERVICES[type]) manifest.loader.version = await LOADER_SERVICES[type].latestLoader(manifest.minecraft);
 
 		warnIfUnlaunchable(manifest);
 	} else if (key === 'loaderVersion') {
@@ -208,8 +206,11 @@ export const bump = async ({ positionals, flags }) => {
 
 	manifest.minecraft = minecraft;
 
-	if (manifest.loader?.type === 'fabric') {
-		manifest.loader = { ...manifest.loader, version: flags.loaderVersion ?? (await latestLoader(minecraft)) };
+	if (LOADER_SERVICES[manifest.loader?.type]) {
+		manifest.loader = {
+			...manifest.loader,
+			version: flags.loaderVersion ?? (await LOADER_SERVICES[manifest.loader.type].latestLoader(minecraft)),
+		};
 	} else if (flags.loaderVersion) {
 		manifest.loader = { ...manifest.loader, version: flags.loaderVersion };
 	}
@@ -299,8 +300,10 @@ const importPack = async (path, flags) => {
 		throw new Error(`An instance named "${pack.manifest.name}" already exists`);
 
 	// A pack may name a loader without pinning it; the instance should still say which one it got.
-	if (pack.manifest.loader.type === 'fabric' && !pack.manifest.loader.version) {
-		pack.manifest.loader.version = await latestLoader(pack.manifest.minecraft);
+	if (LOADER_SERVICES[pack.manifest.loader.type] && !pack.manifest.loader.version) {
+		pack.manifest.loader.version = await LOADER_SERVICES[pack.manifest.loader.type].latestLoader(
+			pack.manifest.minecraft,
+		);
 	}
 
 	const manifest = await instances.create(pack.manifest.name, {

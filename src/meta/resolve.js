@@ -2,7 +2,9 @@ import { join } from 'node:path';
 
 import { checksumOf } from '../download';
 import { paths } from '../paths';
-import * as fabric from './fabric';
+import { fabric } from './fabric';
+import { quilt } from './quilt';
+import { forge, neoforge } from './forge-like';
 import * as mojang from './mojang';
 import { applicableArguments } from './rules';
 
@@ -10,14 +12,12 @@ import { applicableArguments } from './rules';
 export const KNOWN_LOADERS = new Set(['fabric', 'quilt', 'forge', 'neoforge', 'vanilla']);
 
 /**
- * Loaders mcm can build a launch command for.
- *
- * Holding an instance and launching it are separate abilities, and only the second one needs the
- * loader's own metadata and launch shape. An instance on a loader mcm cannot start is still worth
- * keeping: it lists, it reports, and its mods resolve, because every mod source narrows by loader
- * already. Refusing it at the door would only mean it lives nowhere.
+ * The service that answers for each loader: what versions exist, and what a launch of one looks
+ * like. Vanilla needs none, which is why it is not here and is still launchable.
  */
-export const LAUNCHABLE_LOADERS = new Set(['fabric', 'vanilla']);
+export const LOADER_SERVICES = { fabric, quilt, forge, neoforge };
+
+export const LAUNCHABLE_LOADERS = new Set(['fabric', 'quilt', 'forge', 'neoforge', 'vanilla']);
 
 export const isLaunchable = type => LAUNCHABLE_LOADERS.has(type ?? 'vanilla');
 
@@ -34,9 +34,7 @@ export const assertLaunchableLoader = loader => {
 
 	if (isLaunchable(type)) return type;
 
-	throw new Error(
-		`mcm cannot build a ${type} launch yet, so this instance can be managed here but must be started elsewhere. It builds fabric and vanilla launches.`,
-	);
+	throw new Error(`mcm cannot build a ${type} launch. It builds: ${[...LAUNCHABLE_LOADERS].join(', ')}.`);
 };
 
 /** Arguments older manifests assume rather than state. */
@@ -132,15 +130,17 @@ export const resolvePlan = async ({ minecraft, loader, side = 'client', donors =
 		};
 	}
 
-	if (loader?.type === 'fabric') {
-		const version = loader.version ?? (await fabric.latestLoader(id));
-		const fabricProfile = await fabric.profile(id, version, side);
+	const service = LOADER_SERVICES[loader?.type];
 
-		plan.loader = { type: 'fabric', version };
-		plan.mainClass = fabricProfile.mainClass;
-		plan.libraries = [...fabric.libraryJobs(fabricProfile, libraryDonors), ...plan.libraries];
-		plan.jvmArguments = [...plan.jvmArguments, ...applicableArguments(fabricProfile.arguments?.jvm)];
-		plan.gameArguments = [...plan.gameArguments, ...applicableArguments(fabricProfile.arguments?.game)];
+	if (service) {
+		const version = loader.version ?? (await service.latestLoader(id));
+		const loaderProfile = await service.profile(id, version, side);
+
+		plan.loader = { type: loader.type, version, source: service.source };
+		plan.mainClass = loaderProfile.mainClass;
+		plan.libraries = [...service.libraryJobs(loaderProfile, libraryDonors), ...plan.libraries];
+		plan.jvmArguments = [...plan.jvmArguments, ...applicableArguments(loaderProfile.arguments?.jvm)];
+		plan.gameArguments = [...plan.gameArguments, ...applicableArguments(loaderProfile.arguments?.game)];
 	}
 
 	plan.libraries = dedupeLibraries(plan.libraries);

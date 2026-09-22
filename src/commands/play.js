@@ -77,7 +77,7 @@ export const explain = async ({ positionals, flags }) => {
 
 	info(`  minecraft   ${plan.id} ${paint.dim('(piston-meta.mojang.com)')}`);
 	info(
-		`  loader      ${plan.loader ? `${plan.loader.type} ${plan.loader.version} ${paint.dim('(meta.fabricmc.net)')}` : 'vanilla'}`,
+		`  loader      ${plan.loader ? `${plan.loader.type} ${plan.loader.version} ${paint.dim(`(${plan.loader.source})`)}` : 'vanilla'}`,
 	);
 	info(`  main class  ${plan.mainClass}`);
 	info(`  java        needs ${plan.javaMajor}`);

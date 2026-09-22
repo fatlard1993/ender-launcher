@@ -1,7 +1,8 @@
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { fetchServerLauncher, latestLoader } from './meta/fabric';
+import { fabric } from './meta/fabric';
+import { quilt } from './meta/quilt';
 import { versionMeta } from './meta/mojang';
 import { selectJava } from './java';
 import { detail, step, warn } from './out';
@@ -45,13 +46,14 @@ export const acceptEula = async manifest => {
  * so provisioning is one jar rather than a whole install.
  */
 export const provision = async manifest => {
-	const loader = manifest.loader?.version ?? (await latestLoader(manifest.minecraft));
+	const service = manifest.loader?.type === 'quilt' ? quilt : fabric;
+	const loader = manifest.loader?.version ?? (await service.latestLoader(manifest.minecraft));
 
 	await mkdir(manifest.gameDir, { recursive: true });
 
-	step(`Provisioning Fabric server ${manifest.minecraft} / loader ${loader}`);
+	step(`Provisioning ${service.name} server ${manifest.minecraft} / loader ${loader}`);
 
-	const installer = await fetchServerLauncher(manifest.minecraft, loader, launcherJarPath(manifest));
+	const installer = await service.fetchServerLauncher(manifest.minecraft, loader, launcherJarPath(manifest));
 
 	detail('installer', installer);
 

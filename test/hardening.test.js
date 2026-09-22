@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 
 import { ensureFile } from '../src/download';
 import { coordinateToPath } from '../src/meta/maven';
-import { assertKnownLoader, assertLaunchableLoader, isLaunchable } from '../src/meta/resolve';
+import { LOADER_SERVICES, assertKnownLoader, assertLaunchableLoader, isLaunchable } from '../src/meta/resolve';
 import { chooseAsset } from '../src/mods/github';
 import { extractArchive } from '../src/archive';
 
@@ -42,20 +42,28 @@ describe('holding an instance and launching it are separate abilities', () => {
 		expect(() => assertKnownLoader({ type: 'banana' })).toThrow('not a Minecraft loader');
 	});
 
-	test('only fabric and vanilla can be launched', () => {
-		expect(isLaunchable('fabric')).toBe(true);
-		expect(isLaunchable('vanilla')).toBe(true);
-		expect(isLaunchable(undefined)).toBe(true);
-
-		for (const type of ['quilt', 'forge', 'neoforge']) expect(isLaunchable(type)).toBe(false);
-	});
-
-	test('asking for a launch mcm cannot build says so, rather than answering with vanilla', () => {
-		for (const type of ['quilt', 'forge', 'neoforge']) {
-			expect(() => assertLaunchableLoader({ type })).toThrow(`cannot build a ${type} launch`);
+	test('every known loader can now be launched', () => {
+		for (const type of ['fabric', 'quilt', 'forge', 'neoforge', 'vanilla']) {
+			expect(isLaunchable(type)).toBe(true);
+			expect(assertLaunchableLoader({ type })).toBe(type);
 		}
 
-		expect(assertLaunchableLoader({ type: 'fabric' })).toBe('fabric');
+		expect(isLaunchable(undefined)).toBe(true);
+	});
+
+	test('a loader that does not exist is refused at both gates', () => {
+		expect(() => assertKnownLoader({ type: 'banana' })).toThrow('not a Minecraft loader');
+		expect(() => assertLaunchableLoader({ type: 'banana' })).toThrow('not a Minecraft loader');
+	});
+
+	test('vanilla needs no service; every other launchable loader has one', () => {
+		expect(LOADER_SERVICES.vanilla).toBeUndefined();
+
+		for (const type of ['fabric', 'quilt', 'forge', 'neoforge']) {
+			expect(typeof LOADER_SERVICES[type].latestLoader).toBe('function');
+			expect(typeof LOADER_SERVICES[type].profile).toBe('function');
+			expect(typeof LOADER_SERVICES[type].libraryJobs).toBe('function');
+		}
 	});
 });
 
@@ -128,5 +136,19 @@ describe('natives archives', () => {
 		await writeFile(path, 'definitely not a zip');
 
 		await expect(extractArchive(path, directory)).rejects.toThrow('Not a zip archive');
+	});
+});
+
+describe('loader services', () => {
+	test('forge names its profile after the pairing, neoforge after itself', () => {
+		expect(LOADER_SERVICES.forge.profileId('1.20.1', '47.4.23')).toBe('1.20.1-forge-47.4.23');
+		expect(LOADER_SERVICES.neoforge.profileId('1.21.1', '21.1.251')).toBe('neoforge-21.1.251');
+	});
+
+	test('each service says where its answers come from, so explain can report it', () => {
+		expect(LOADER_SERVICES.fabric.source).toBe('meta.fabricmc.net');
+		expect(LOADER_SERVICES.quilt.source).toBe('meta.quiltmc.org');
+		expect(LOADER_SERVICES.forge.source).toBe('its own installer');
+		expect(LOADER_SERVICES.neoforge.source).toBe('its own installer');
 	});
 });

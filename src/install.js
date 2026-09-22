@@ -27,7 +27,7 @@ const runJobs = async (label, jobs, { concurrency = 8 } = {}) => {
 export const installPlan = async (plan, { assets = true, donors = {} } = {}) => {
 	const jarJob = plan.side === 'server' ? plan.serverJar : plan.clientJar;
 
-	step(`Installing Minecraft ${plan.id}${plan.loader ? ` with Fabric ${plan.loader.version}` : ''}`);
+	step(`Installing Minecraft ${plan.id}${plan.loader ? ` with ${plan.loader.type} ${plan.loader.version}` : ''}`);
 
 	if (jarJob === undefined) throw new Error(`Mojang publishes no ${plan.side} jar for ${plan.id}`);
 
