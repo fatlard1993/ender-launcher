@@ -14,9 +14,10 @@ export const commands = {
 		run: instanceCommands.ls,
 	},
 	new: {
-		summary: 'Create an instance',
-		usage: 'mcm new <name>',
+		summary: 'Create an instance, optionally with mods',
+		usage: 'mcm new <name> [mod...]',
 		flags: {
+			...depsFlag,
 			minecraft: { alias: 'm', description: 'Game version, or "release" / "snapshot"' },
 			loader: { alias: 'l', description: 'fabric (default) or vanilla' },
 			loaderVersion: { description: 'Pin the loader version' },

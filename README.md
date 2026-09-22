@@ -47,13 +47,14 @@ Import reads the version and loader out of `mmc-pack.json`, follows `.minecraft`
 
 Whatever a pack carries as loose files is unpacked into the game directory, then offered to Modrinth by hash. A bundled jar that turns out to be a published mod becomes a declared, updatable entry; one that does not is listed and left alone, the same as any jar you dropped in yourself. A pack's `client`/`server` markings are honored, so importing a pack into a server instance leaves out what it says is client-only.
 
-Otherwise, start fresh:
+Otherwise, start fresh. `new` takes mods, so an instance and its contents are one command:
 
 ```
-mcm new suite --minecraft 26.3
-mcm add fabric-api sodium
-mcm launch
+mcm new suite fabric-api sodium
+mcm launch suite
 ```
+
+With no flags at all, `mcm new suite` is the newest release on the newest stable Fabric loader, both resolved live. Mods named on the line are resolved before the instance is created, so a typo leaves nothing behind to clean up, and anything they require comes along with them.
 
 ## Accounts
 
@@ -67,7 +68,7 @@ An instance is a manifest and a game directory, nothing more:
 
 ```
 mcm ls                     list them, with the active one marked
-mcm new <name>             create one
+mcm new <name> [mod...]    create one, optionally with mods
 mcm use <name>             set the active one, so later commands need no --instance
 mcm info                   what it is and what is installed
 mcm set [key] [value]      change a setting; bare `mcm set` lists what is settable
@@ -92,6 +93,8 @@ mcm drop sodium            remove from the manifest and from disk
 mcm sync                   make mods/ match the manifest
 mcm update                 move to the newest compatible builds
 ```
+
+Fabric is the default loader and the only one mcm builds launches for; `--loader vanilla` is the other option. Fabric API is not added for you, because it is not always wanted (Sodium and Lithium declare no dependencies at all) and because anything that does need it names it as a dependency, which mcm follows on its own.
 
 A mod is written one of these ways:
 

@@ -5,11 +5,12 @@ import { readConfig, updateConfig } from '../config';
 import * as instances from '../instance';
 import { fromPrism, identifyMods } from '../instance/import';
 import { readPack, unpackInto } from '../instance/pack';
-import { entryKey } from '../mods';
+import { entryKey, resolveAll } from '../mods';
 import { latestLoader } from '../meta/fabric';
 import { resolveVersionId } from '../meta/mojang';
 import { assertSupportedLoader } from '../meta/resolve';
 import { done, info, paint, plural, step, warn } from '../out';
+import { parseModSpec, syncInstance } from './mods';
 import { targetInstance, targetName } from './context';
 
 export const ls = async () => {
@@ -37,9 +38,9 @@ export const ls = async () => {
 };
 
 export const create = async ({ positionals, flags }) => {
-	const [name] = positionals;
+	const [name, ...specs] = positionals;
 
-	if (name === undefined) throw new Error('mcm new <name>');
+	if (name === undefined) throw new Error('mcm new <name> [mod...]');
 
 	const minecraft = await resolveVersionId(flags.minecraft);
 	const loaderType = assertSupportedLoader({ type: flags.loader ?? 'fabric' });
@@ -48,19 +49,43 @@ export const create = async ({ positionals, flags }) => {
 			? { type: 'vanilla' }
 			: { type: loaderType, version: flags.loaderVersion ?? (await latestLoader(minecraft)) };
 
+	const mods = specs.map(spec => {
+		const entry = parseModSpec(spec);
+
+		if (entry.source === 'local') entry.path = resolve(entry.path);
+
+		return entry;
+	});
+
+	// Resolved before the instance exists, so a typo leaves nothing behind to clean up.
+	const config = await readConfig();
+	const context = {
+		minecraft,
+		loader: loaderType === 'vanilla' ? undefined : loaderType,
+		key: config.curseforgeKey,
+		githubToken: config.githubToken,
+	};
+
+	if (mods.length > 0) await resolveAll(mods, context, { withDependencies: false });
+
 	const manifest = await instances.create(name, {
 		type: flags.server ? 'server' : 'client',
 		minecraft,
 		loader,
+		mods,
 		...(flags.gameDir ? { gameDir: resolve(flags.gameDir) } : {}),
 	});
 
 	done(`Created ${name} :: Minecraft ${minecraft}, ${loader.type}${loader.version ? ` ${loader.version}` : ''}`);
 	info(paint.dim(`  ${manifest.gameDir}`));
 
-	if ((await readConfig()).activeInstance === undefined) await updateConfig({ activeInstance: name });
+	await activateIfFirst(name);
 
-	return 0;
+	if (mods.length === 0) return 0;
+
+	const { failures } = await syncInstance(manifest, config, { withDependencies: flags.deps !== false });
+
+	return failures.length > 0 ? 1 : 0;
 };
 
 export const use = async ({ positionals }) => {

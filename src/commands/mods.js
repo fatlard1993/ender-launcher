@@ -13,7 +13,7 @@ const contextFor = (manifest, config) => ({
 	githubToken: config.githubToken,
 });
 
-const applySync = async (manifest, config, { withDependencies = true } = {}) => {
+export const syncInstance = async (manifest, config, { withDependencies = true } = {}) => {
 	const directory = instances.modsDir(manifest);
 
 	await mkdir(directory, { recursive: true });
@@ -38,9 +38,9 @@ export const sync = async ({ positionals, flags }) => {
 
 	step(`Syncing mods for ${manifest.name}`);
 
-	await applySync(manifest, config, { withDependencies: flags.deps !== false });
+	const { failures } = await syncInstance(manifest, config, { withDependencies: flags.deps !== false });
 
-	return 0;
+	return failures.length > 0 ? 1 : 0;
 };
 
 export const add = async ({ positionals, flags }) => {
@@ -80,7 +80,7 @@ export const add = async ({ positionals, flags }) => {
 
 	step(`Added ${plural(added.length, 'mod')} to ${manifest.name}`);
 
-	await applySync(manifest, config, { withDependencies: flags.deps !== false });
+	await syncInstance(manifest, config, { withDependencies: flags.deps !== false });
 
 	return 0;
 };
@@ -118,7 +118,7 @@ export const drop = async ({ positionals, flags }) => {
 
 	step(`Dropped ${plural(dropped, 'mod')} from ${manifest.name}`);
 
-	await applySync(manifest, config, { withDependencies: flags.deps !== false });
+	await syncInstance(manifest, config, { withDependencies: flags.deps !== false });
 
 	return 0;
 };
@@ -144,7 +144,7 @@ export const update = async ({ positionals, flags }) => {
 	step(`Updating ${manifest.name}${unpinned > 0 ? ` (${plural(unpinned, 'pin')} released)` : ''}`);
 
 	const before = new Map((await instances.readLock(manifest.name)).mods.map(mod => [mod.key, mod.version]));
-	const { lock } = await applySync(manifest, config, { withDependencies: flags.deps !== false });
+	const { lock } = await syncInstance(manifest, config, { withDependencies: flags.deps !== false });
 
 	const changed = lock.mods.filter(mod => before.get(mod.key) !== undefined && before.get(mod.key) !== mod.version);
 
@@ -221,3 +221,5 @@ export const search = async ({ positionals, flags }) => {
 
 	return 0;
 };
+
+export { parseModSpec } from './context';
