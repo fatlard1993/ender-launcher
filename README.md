@@ -128,7 +128,9 @@ The manifest is the file, and `mcm add` is only a way of editing it. Instance st
 }
 ```
 
-Edit it by hand and run `mcm sync`. An entry without a `version` floats to the newest compatible build; one with a version stays put until `mcm update` releases it.
+Edit it by hand and run `mcm sync`. An entry without a `version` floats; one with a version stays put until `mcm update` releases it.
+
+Floating means the newest **release** built for the instance's game version and loader, not simply whatever the source listed first. A stable release wins over a newer alpha, because "latest" almost never means the prerelease that landed this morning. When a version is new enough that nobody has cut a release yet, the best channel actually published is used, so a fresh snapshot still resolves. `--pre` on `add`, `new`, `sync` or `update` drops that preference and takes the newest of anything, and naming a version explicitly always wins outright.
 
 Alongside it, `instance.lock.json` records what was actually installed, including whatever checksum the source published, if it published one. That is what makes removal safe: **sync only deletes files a previous sync put there.** A jar you dropped in by hand is reported and left alone, every time.
 

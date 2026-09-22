@@ -84,6 +84,8 @@ module.exports = {
 		'pid',
 		'piston',
 		'positionals',
+		'prerelease',
+		'prereleases',
 		'prism',
 		'quilt',
 		'quiltmc',

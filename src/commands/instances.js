@@ -64,6 +64,7 @@ export const create = async ({ positionals, flags }) => {
 		loader: loaderType === 'vanilla' ? undefined : loaderType,
 		key: config.curseforgeKey,
 		githubToken: config.githubToken,
+		allowPrerelease: flags.pre ?? config.prerelease ?? false,
 	};
 
 	if (mods.length > 0) await resolveAll(mods, context, { withDependencies: false });
@@ -83,7 +84,7 @@ export const create = async ({ positionals, flags }) => {
 
 	if (mods.length === 0) return 0;
 
-	const { failures } = await syncInstance(manifest, config, { withDependencies: flags.deps !== false });
+	const { failures } = await syncInstance(manifest, config, { withDependencies: flags.deps !== false, flags });
 
 	return failures.length > 0 ? 1 : 0;
 };

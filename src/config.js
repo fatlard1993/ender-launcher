@@ -9,6 +9,7 @@ const defaults = {
 	javaPath: undefined,
 	memory: { min: 512, max: 4096 },
 	manageJava: true,
+	prerelease: false,
 };
 
 export const readConfig = async () => ({ ...defaults, ...(await readJson(paths.config, {})) });

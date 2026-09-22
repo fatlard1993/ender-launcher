@@ -1,5 +1,6 @@
 import { checksumOf, fetchJson, fetchWithRetry } from '../download';
 import { detail } from '../out';
+import { pickBuild } from './pick';
 
 const API = 'https://api.curseforge.com/v1';
 
@@ -16,6 +17,8 @@ const MINECRAFT_GAME = 432;
 const MOD_CLASS = 6;
 
 const LOADER_TYPES = { forge: 1, fabric: 4, quilt: 5, neoforge: 6 };
+
+const RELEASE_TYPES = { 1: 'release', 2: 'beta', 3: 'alpha' };
 
 const LOADER_TAGS = { forge: 'Forge', fabric: 'Fabric', quilt: 'Quilt', neoforge: 'NeoForge' };
 
@@ -66,6 +69,8 @@ const siteFiles = async projectId => {
 			display: file.displayName,
 			size: file.fileLength,
 			versions: file.gameVersions ?? [],
+			channel: RELEASE_TYPES[file.releaseType],
+			published: Date.parse(file.dateCreated ?? file.dateModified ?? 0),
 		}));
 	} catch {
 		return undefined;
@@ -81,7 +86,7 @@ const matchesInstance = (versions, minecraft, loader) => {
 	return !tag || !versions.some(entry => Object.values(LOADER_TAGS).includes(entry)) || versions.includes(tag);
 };
 
-const resolveKeyless = async (entry, { minecraft, loader }) => {
+const resolveKeyless = async (entry, { minecraft, loader, allowPrerelease }) => {
 	const project = await widgetProject(entry.id);
 	const files = (await siteFiles(project.id)) ?? project.files.map(file => ({ ...file, versions: file.versions }));
 
@@ -93,7 +98,7 @@ const resolveKeyless = async (entry, { minecraft, loader }) => {
 
 	const picked = entry.version
 		? usable.find(file => file.display === entry.version || String(file.id) === String(entry.version))
-		: usable[0];
+		: pickBuild(usable, { allowPrerelease });
 
 	if (picked === undefined) throw new Error(`curseforge:${entry.id} has no version "${entry.version}"`);
 
@@ -127,7 +132,7 @@ const findProject = async (entry, key) => {
 	return data[0];
 };
 
-const resolveKeyed = async (entry, { minecraft, loader, key }) => {
+const resolveKeyed = async (entry, { minecraft, loader, key, allowPrerelease }) => {
 	const project = await findProject(entry, key);
 
 	const parameters = new URLSearchParams({ pageSize: '50' });
@@ -143,7 +148,14 @@ const resolveKeyed = async (entry, { minecraft, loader, key }) => {
 
 	const picked = entry.version
 		? data.find(file => file.displayName === entry.version || String(file.id) === String(entry.version))
-		: data[0];
+		: pickBuild(
+				data.map(file => ({
+					...file,
+					channel: RELEASE_TYPES[file.releaseType],
+					published: Date.parse(file.fileDate ?? 0),
+				})),
+				{ allowPrerelease },
+			);
 
 	if (picked === undefined) throw new Error(`curseforge:${entry.id} has no version "${entry.version}"`);
 

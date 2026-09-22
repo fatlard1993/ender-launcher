@@ -1,4 +1,5 @@
 import { checksumOf, fetchJson } from '../download';
+import { pickBuild } from './pick';
 
 const API = 'https://api.modrinth.com/v2';
 
@@ -30,7 +31,7 @@ export const search = async (query, { minecraft, loader, limit = 10 } = {}) => {
 };
 
 /** Newest release of a project that matches the instance, or a named version when one is pinned. */
-export const resolve = async (entry, { minecraft, loader }) => {
+export const resolve = async (entry, { minecraft, loader, allowPrerelease }) => {
 	const query = new URLSearchParams();
 
 	if (loader) query.set('loaders', JSON.stringify([loader]));
@@ -44,7 +45,14 @@ export const resolve = async (entry, { minecraft, loader }) => {
 
 	const picked = entry.version
 		? versions.find(version => version.version_number === entry.version || version.id === entry.version)
-		: versions[0];
+		: pickBuild(
+				versions.map(version => ({
+					...version,
+					channel: version.version_type,
+					published: Date.parse(version.date_published),
+				})),
+				{ allowPrerelease },
+			);
 
 	if (picked === undefined) throw new Error(`modrinth:${entry.id} has no version "${entry.version}"`);
 

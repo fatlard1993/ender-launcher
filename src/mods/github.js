@@ -1,5 +1,6 @@
 import { checksumOf, fetchJson } from '../download';
 import { detail } from '../out';
+import { pickBuild } from './pick';
 
 const API = 'https://api.github.com';
 
@@ -83,7 +84,7 @@ export const chooseAsset = (assets, { minecraft, loader, pattern } = {}) => {
 	return [...pool].sort((a, b) => a.name.length - b.name.length)[0];
 };
 
-const releaseFor = async (entry, configuredToken) => {
+const releaseFor = async (entry, configuredToken, allowPrerelease) => {
 	const { owner, repository } = parseRepository(entry.id);
 
 	if (entry.version) return request(`/repos/${owner}/${repository}/releases/tags/${entry.version}`, configuredToken);
@@ -91,12 +92,19 @@ const releaseFor = async (entry, configuredToken) => {
 	// Not /releases/latest: mod authors publish prereleases constantly, and the newest release that
 	// actually carries a jar is the one wanted.
 	const releases = await request(`/repos/${owner}/${repository}/releases?per_page=30`, configuredToken);
+	const usable = releases
+		.filter(release => !release.draft && release.assets?.some(asset => asset.name.endsWith('.jar')))
+		.map(release => ({
+			...release,
+			channel: release.prerelease ? 'beta' : 'release',
+			published: Date.parse(release.published_at ?? 0),
+		}));
 
-	return releases.find(release => !release.draft && release.assets?.some(asset => asset.name.endsWith('.jar')));
+	return pickBuild(usable, { allowPrerelease });
 };
 
-export const resolve = async (entry, { minecraft, loader, githubToken } = {}) => {
-	const release = await releaseFor(entry, githubToken);
+export const resolve = async (entry, { minecraft, loader, githubToken, allowPrerelease } = {}) => {
+	const release = await releaseFor(entry, githubToken, allowPrerelease);
 
 	if (release === undefined) throw new Error(`github:${entry.id} has no release carrying a jar`);
 

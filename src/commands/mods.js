@@ -6,14 +6,15 @@ import { entryKey, reportSync, resolveAll, sources, syncMods } from '../mods';
 import { done, fail, info, paint, plural, step, warn } from '../out';
 import { parseModSpec, targetInstance } from './context';
 
-const contextFor = (manifest, config) => ({
+const contextFor = (manifest, config, flags = {}) => ({
 	minecraft: manifest.minecraft,
 	loader: manifest.loader?.type === 'vanilla' ? undefined : manifest.loader?.type,
 	key: config.curseforgeKey,
 	githubToken: config.githubToken,
+	allowPrerelease: flags.pre ?? manifest.prerelease ?? config.prerelease ?? false,
 });
 
-export const syncInstance = async (manifest, config, { withDependencies = true } = {}) => {
+export const syncInstance = async (manifest, config, { withDependencies = true, flags = {} } = {}) => {
 	const directory = instances.modsDir(manifest);
 
 	await mkdir(directory, { recursive: true });
@@ -22,7 +23,7 @@ export const syncInstance = async (manifest, config, { withDependencies = true }
 		entries: manifest.mods,
 		modsDir: directory,
 		lock: await instances.readLock(manifest.name),
-		context: contextFor(manifest, config),
+		context: contextFor(manifest, config, flags),
 		withDependencies,
 	});
 
@@ -38,7 +39,7 @@ export const sync = async ({ positionals, flags }) => {
 
 	step(`Syncing mods for ${manifest.name}`);
 
-	const { failures } = await syncInstance(manifest, config, { withDependencies: flags.deps !== false });
+	const { failures } = await syncInstance(manifest, config, { withDependencies: flags.deps !== false, flags });
 
 	return failures.length > 0 ? 1 : 0;
 };
@@ -72,7 +73,7 @@ export const add = async ({ positionals, flags }) => {
 
 	// Resolved before it is written: a name that cannot be found must not enter the manifest, or
 	// every later mod command on this instance fails on a typo nothing will show you.
-	await resolveAll(added, contextFor(manifest, config), { withDependencies: false });
+	await resolveAll(added, contextFor(manifest, config, flags), { withDependencies: false });
 
 	manifest.mods.push(...added);
 
@@ -80,7 +81,7 @@ export const add = async ({ positionals, flags }) => {
 
 	step(`Added ${plural(added.length, 'mod')} to ${manifest.name}`);
 
-	await syncInstance(manifest, config, { withDependencies: flags.deps !== false });
+	await syncInstance(manifest, config, { withDependencies: flags.deps !== false, flags });
 
 	return 0;
 };
@@ -118,7 +119,7 @@ export const drop = async ({ positionals, flags }) => {
 
 	step(`Dropped ${plural(dropped, 'mod')} from ${manifest.name}`);
 
-	await syncInstance(manifest, config, { withDependencies: flags.deps !== false });
+	await syncInstance(manifest, config, { withDependencies: flags.deps !== false, flags });
 
 	return 0;
 };
@@ -144,7 +145,7 @@ export const update = async ({ positionals, flags }) => {
 	step(`Updating ${manifest.name}${unpinned > 0 ? ` (${plural(unpinned, 'pin')} released)` : ''}`);
 
 	const before = new Map((await instances.readLock(manifest.name)).mods.map(mod => [mod.key, mod.version]));
-	const { lock } = await syncInstance(manifest, config, { withDependencies: flags.deps !== false });
+	const { lock } = await syncInstance(manifest, config, { withDependencies: flags.deps !== false, flags });
 
 	const changed = lock.mods.filter(mod => before.get(mod.key) !== undefined && before.get(mod.key) !== mod.version);
 

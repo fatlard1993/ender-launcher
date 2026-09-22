@@ -6,7 +6,10 @@ import * as settingsCommands from '../commands/settings';
 
 const instanceFlag = { instance: { alias: 'i', description: 'Instance to act on' } };
 
-const depsFlag = { deps: { type: 'boolean', default: true, description: 'Also install required dependencies' } };
+const depsFlag = {
+	deps: { type: 'boolean', default: true, description: 'Also install required dependencies' },
+	pre: { type: 'boolean', description: 'Allow alpha and beta builds, not just releases' },
+};
 
 export const commands = {
 	ls: {
