@@ -1,0 +1,149 @@
+import { relative, resolve } from 'node:path';
+
+import { readConfig, updateConfig } from '../config';
+import * as instances from '../instance';
+import { fromPrism } from '../instance/import';
+import { latestLoader } from '../meta/fabric';
+import { resolveVersionId } from '../meta/mojang';
+import { done, info, paint, plural, step, warn } from '../out';
+import { targetInstance, targetName } from './context';
+
+export const ls = async () => {
+	const [found, config] = await Promise.all([instances.list(), readConfig()]);
+
+	if (found.length === 0) {
+		info('No instances yet. Create one with "mcm new <name>", or adopt a Prism one with "mcm import <path>".');
+
+		return 0;
+	}
+
+	for (const manifest of found) {
+		const active = manifest.name === config.activeInstance;
+		const loader =
+			manifest.loader?.type === 'vanilla'
+				? 'vanilla'
+				: `${manifest.loader.type} ${manifest.loader.version ?? 'latest'}`;
+
+		info(
+			`${active ? paint.green('*') : ' '} ${paint.bold(manifest.name.padEnd(16))} ${manifest.minecraft.padEnd(10)} ${loader.padEnd(18)} ${paint.dim(`${plural(manifest.mods.length, 'mod')}, ${manifest.type}`)}`,
+		);
+	}
+
+	return 0;
+};
+
+export const create = async ({ positionals, flags }) => {
+	const [name] = positionals;
+
+	if (name === undefined) throw new Error('mcm new <name>');
+
+	const minecraft = await resolveVersionId(flags.minecraft);
+	const loaderType = flags.loader ?? 'fabric';
+	const loader =
+		loaderType === 'vanilla'
+			? { type: 'vanilla' }
+			: { type: loaderType, version: flags.loaderVersion ?? (await latestLoader(minecraft)) };
+
+	const manifest = await instances.create(name, {
+		type: flags.server ? 'server' : 'client',
+		minecraft,
+		loader,
+		...(flags.gameDir ? { gameDir: resolve(flags.gameDir) } : {}),
+	});
+
+	done(`Created ${name} :: Minecraft ${minecraft}, ${loader.type}${loader.version ? ` ${loader.version}` : ''}`);
+	info(paint.dim(`  ${manifest.gameDir}`));
+
+	if ((await readConfig()).activeInstance === undefined) await updateConfig({ activeInstance: name });
+
+	return 0;
+};
+
+export const use = async ({ positionals }) => {
+	const [name] = positionals;
+
+	if (name === undefined) throw new Error('mcm use <name>');
+	if (!(await instances.exists(name))) throw new Error(`No instance named "${name}"`);
+
+	await updateConfig({ activeInstance: name });
+
+	done(`Active instance is now ${name}`);
+
+	return 0;
+};
+
+export const info_ = async ({ positionals, flags }) => {
+	const { manifest } = await targetInstance(flags.instance ?? positionals[0]);
+	const lock = await instances.readLock(manifest.name);
+
+	info(`${paint.bold(manifest.name)} ${paint.dim(`(${manifest.type})`)}`);
+	info(`  minecraft  ${manifest.minecraft}`);
+	info(`  loader     ${manifest.loader?.type ?? 'vanilla'} ${manifest.loader?.version ?? ''}`);
+	info(`  game dir   ${manifest.gameDir}`);
+	info(`  mods       ${plural(manifest.mods.length, 'declared')}, ${lock.mods.length} installed`);
+
+	for (const mod of lock.mods) {
+		info(`    ${mod.requested ? ' ' : paint.dim('+')} ${mod.name} ${paint.dim(mod.version)}`);
+	}
+
+	return 0;
+};
+
+export const remove = async ({ positionals, flags }) => {
+	const name = await targetName(flags.instance ?? positionals[0]);
+	const manifest = await instances.read(name);
+
+	if (!flags.yes) {
+		warn(`This removes the instance "${name}".`);
+		info(
+			flags.purge
+				? `  Its game directory ${manifest.gameDir} goes too.`
+				: `  Its game directory ${manifest.gameDir} stays.`,
+		);
+		info('  Pass --yes to go ahead.');
+
+		return 1;
+	}
+
+	await instances.remove(name, { purgeGameDir: flags.purge });
+
+	if ((await readConfig()).activeInstance === name) await updateConfig({ activeInstance: undefined });
+
+	done(`Removed ${name}`);
+
+	return 0;
+};
+
+export const importPrism = async ({ positionals, flags }) => {
+	const [directory] = positionals;
+
+	if (directory === undefined) throw new Error('mcm import <prism-instance-directory>');
+
+	step(`Reading ${directory}`);
+
+	const { manifest, unmatched } = await fromPrism(directory, { name: flags.name });
+
+	if (await instances.exists(manifest.name)) throw new Error(`An instance named "${manifest.name}" already exists`);
+
+	await instances.write(manifest);
+
+	done(
+		`Imported ${manifest.name} :: Minecraft ${manifest.minecraft}, ${manifest.loader.type} ${manifest.loader.version ?? ''}`,
+	);
+	info(paint.dim(`  game dir  ${manifest.gameDir}`));
+	info(paint.dim(`  ${plural(manifest.mods.length, 'mod')} identified on Modrinth`));
+
+	if (unmatched.length > 0) {
+		info('');
+		warn(`${plural(unmatched.length, 'jar')} could not be identified and stay unmanaged:`);
+
+		for (const file of unmatched) info(`    ${file}`);
+
+		info(paint.dim('  They keep working. To have mcm manage one, add it by path:'));
+		info(paint.dim(`    mcm add ./${relative(process.cwd(), manifest.gameDir)}/mods/${unmatched[0]}`));
+	}
+
+	if ((await readConfig()).activeInstance === undefined) await updateConfig({ activeInstance: manifest.name });
+
+	return 0;
+};
