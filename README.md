@@ -162,7 +162,16 @@ mcm server offline         set online-mode=false
 mcm server status          version, port, online-mode, what is installed
 ```
 
-Mods sync into a server instance exactly as they do into a client one.
+Mods sync into a server instance exactly as they do into a client one, and every loader that can launch a client can also run a server:
+
+| Loader          | How its server is built                                       |
+| --------------- | ------------------------------------------------------------- |
+| fabric          | its bootstrap jar, which fetches the rest itself              |
+| quilt           | its own installer                                             |
+| forge, neoforge | their own installer, started from the argument file it writes |
+| vanilla         | Mojang's server jar                                           |
+
+Fabric is the only one that ships a jar you can simply run. Quilt publishes a server profile but no bootstrap to run it with, and Mojang's server download has been a bundler since 1.18 whose own libraries live inside it, so assembling that by hand reproduces work the installers already do correctly. They are asked instead.
 
 ## Java
 

@@ -7,6 +7,7 @@ import { ensureFile } from '../src/download';
 import { coordinateToPath } from '../src/meta/maven';
 import { LOADER_SERVICES, assertKnownLoader, assertLaunchableLoader, isLaunchable } from '../src/meta/resolve';
 import { chooseAsset } from '../src/mods/github';
+import { strategyFor } from '../src/server';
 import { extractArchive } from '../src/archive';
 
 describe('maven coordinates cannot leave the repository root', () => {
@@ -150,5 +151,28 @@ describe('loader services', () => {
 		expect(LOADER_SERVICES.quilt.source).toBe('meta.quiltmc.org');
 		expect(LOADER_SERVICES.forge.source).toBe('its own installer');
 		expect(LOADER_SERVICES.neoforge.source).toBe('its own installer');
+	});
+});
+
+describe('server strategies', () => {
+	const instance = type => ({ name: 't', gameDir: '/tmp/x', loader: { type } });
+
+	test('every launchable loader can also run a server', () => {
+		for (const type of ['fabric', 'quilt', 'forge', 'neoforge', 'vanilla']) {
+			expect(strategyFor(instance(type)).name).toBeString();
+		}
+	});
+
+	test('an instance with no loader is treated as vanilla', () => {
+		expect(strategyFor({ name: 't', gameDir: '/tmp/x' }).name).toBe('Vanilla');
+	});
+
+	// Fabric ships a bootstrap jar and Quilt's installer writes one; Forge and NeoForge are started
+	// from an argument file instead, so they have no jar to name.
+	test('only the loaders that end up with a runnable jar expose one', () => {
+		expect(strategyFor(instance('fabric')).jarPath(instance('fabric'))).toEndWith('fabric-server.jar');
+		expect(strategyFor(instance('quilt')).jarPath(instance('quilt'))).toEndWith('quilt-server-launch.jar');
+		expect(strategyFor(instance('vanilla')).jarPath(instance('vanilla'))).toEndWith('server.jar');
+		expect(strategyFor(instance('forge')).jarPath).toBeUndefined();
 	});
 });

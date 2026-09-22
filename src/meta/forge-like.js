@@ -29,30 +29,27 @@ export const forgeLike = ({ name, versionsFor, installerUrl, profileId }) => {
 	 * Run the vendor installer into a staging directory, then keep only what a launch needs: the
 	 * profile it wrote, and the libraries it fetched, merged into the shared library tree.
 	 */
-	const install = async (minecraft, loaderVersion, { javaPath } = {}) => {
-		const staging = join(paths.cache, `${name.toLowerCase()}-install-${loaderVersion}`);
-		const installer = join(staging, 'installer.jar');
+	/**
+	 * Fetch the vendor installer and run it headless in `directory`.
+	 *
+	 * Forge's installer takes --installClient / --installServer; NeoForge's newer one accepts those
+	 * spellings too, so one pair of flags serves both. It writes its real diagnosis to a log beside
+	 * itself rather than to either stream, which is why failure is read from there.
+	 */
+	const runInstaller = async (minecraft, loaderVersion, directory, mode, { javaPath } = {}) => {
+		const installer = join(directory, 'installer.jar');
 
-		await rm(staging, { recursive: true, force: true });
-		await mkdir(join(staging, 'versions'), { recursive: true });
-
-		step(`Installing ${name} ${loaderVersion} for Minecraft ${minecraft}`);
-
+		await mkdir(directory, { recursive: true });
 		await ensureFile({ url: installerUrl(minecraft, loaderVersion), path: installer });
-
-		// The installer expects to find a launcher it can register a profile with; an empty one
-		// satisfies it, and the profile it injects there is discarded with the staging directory.
-		await writeFile(join(staging, 'launcher_profiles.json'), '{"profiles":{},"version":3}\n');
 
 		// Any reasonably modern Java runs the installer; it is a plain tool, not the game, so no
 		// runtime is fetched purely to run it.
 		const java = await selectJava(17, javaPath);
 
-		// Forge's installer takes --installClient; NeoForge's newer one accepts that spelling too.
-		detail('installer', `${java.path} -jar installer.jar --installClient`);
+		detail('installer', `${java.path} -jar installer.jar ${mode}`);
 
-		const process_ = Bun.spawn([java.path, '-jar', installer, '--installClient', staging], {
-			cwd: staging,
+		const process_ = Bun.spawn([java.path, '-jar', installer, mode, directory], {
+			cwd: directory,
 			stdout: 'pipe',
 			stderr: 'pipe',
 		});
@@ -63,15 +60,43 @@ export const forgeLike = ({ name, versionsFor, installerUrl, profileId }) => {
 		]);
 
 		if ((await process_.exited) !== 0) {
-			// It writes its real diagnosis to a log beside itself rather than to either stream.
-			const logged = await Bun.file(join(staging, 'installer.jar.log'))
+			const logged = await Bun.file(join(directory, 'installer.jar.log'))
 				.text()
 				.catch(() => '');
 			const said = [logged, error, out].find(text => text.trim() !== '') ?? '(it said nothing)';
 
+			throw new Error(`The ${name} installer failed:\n${said.trim().split('\n').slice(-8).join('\n')}`);
+		}
+
+		await rm(installer, { force: true });
+		await rm(join(directory, 'installer.jar.log'), { force: true });
+	};
+
+	/** Install a server in place: its argument file names libraries by path relative to there. */
+	const installServer = async (minecraft, loaderVersion, directory, options) => {
+		await runInstaller(minecraft, loaderVersion, directory, '--installServer', options);
+
+		detail(name, `server ${loaderVersion} installed into ${directory}`);
+	};
+
+	const install = async (minecraft, loaderVersion, { javaPath } = {}) => {
+		const staging = join(paths.cache, `${name.toLowerCase()}-install-${loaderVersion}`);
+
+		await rm(staging, { recursive: true, force: true });
+		await mkdir(join(staging, 'versions'), { recursive: true });
+
+		step(`Installing ${name} ${loaderVersion} for Minecraft ${minecraft}`);
+
+		// The installer expects to find a launcher it can register a profile with; an empty one
+		// satisfies it, and the profile it injects there is discarded with the staging directory.
+		await writeFile(join(staging, 'launcher_profiles.json'), '{"profiles":{},"version":3}\n');
+
+		try {
+			await runInstaller(minecraft, loaderVersion, staging, '--installClient', { javaPath });
+		} catch (error) {
 			await rm(staging, { recursive: true, force: true });
 
-			throw new Error(`The ${name} installer failed:\n${said.trim().split('\n').slice(-8).join('\n')}`);
+			throw error;
 		}
 
 		const id = profileId(minecraft, loaderVersion);
@@ -156,6 +181,7 @@ export const forgeLike = ({ name, versionsFor, installerUrl, profileId }) => {
 		libraryJobs,
 		isInstalled,
 		install,
+		installServer,
 		profileId,
 	};
 };
