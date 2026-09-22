@@ -8,7 +8,19 @@ const META = 'https://meta.fabricmc.net/v2';
 
 const DEFAULT_REPOSITORY = 'https://maven.fabricmc.net/';
 
-export const loaderVersions = async minecraft => fetchJson(`${META}/versions/loader/${minecraft}`);
+export const loaderVersions = async minecraft => {
+	try {
+		return await fetchJson(`${META}/versions/loader/${encodeURIComponent(minecraft)}`);
+	} catch (error) {
+		// Fabric answers 400, not an empty list, for a game version it has not ingested yet. On a
+		// release-day snapshot that is the expected answer, and it needs to read like one.
+		if (error.status === 400 || error.status === 404) {
+			throw new Error(`Fabric has no loader for Minecraft ${minecraft} yet`);
+		}
+
+		throw error;
+	}
+};
 
 export const installerVersions = async () => fetchJson(`${META}/versions/installer`);
 

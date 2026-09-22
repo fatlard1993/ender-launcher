@@ -36,6 +36,24 @@ export const commands = {
 		flags: instanceFlag,
 		run: instanceCommands.info_,
 	},
+	set: {
+		summary: 'Change an instance setting',
+		usage: 'mcm set [key] [value]',
+		flags: instanceFlag,
+		run: instanceCommands.set,
+	},
+	bump: {
+		summary: 'Move an instance to another Minecraft version',
+		usage: 'mcm bump <minecraft-version>',
+		flags: { ...instanceFlag, loaderVersion: { description: 'Pin the loader instead of taking the newest' } },
+		run: instanceCommands.bump,
+	},
+	clone: {
+		summary: 'Copy an instance under a new name',
+		usage: 'mcm clone <source> <new-name>',
+		flags: { gameDir: { description: 'Give the copy an existing directory' } },
+		run: instanceCommands.clone,
+	},
 	delete: {
 		summary: 'Delete an instance',
 		usage: 'mcm delete <name> [--purge] [--yes]',
@@ -133,8 +151,13 @@ export const commands = {
 		run: settingsCommands.config,
 	},
 	java: {
-		summary: 'List the Java installations that were found',
+		summary: 'Java runtimes: what is here, and what Mojang publishes',
+		usage: 'mcm java [install <component>]',
 		flags: { refresh: { type: 'boolean', description: 'Probe again instead of using the cache' } },
-		run: settingsCommands.java,
+		subcommands: {
+			list: { summary: 'Show managed, system and installable runtimes', run: settingsCommands.javaList },
+			install: { summary: "Fetch one of Mojang's runtimes", run: settingsCommands.javaInstall },
+		},
+		run: settingsCommands.javaList,
 	},
 };

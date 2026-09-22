@@ -67,10 +67,6 @@ export const provision = async manifest => {
 	return { loader, installer };
 };
 
-/**
- * An offline client cannot join an online-mode server, so say it here rather than let it fail
- * later as an unexplained "failed to verify username".
- */
 export const warnIfUnreachableOffline = async manifest => {
 	const properties = await readProperties(manifest);
 
@@ -84,7 +80,8 @@ export const warnIfUnreachableOffline = async manifest => {
 };
 
 /** The game says which Java it needs; a server is the same game, so it is asked rather than guessed. */
-export const requiredJava = async manifest => (await versionMeta(manifest.minecraft)).meta.javaVersion?.majorVersion ?? 8;
+export const requiredJava = async manifest =>
+	(await versionMeta(manifest.minecraft)).meta.javaVersion?.majorVersion ?? 8;
 
 export const run = async (manifest, { javaPath, memory, javaMajor, extraArgs = [] } = {}) => {
 	const jar = launcherJarPath(manifest);

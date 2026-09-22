@@ -1,3 +1,4 @@
+import { version } from '../../package.json';
 import { fail, info, paint, setVerbosity } from '../out';
 import { commands } from './commands';
 import { commandHelp, usage } from './help';
@@ -9,23 +10,27 @@ const GLOBAL_FLAGS = {
 };
 
 const suggest = wanted => {
-	const names = Object.keys(commands);
-	const close = names.filter(name => name.startsWith(wanted[0]) || name.includes(wanted));
+	const bare = wanted.replace(/^-+/, '');
+	const close = Object.keys(commands).filter(name => (bare && name.startsWith(bare[0])) || name.includes(bare));
 
 	return close.length > 0 ? `\n  Did you mean: ${close.join(', ')}?` : '';
 };
 
+const HELP_WORDS = new Set(['help', '--help', '-h', '-?']);
+
+const VERSION_WORDS = new Set(['version', '--version', '-V']);
+
 export const run = async argv => {
 	const [name, ...rest] = argv;
 
-	if (name === undefined || name === 'help') {
+	if (name === undefined || HELP_WORDS.has(name)) {
 		usage();
 
 		return name === undefined ? 1 : 0;
 	}
 
-	if (name === '--version' || name === '-V') {
-		info('0.1.0');
+	if (VERSION_WORDS.has(name)) {
+		info(version);
 
 		return 0;
 	}
@@ -40,19 +45,22 @@ export const run = async argv => {
 
 	let definition = command;
 	let argumentsForCommand = rest;
+	let title = name;
 
 	if (command.subcommands) {
 		const [sub, ...subRest] = rest;
 
 		if (sub !== undefined && command.subcommands[sub]) {
-			definition = { ...command, ...command.subcommands[sub] };
+			// The child's own usage, under the name actually typed, rather than the parent's page.
+			definition = { ...command, usage: `mcm ${name} ${sub}`, subcommands: undefined, ...command.subcommands[sub] };
 			argumentsForCommand = subRest;
+			title = `${name} ${sub}`;
 		} else if (sub !== undefined && !sub.startsWith('-')) {
 			fail(`"${name}" has no subcommand "${sub}"`);
 			commandHelp(name, command);
 
 			return 1;
-		} else if (!rest.includes('--help') && !rest.includes('-h')) {
+		} else if (command.run === undefined && !rest.includes('--help') && !rest.includes('-h')) {
 			commandHelp(name, command);
 
 			return 1;
@@ -63,7 +71,7 @@ export const run = async argv => {
 	const parsed = parseArgv(argumentsForCommand, spec);
 
 	if (parsed.flags.help) {
-		commandHelp(name, definition);
+		commandHelp(title, definition);
 
 		return 0;
 	}

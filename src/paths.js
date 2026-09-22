@@ -14,6 +14,7 @@ export const paths = {
 	libraries: join(dataRoot, 'libraries'),
 	versions: join(dataRoot, 'versions'),
 	natives: join(dataRoot, 'natives'),
+	java: join(dataRoot, 'java'),
 	cache: join(dataRoot, 'cache'),
 };
 

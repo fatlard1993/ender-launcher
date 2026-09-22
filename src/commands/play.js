@@ -62,6 +62,7 @@ export const play = async ({ positionals, flags }) => {
 		username: settings.username ?? 'Player',
 		memory: settings.memory ?? (await readConfig()).memory,
 		extraJvmArgs: [...(manifest.jvmArgs ?? [])],
+		manageJava: config.manageJava !== false,
 		dryRun: flags.dryRun,
 	});
 };

@@ -2,6 +2,7 @@ import { readdir, realpath } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 
 import { fetchWithRetry, sha1 } from '../download';
+import { assertSupportedLoader } from '../meta/resolve';
 import { readJson } from '../json';
 
 const LOADER_UIDS = {
@@ -82,6 +83,11 @@ export const fromPrism = async (directory, { name } = {}) => {
 
 	const loaderUid = Object.keys(LOADER_UIDS).find(uid => components[uid]);
 
+	const loader = loaderUid ? { type: LOADER_UIDS[loaderUid], version: components[loaderUid] } : { type: 'vanilla' };
+
+	// Refused at the door rather than imported into an instance that would launch as vanilla.
+	assertSupportedLoader(loader);
+
 	const gameDir = await realpath(join(directory, '.minecraft')).catch(() => join(directory, '.minecraft'));
 
 	const { entries, unmatched } = await identifyMods(join(gameDir, 'mods'));
@@ -91,7 +97,7 @@ export const fromPrism = async (directory, { name } = {}) => {
 			name: name ?? config.name ?? basename(directory),
 			type: 'client',
 			minecraft,
-			loader: loaderUid ? { type: LOADER_UIDS[loaderUid], version: components[loaderUid] } : { type: 'vanilla' },
+			loader,
 			gameDir,
 			memory:
 				config.OverrideMemory === 'true'

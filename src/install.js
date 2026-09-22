@@ -2,6 +2,7 @@ import { mkdir } from 'node:fs/promises';
 
 import { ensureFile, pool } from './download';
 import { assetJobs, fetchAssetIndex } from './meta/mojang';
+import { extractArchive } from './natives';
 import { detail, plural, progress, step } from './out';
 
 const runJobs = async (label, jobs, { concurrency = 8 } = {}) => {
@@ -45,6 +46,19 @@ export const installPlan = async (plan, { assets = true, donors = {} } = {}) => 
 	}
 
 	await mkdir(plan.nativesDirectory, { recursive: true });
+
+	// Since 1.19 the directory only has to exist: lwjgl, jna and netty each unpack their own
+	// natives out of the classpath at startup. Older versions ship theirs as jars nobody else
+	// will open.
+	const archives = plan.libraries.filter(library => library.extract);
+
+	for (const archive of archives) {
+		const written = await extractArchive(archive.path, plan.nativesDirectory, archive.extract);
+
+		detail('natives', `${archive.name} -> ${plural(written.length, 'file')}`);
+	}
+
+	if (archives.length > 0) step(`Unpacked natives from ${plural(archives.length, 'archive')}`);
 
 	return plan;
 };

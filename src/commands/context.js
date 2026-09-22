@@ -1,7 +1,7 @@
 import { readConfig } from '../config';
 import * as instances from '../instance';
 
-/** Which instance a command acts on: the flag, then a positional, then whatever `use` last set. */
+/** Which instance a command acts on: what the caller resolved, then whatever `use` last set. */
 export const targetName = async (explicit, config) => {
 	const name = explicit ?? (config ?? (await readConfig())).activeInstance;
 

@@ -2,7 +2,7 @@ import { join } from 'node:path';
 
 import { checksumOf, ensureFile, fetchJson } from '../download';
 import { paths } from '../paths';
-import { allowed } from './rules';
+import { allowed, currentOs } from './rules';
 
 const MANIFEST = 'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json';
 const RESOURCES = 'https://resources.download.minecraft.net';
@@ -16,6 +16,12 @@ export const resolveVersionId = async wanted => {
 
 	if (wanted === undefined || wanted === 'release') return manifest.latest.release;
 	if (wanted === 'snapshot') return manifest.latest.snapshot;
+
+	// Checked here, against the manifest already in hand, so the name is refused by the launcher
+	// rather than by whichever service is asked about it next.
+	if (!manifest.versions.some(version => version.id === wanted)) {
+		throw new Error(`Mojang publishes no version "${wanted}"`);
+	}
 
 	return wanted;
 };
@@ -39,19 +45,44 @@ export const clientJarPath = id => join(paths.versions, id, `${id}.jar`);
 
 export const serverJarPath = id => join(paths.versions, id, `${id}-server.jar`);
 
-/** Every library entry whose rules hold on this machine, as download jobs. */
-export const libraryJobs = (meta, donorRoots = []) =>
-	meta.libraries
-		.filter(library => allowed(library.rules))
-		.filter(library => library.downloads?.artifact)
-		.map(({ name, downloads: { artifact } }) => ({
-			name,
-			url: artifact.url,
-			checksum: checksumOf(artifact.sha1),
-			size: artifact.size,
-			path: join(paths.libraries, artifact.path),
-			donors: donorRoots.map(root => join(root, artifact.path)),
-		}));
+const artifactJob = (name, artifact, donorRoots) => ({
+	name,
+	url: artifact.url,
+	checksum: checksumOf(artifact.sha1),
+	size: artifact.size,
+	path: join(paths.libraries, artifact.path),
+	donors: donorRoots.map(root => join(root, artifact.path)),
+});
+
+/**
+ * Every library entry whose rules hold on this machine, as download jobs.
+ *
+ * Two shapes exist. Since 1.19 a native library is an ordinary artifact carrying a `natives-<os>`
+ * classifier in its name, and the runtime unpacks it from the classpath itself. Before that, the
+ * native lives under `downloads.classifiers`, keyed by `natives[<os>]`, and the launcher is
+ * expected to unpack it. A job carrying `extract` is one of the second kind.
+ */
+export const libraryJobs = (meta, donorRoots = []) => {
+	const jobs = [];
+
+	for (const library of meta.libraries) {
+		if (!allowed(library.rules)) continue;
+
+		if (library.downloads?.artifact) jobs.push(artifactJob(library.name, library.downloads.artifact, donorRoots));
+
+		const classifier = library.natives?.[currentOs.name]?.replace('${arch}', process.arch === 'ia32' ? '32' : '64');
+		const classified = classifier && library.downloads?.classifiers?.[classifier];
+
+		if (classified) {
+			jobs.push({
+				...artifactJob(`${library.name}:${classifier}`, classified, donorRoots),
+				extract: library.extract ?? { exclude: ['META-INF/'] },
+			});
+		}
+	}
+
+	return jobs;
+};
 
 export const assetIndexPath = id => join(paths.assets, 'indexes', `${id}.json`);
 

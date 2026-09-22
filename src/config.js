@@ -8,6 +8,7 @@ const defaults = {
 	githubToken: undefined,
 	javaPath: undefined,
 	memory: { min: 512, max: 4096 },
+	manageJava: true,
 };
 
 export const readConfig = async () => ({ ...defaults, ...(await readJson(paths.config, {})) });

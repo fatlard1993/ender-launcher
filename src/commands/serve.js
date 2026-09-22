@@ -3,8 +3,8 @@ import { done, info, step } from '../out';
 import * as server from '../server';
 import { settingsFor, targetInstance } from './context';
 
-export const provision = async ({ flags }) => {
-	const { manifest } = await targetInstance(flags.instance);
+export const provision = async ({ positionals, flags }) => {
+	const { manifest } = await targetInstance(flags.instance ?? positionals[0]);
 
 	await server.acceptEula(manifest);
 	await server.provision(manifest);
@@ -14,8 +14,8 @@ export const provision = async ({ flags }) => {
 	return 0;
 };
 
-export const start = async ({ flags }) => {
-	const { manifest, config } = await targetInstance(flags.instance);
+export const start = async ({ positionals, flags }) => {
+	const { manifest, config } = await targetInstance(flags.instance ?? positionals[0]);
 
 	if (manifest.type !== 'server') throw new Error(`${manifest.name} is a client instance`);
 
@@ -25,9 +25,8 @@ export const start = async ({ flags }) => {
 	return server.run(manifest, settingsFor(manifest, config));
 };
 
-/** Offline clients cannot pass Mojang's session check, so a server they are meant to join must skip it. */
-export const offline = async ({ flags }) => {
-	const { manifest } = await targetInstance(flags.instance);
+export const offline = async ({ positionals, flags }) => {
+	const { manifest } = await targetInstance(flags.instance ?? positionals[0]);
 
 	const properties = await server.readProperties(manifest);
 
@@ -41,8 +40,8 @@ export const offline = async ({ flags }) => {
 	return 0;
 };
 
-export const status = async ({ flags }) => {
-	const { manifest } = await targetInstance(flags.instance);
+export const status = async ({ positionals, flags }) => {
+	const { manifest } = await targetInstance(flags.instance ?? positionals[0]);
 	const properties = await server.readProperties(manifest);
 	const jar = server.launcherJarPath(manifest);
 

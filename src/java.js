@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { readJson, writeJson } from './json';
 import { detail, warn } from './out';
 import { paths } from './paths';
+import { installedRuntimes, isInstalled, provideRuntime, runtimeBinary } from './runtime';
 
 const searchRoots = [
 	'/usr/lib/jvm',
@@ -12,6 +13,7 @@ const searchRoots = [
 	'/Library/Java/JavaVirtualMachines',
 	join(homedir(), '.local/share/PrismLauncher/java'),
 	join(homedir(), '.sdkman/candidates/java'),
+	paths.java,
 ];
 
 const cachePath = () => join(paths.cache, 'java.json');
@@ -65,23 +67,28 @@ export const probe = async path => {
 	// Java 8 and earlier report 1.8.0; everything since leads with the major.
 	const major = matched[1] === '1' ? Number(matched[2]) : Number(matched[1]);
 
-	return Number.isNaN(major) ? undefined : { path, major };
+	return Number.isNaN(major) ? undefined : { path, major, mtime: Bun.file(path).lastModified };
 };
 
 export const installations = async ({ refresh = false } = {}) => {
 	const cached = await readJson(cachePath(), undefined).catch(() => undefined);
+	const paths_ = await candidatePaths();
 
+	// A cached major is a belief about a path, and an in-place jdk upgrade rewrites the binary
+	// without moving it. The mtime is what tells the two apart.
 	if (!refresh && cached?.entries) {
-		const stillThere = [];
+		const stillValid = [];
 
 		for (const entry of cached.entries) {
-			if (await Bun.file(entry.path).exists()) stillThere.push(entry);
+			const file = Bun.file(entry.path);
+
+			if ((await file.exists()) && entry.mtime === file.lastModified) stillValid.push(entry);
 		}
 
-		if (stillThere.length > 0) return stillThere;
+		if (stillValid.length === paths_.length) return stillValid;
 	}
 
-	const entries = (await Promise.all((await candidatePaths()).map(probe))).filter(Boolean);
+	const entries = (await Promise.all(paths_.map(probe))).filter(Boolean);
 
 	await writeJson(cachePath(), { entries });
 
@@ -89,10 +96,15 @@ export const installations = async ({ refresh = false } = {}) => {
 };
 
 /**
- * The closest runtime at or above what the version asks for. Running a game on a newer major than
- * Mojang tested is usually fine; running it on an older one reliably is not.
+ * The runtime a version runs on, in order of preference: an explicit path, a managed runtime
+ * already here, a local JDK of the exact major the version was built against, and only then the
+ * component Mojang names for it, fetched.
+ *
+ * The exact-major step is what keeps a machine that already has the right Java from downloading a
+ * second copy of it, while a version whose major is missing still gets the runtime it expects
+ * rather than whichever nearby one happens to be installed.
  */
-export const selectJava = async (required, override) => {
+export const selectJava = async (required, override, { component, manage = true } = {}) => {
 	if (override) {
 		const probed = await probe(override);
 
@@ -102,9 +114,36 @@ export const selectJava = async (required, override) => {
 		return probed;
 	}
 
+	const managed = component && (await isInstalled(component)) ? runtimeBinary(component) : undefined;
+
+	if (managed) return (await probe(managed)) ?? { path: managed, major: required };
+
 	const available = await installations();
 
-	if (available.length === 0) throw new Error('No Java installation found. Install a JDK or set javaPath.');
+	// A machine that already has the major this version was built against needs nothing downloaded.
+	const exact = available.find(({ major }) => major === required);
+
+	if (exact) {
+		detail('java', exact.path, exact.major);
+
+		return exact;
+	}
+
+	// Nothing here matches, so the version's own answer is fetched rather than a nearby major
+	// pressed into service.
+	if (component && manage) {
+		const path = await provideRuntime(component);
+
+		return (await probe(path)) ?? { path, major: required };
+	}
+
+	if (available.length === 0) {
+		throw new Error(
+			component
+				? `No Java installation found. Run "mcm java install ${component}", or set javaPath.`
+				: 'No Java installation found. Install a JDK or set javaPath.',
+		);
+	}
 
 	const suitable = available.filter(({ major }) => major >= required).sort((a, b) => a.major - b.major);
 
@@ -120,3 +159,5 @@ export const selectJava = async (required, override) => {
 
 	return newest;
 };
+
+export const managedRuntimes = installedRuntimes;

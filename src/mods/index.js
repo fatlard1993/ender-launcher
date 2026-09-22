@@ -2,7 +2,7 @@ import { readdir, unlink } from 'node:fs/promises';
 import { basename, join, resolve as resolvePath } from 'node:path';
 
 import { checksumOf, checksumText, ensureFile, pool } from '../download';
-import { detail, plural, progress, step, warn } from '../out';
+import { detail, fail, plural, progress, step, warn } from '../out';
 import * as curseforge from './curseforge';
 import * as github from './github';
 import * as modrinth from './modrinth';
@@ -37,15 +37,29 @@ const resolveUrl = entry => ({
 	dependencies: [],
 });
 
+/**
+ * A filename is chosen by whoever published the mod, so it is a remote string on its way to a path.
+ * Stripping it to a basename here covers every source at once, including ones added later.
+ */
+const named = resolution => {
+	const filename = basename(resolution.file.filename);
+
+	if (filename === '' || filename === '.' || filename === '..') {
+		throw new Error(`${resolution.source}:${resolution.id} published an unusable filename`);
+	}
+
+	return { ...resolution, file: { ...resolution.file, filename } };
+};
+
 export const resolveEntry = async (entry, context) => {
-	if (entry.source === 'local') return resolveLocal(entry);
-	if (entry.source === 'url') return resolveUrl(entry);
+	if (entry.source === 'local') return named(resolveLocal(entry));
+	if (entry.source === 'url') return named(resolveUrl(entry));
 
 	const source = sources[entry.source];
 
 	if (source === undefined) throw new Error(`Unknown mod source "${entry.source}"`);
 
-	return source.resolve(entry, context);
+	return named(await source.resolve(entry, context));
 };
 
 /** Resolve the declared list, pulling in required dependencies the declared mods name. */
@@ -106,20 +120,45 @@ const install = async (resolution, modsDir) => {
  * stays where it was put.
  */
 export const syncMods = async ({ entries, modsDir, lock, context, withDependencies = true }) => {
-	const resolved = await resolveAll(entries, context, { withDependencies });
+	const all = await resolveAll(entries, context, { withDependencies });
+
+	// The same mod can be declared by slug and arrive again by project id. Two keys, one file:
+	// installing both concurrently means two writers racing for one destination.
+	const byFile = new Map();
+
+	for (const resolution of all)
+		if (!byFile.has(resolution.file.filename)) byFile.set(resolution.file.filename, resolution);
+
+	const resolved = [...byFile.values()];
+	const failures = [];
+	let installed = resolved;
 
 	if (resolved.length > 0) {
 		const bar = progress();
 
-		await pool(resolved, resolution => install(resolution, modsDir), {
-			concurrency: 6,
-			onProgress: (finished, total) => bar.update(`   mods ${finished}/${total}`),
-		});
+		const outcomes = await pool(
+			resolved,
+			async resolution => {
+				try {
+					await install(resolution, modsDir);
+
+					return resolution;
+				} catch (error) {
+					// Held rather than thrown: a lock that omits what landed orphans those files.
+					failures.push({ resolution, error });
+
+					return undefined;
+				}
+			},
+			{ concurrency: 6, onProgress: (finished, total) => bar.update(`   mods ${finished}/${total}`) },
+		);
 
 		bar.clear();
+
+		installed = outcomes.filter(Boolean);
 	}
 
-	const wanted = new Set(resolved.map(resolution => resolution.file.filename));
+	const wanted = new Set(installed.map(resolution => resolution.file.filename));
 	const previous = lock?.mods ?? [];
 	const removed = [];
 
@@ -139,11 +178,12 @@ export const syncMods = async ({ entries, modsDir, lock, context, withDependenci
 	const unmanaged = present.filter(file => file.endsWith('.jar') && !wanted.has(file));
 
 	return {
-		resolved,
+		resolved: installed,
+		failures,
 		removed,
 		unmanaged,
 		lock: {
-			mods: resolved.map(resolution => ({
+			mods: installed.map(resolution => ({
 				key: resolution.key,
 				source: resolution.source,
 				id: resolution.id,
@@ -158,7 +198,7 @@ export const syncMods = async ({ entries, modsDir, lock, context, withDependenci
 	};
 };
 
-export const reportSync = ({ resolved, removed, unmanaged }) => {
+export const reportSync = ({ resolved, failures = [], removed, unmanaged }) => {
 	for (const resolution of resolved) {
 		detail(resolution.requested ? '  ' : '  +', resolution.name, resolution.version);
 	}
@@ -166,4 +206,8 @@ export const reportSync = ({ resolved, removed, unmanaged }) => {
 	step(`${plural(resolved.length, 'mod')} in place${removed.length > 0 ? `, ${removed.length} removed` : ''}`);
 
 	if (unmanaged.length > 0) warn(`Left alone (not in the manifest): ${unmanaged.join(', ')}`);
+
+	for (const { resolution, error } of failures) fail(`${resolution.source}:${resolution.id} :: ${error.message}`);
+
+	return failures.length;
 };

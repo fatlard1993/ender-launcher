@@ -6,6 +6,21 @@ import * as fabric from './fabric';
 import * as mojang from './mojang';
 import { applicableArguments } from './rules';
 
+/**
+ * What `resolvePlan` can actually build. Quilt, Forge and NeoForge each need their own loader
+ * metadata and their own launch shape; until that exists, naming one is refused rather than
+ * quietly answered with a vanilla launch.
+ */
+export const SUPPORTED_LOADERS = new Set(['fabric', 'vanilla']);
+
+export const assertSupportedLoader = loader => {
+	const type = loader?.type ?? 'vanilla';
+
+	if (SUPPORTED_LOADERS.has(type)) return type;
+
+	throw new Error(`mcm has no support for the ${type} loader. It builds fabric and vanilla launches.`);
+};
+
 /** Arguments older manifests assume rather than state. */
 const LEGACY_JVM_ARGUMENTS = ['-Djava.library.path=${natives_directory}', '-cp', '${classpath}'];
 
@@ -31,11 +46,10 @@ const dedupeLibraries = jobs => {
 	});
 };
 
-/**
- * Everything needed to install and launch a pairing of game version and loader,
- * read straight from Mojang and Fabric rather than from any launcher's mirror.
- */
+/** Everything needed to install and launch a pairing of game version and loader. */
 export const resolvePlan = async ({ minecraft, loader, side = 'client', donors = {} }) => {
+	assertSupportedLoader(loader);
+
 	const libraryDonors = donors.libraries ?? [];
 	const { meta } = await mojang.versionMeta(minecraft);
 	const id = meta.id;
@@ -50,6 +64,7 @@ export const resolvePlan = async ({ minecraft, loader, side = 'client', donors =
 		loader: undefined,
 		mainClass: meta.mainClass,
 		javaMajor: meta.javaVersion?.majorVersion ?? 8,
+		javaComponent: meta.javaVersion?.component,
 		assetIndexId: meta.assetIndex.id,
 		assetsLegacy: meta.assets === 'legacy' || meta.assets === 'pre-1.6',
 		versionType: meta.type,

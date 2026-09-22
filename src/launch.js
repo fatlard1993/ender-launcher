@@ -1,16 +1,37 @@
 import { delimiter } from 'node:path';
 
+import { version } from '../package.json';
 import { offlineProfile } from './auth';
 import { selectJava } from './java';
 import { paths } from './paths';
-import { detail, step } from './out';
+import { detail, step, warn } from './out';
+
+/**
+ * Flags the JVM treats as instructions rather than settings. An argv array closes shell injection,
+ * but the JVM is its own argument interpreter: HotSpot hands -XX:OnError and -XX:OnOutOfMemoryError
+ * to a shell, and the agent and bootclasspath flags load code before the game starts. None of these
+ * appears in a Mojang or Fabric manifest, so anything carrying one is not a manifest we should run.
+ */
+const REFUSED = /^(?:@|-javaagent|-agentlib|-agentpath|-Xbootclasspath)|OnError|OnOutOfMemoryError/i;
+
+const vetted = argumentList =>
+	argumentList.filter(argument => {
+		if (!REFUSED.test(argument)) return true;
+
+		warn(`Refusing JVM argument from remote metadata: ${argument}`);
+
+		return false;
+	});
 
 const substitute = (argument, values) =>
 	argument.replaceAll(/\$\{(\w+)}/g, (whole, key) => (key in values ? values[key] : whole));
 
-/** The exact command Prism would build, assembled from Mojang's own manifest instead of a mirror. */
-export const buildCommand = async (plan, instance, { javaPath, username, memory, extraJvmArgs = [] } = {}) => {
-	const java = await selectJava(plan.javaMajor, javaPath);
+export const buildCommand = async (
+	plan,
+	instance,
+	{ javaPath, username, memory, extraJvmArgs = [], manageJava = true } = {},
+) => {
+	const java = await selectJava(plan.javaMajor, javaPath, { component: plan.javaComponent, manage: manageJava });
 	const profile = offlineProfile(username);
 
 	const classpath = [...plan.libraries.map(({ path }) => path), plan.clientJar.path].join(delimiter);
@@ -21,7 +42,7 @@ export const buildCommand = async (plan, instance, { javaPath, username, memory,
 		classpath_separator: delimiter,
 		classpath,
 		launcher_name: 'minecraft-manager',
-		launcher_version: '0.1.0',
+		launcher_version: version,
 		version_name: plan.id,
 		version_type: plan.versionType,
 		game_directory: instance.gameDir,
@@ -41,9 +62,10 @@ export const buildCommand = async (plan, instance, { javaPath, username, memory,
 
 	const command = [
 		java.path,
-		...memoryArgs,
-		...plan.jvmArguments.map(argument => substitute(argument, values)),
+		...vetted(plan.jvmArguments.map(argument => substitute(argument, values))),
 		...loggingArgs,
+		// After the manifest's arguments, so a remote -Xmx cannot quietly lower the ceiling set here.
+		...memoryArgs,
 		...extraJvmArgs,
 		plan.mainClass,
 		...plan.gameArguments.map(argument => substitute(argument, values)),

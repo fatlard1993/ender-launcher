@@ -5,6 +5,7 @@ import * as instances from '../instance';
 import { fromPrism } from '../instance/import';
 import { latestLoader } from '../meta/fabric';
 import { resolveVersionId } from '../meta/mojang';
+import { assertSupportedLoader } from '../meta/resolve';
 import { done, info, paint, plural, step, warn } from '../out';
 import { targetInstance, targetName } from './context';
 
@@ -38,7 +39,7 @@ export const create = async ({ positionals, flags }) => {
 	if (name === undefined) throw new Error('mcm new <name>');
 
 	const minecraft = await resolveVersionId(flags.minecraft);
-	const loaderType = flags.loader ?? 'fabric';
+	const loaderType = assertSupportedLoader({ type: flags.loader ?? 'fabric' });
 	const loader =
 		loaderType === 'vanilla'
 			? { type: 'vanilla' }
@@ -80,11 +81,121 @@ export const info_ = async ({ positionals, flags }) => {
 	info(`  minecraft  ${manifest.minecraft}`);
 	info(`  loader     ${manifest.loader?.type ?? 'vanilla'} ${manifest.loader?.version ?? ''}`);
 	info(`  game dir   ${manifest.gameDir}`);
-	info(`  mods       ${plural(manifest.mods.length, 'declared')}, ${lock.mods.length} installed`);
+	info(`  mods       ${manifest.mods.length} declared, ${lock.mods.length} installed`);
 
 	for (const mod of lock.mods) {
 		info(`    ${mod.requested ? ' ' : paint.dim('+')} ${mod.name} ${paint.dim(mod.version)}`);
 	}
+
+	return 0;
+};
+
+const NUMERIC = new Set(['memory.min', 'memory.max']);
+
+const SETTABLE = new Set([
+	'minecraft',
+	'loader',
+	'loaderVersion',
+	'gameDir',
+	'username',
+	'memory.min',
+	'memory.max',
+	'javaPath',
+]);
+
+/** Everything about an instance except its mods was fixed at creation until this existed. */
+export const set = async ({ positionals, flags }) => {
+	const [key, ...rest] = positionals;
+	const { manifest } = await targetInstance(flags.instance);
+
+	if (key === undefined) {
+		for (const name of SETTABLE) {
+			const [head, tail] = name.split('.');
+			const value = tail ? manifest[head]?.[tail] : manifest[head];
+
+			info(`  ${name.padEnd(14)} ${value === undefined ? paint.dim('unset') : JSON.stringify(value)}`);
+		}
+
+		return 0;
+	}
+
+	if (!SETTABLE.has(key)) throw new Error(`"${key}" is not settable. "mcm set" lists what is.`);
+	if (rest.length === 0) throw new Error(`mcm set ${key} <value>`);
+
+	const raw = rest.join(' ');
+
+	if (key === 'minecraft') return bump({ positionals: [raw], flags });
+
+	if (key === 'loader') {
+		const type = assertSupportedLoader({ type: raw });
+
+		manifest.loader = type === 'vanilla' ? { type } : { type, version: await latestLoader(manifest.minecraft) };
+	} else if (key === 'loaderVersion') {
+		manifest.loader = { ...manifest.loader, version: raw };
+	} else if (key === 'gameDir') {
+		manifest.gameDir = resolve(raw);
+	} else if (NUMERIC.has(key)) {
+		const [, field] = key.split('.');
+		const value = Number(raw);
+
+		if (!Number.isFinite(value)) throw new Error(`${key} needs a number, not "${raw}"`);
+
+		manifest.memory = { ...(manifest.memory ?? { min: 512, max: 4096 }), [field]: value };
+	} else manifest[key] = raw;
+
+	await instances.write(manifest);
+
+	done(`${manifest.name}: ${key} = ${raw}`);
+
+	return 0;
+};
+
+/** Move an instance to another game version, carrying the loader with it. */
+export const bump = async ({ positionals, flags }) => {
+	const [wanted] = positionals;
+
+	if (wanted === undefined) throw new Error('mcm bump <minecraft-version>');
+
+	const { manifest } = await targetInstance(flags.instance);
+	const minecraft = await resolveVersionId(wanted);
+	const was = manifest.minecraft;
+
+	manifest.minecraft = minecraft;
+
+	if (manifest.loader?.type && manifest.loader.type !== 'vanilla') {
+		manifest.loader = {
+			...manifest.loader,
+			version: flags.loaderVersion ?? (await latestLoader(minecraft)),
+		};
+	}
+
+	await instances.write(manifest);
+
+	done(
+		`${manifest.name}: ${was} -> ${minecraft}${manifest.loader?.version ? `, loader ${manifest.loader.version}` : ''}`,
+	);
+	info(paint.dim('  run "mcm update" to move the mods, then "mcm launch"'));
+
+	return 0;
+};
+
+export const clone = async ({ positionals, flags }) => {
+	const [source, destination] = positionals;
+
+	if (source === undefined || destination === undefined) throw new Error('mcm clone <source> <new-name>');
+
+	const original = await instances.read(source);
+
+	const copy = await instances.create(destination, {
+		...original,
+		name: destination,
+		gameDir: flags.gameDir ? resolve(flags.gameDir) : undefined,
+		mods: structuredClone(original.mods),
+	});
+
+	done(`Cloned ${source} -> ${destination}`);
+	info(paint.dim(`  ${copy.gameDir}`));
+	info(paint.dim('  run "mcm sync -i ' + destination + '" to install its mods'));
 
 	return 0;
 };

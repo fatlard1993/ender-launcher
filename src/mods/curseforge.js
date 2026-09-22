@@ -37,8 +37,6 @@ export const downloadUrl = (fileId, fileName) =>
 
 const keyed = async (path, key) => fetchJson(`${API}${path}`, { headers: { 'x-api-key': key } });
 
-// ---------------------------------------------------------------- keyless
-
 /** The mirror builds a project on first request and answers 202 until it is ready. */
 const widget = async path => {
 	for (let attempt = 0; attempt < 4; ++attempt) {
@@ -113,8 +111,6 @@ const resolveKeyless = async (entry, { minecraft, loader }) => {
 		dependencies: [],
 	};
 };
-
-// ---------------------------------------------------------------- keyed
 
 const findProject = async (entry, key) => {
 	if (/^\d+$/.test(String(entry.id))) return { id: Number(entry.id), name: String(entry.id) };

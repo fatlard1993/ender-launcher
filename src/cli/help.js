@@ -2,7 +2,7 @@ import { info, paint } from '../out';
 import { commands } from './commands';
 
 const GROUPS = [
-	['Instances', ['ls', 'new', 'use', 'info', 'delete', 'import']],
+	['Instances', ['ls', 'new', 'use', 'info', 'set', 'bump', 'clone', 'delete', 'import']],
 	['Running', ['install', 'launch', 'explain']],
 	['Mods', ['search', 'add', 'drop', 'sync', 'update']],
 	['Servers', ['server']],
@@ -45,13 +45,17 @@ export const commandHelp = (name, command) => {
 		info('');
 		info(paint.bold('Flags'));
 
+		// Flags are declared in camelCase and typed in kebab-case, so kebab is what is shown. A
+		// boolean already on by default is only useful as its negation.
+		const kebab = flag => flag.replaceAll(/[A-Z]/g, letter => `-${letter.toLowerCase()}`);
+
 		for (const [flag, spec] of flags) {
 			const alias = spec.alias ? `-${spec.alias}, ` : '    ';
-			const shown = `${alias}--${flag}${spec.type === 'boolean' ? '' : ' <value>'}`;
+			const name = spec.type === 'boolean' && spec.default === true ? `--no-${kebab(flag)}` : `--${kebab(flag)}`;
+			const shown = `${alias}${name}${spec.type === 'boolean' ? '' : ' <value>'}`;
+			const note = spec.default === undefined || spec.type === 'boolean' ? '' : paint.dim(` (${spec.default})`);
 
-			info(
-				`  ${paint.cyan(shown.padEnd(24))} ${spec.description ?? ''}${spec.default === undefined ? '' : paint.dim(` (${spec.default})`)}`,
-			);
+			info(`  ${paint.cyan(shown.padEnd(26))} ${spec.description ?? ''}${note}`);
 		}
 	}
 };

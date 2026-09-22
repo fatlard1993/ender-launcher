@@ -1,7 +1,8 @@
 import { mkdir } from 'node:fs/promises';
+import { resolve } from 'node:path';
 
 import * as instances from '../instance';
-import { entryKey, reportSync, sources, syncMods } from '../mods';
+import { entryKey, reportSync, resolveAll, sources, syncMods } from '../mods';
 import { done, fail, info, paint, plural, step, warn } from '../out';
 import { parseModSpec, targetInstance } from './context';
 
@@ -32,8 +33,8 @@ const applySync = async (manifest, config, { withDependencies = true } = {}) => 
 	return result;
 };
 
-export const sync = async ({ flags }) => {
-	const { manifest, config } = await targetInstance(flags.instance);
+export const sync = async ({ positionals, flags }) => {
+	const { manifest, config } = await targetInstance(flags.instance ?? positionals[0]);
 
 	step(`Syncing mods for ${manifest.name}`);
 
@@ -53,18 +54,27 @@ export const add = async ({ positionals, flags }) => {
 	for (const spec of positionals) {
 		const entry = parseModSpec(spec);
 
+		// A relative path means something different from every other directory, so it is anchored
+		// now, the way --game-dir already is, rather than at each sync.
+		if (entry.source === 'local') entry.path = resolve(entry.path);
+
 		if (existing.has(entryKey(entry))) {
 			warn(`${spec} is already declared`);
 
 			continue;
 		}
 
-		manifest.mods.push(entry);
 		existing.add(entryKey(entry));
 		added.push(entry);
 	}
 
 	if (added.length === 0) return 0;
+
+	// Resolved before it is written: a name that cannot be found must not enter the manifest, or
+	// every later mod command on this instance fails on a typo nothing will show you.
+	await resolveAll(added, contextFor(manifest, config), { withDependencies: false });
+
+	manifest.mods.push(...added);
 
 	await instances.write(manifest);
 
@@ -80,8 +90,18 @@ export const drop = async ({ positionals, flags }) => {
 
 	if (positionals.length === 0) throw new Error('mcm drop <mod> [mod...]');
 
-	const wanted = new Set(positionals.map(spec => entryKey(parseModSpec(spec))));
-	const byId = new Set(positionals.map(spec => parseModSpec(spec).id));
+	const wanted = new Set(
+		positionals.map(spec => {
+			const entry = parseModSpec(spec);
+
+			if (entry.source === 'local') entry.path = resolve(entry.path);
+
+			return entryKey(entry);
+		}),
+	);
+	// Path and url entries carry no id. Without the filter every one of them matches `undefined`
+	// and a single unrelated argument drops the lot.
+	const byId = new Set(positionals.map(spec => parseModSpec(spec).id).filter(Boolean));
 
 	const kept = manifest.mods.filter(entry => !wanted.has(entryKey(entry)) && !byId.has(entry.id));
 	const dropped = manifest.mods.length - kept.length;
