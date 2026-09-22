@@ -7,7 +7,7 @@ import { ensureFile } from '../src/download';
 import { coordinateToPath } from '../src/meta/maven';
 import { assertSupportedLoader } from '../src/meta/resolve';
 import { chooseAsset } from '../src/mods/github';
-import { extractArchive } from '../src/natives';
+import { extractArchive } from '../src/archive';
 
 describe('maven coordinates cannot leave the repository root', () => {
 	test('an extension segment cannot climb out', () => {

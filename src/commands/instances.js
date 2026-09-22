@@ -1,8 +1,11 @@
-import { relative, resolve } from 'node:path';
+import { stat } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 
 import { readConfig, updateConfig } from '../config';
 import * as instances from '../instance';
-import { fromPrism } from '../instance/import';
+import { fromPrism, identifyMods } from '../instance/import';
+import { readPack, unpackInto } from '../instance/pack';
+import { entryKey } from '../mods';
 import { latestLoader } from '../meta/fabric';
 import { resolveVersionId } from '../meta/mojang';
 import { assertSupportedLoader } from '../meta/resolve';
@@ -225,11 +228,77 @@ export const remove = async ({ positionals, flags }) => {
 	return 0;
 };
 
-export const importPrism = async ({ positionals, flags }) => {
-	const [directory] = positionals;
+const reportUnmanaged = (unmatched, gameDir) => {
+	if (unmatched.length === 0) return;
 
-	if (directory === undefined) throw new Error('mcm import <prism-instance-directory>');
+	info('');
+	warn(`${plural(unmatched.length, 'jar')} could not be identified and stay unmanaged:`);
 
+	for (const file of unmatched) info(`    ${file}`);
+
+	info(paint.dim('  They keep working. To have mcm manage one, add it by path:'));
+	info(paint.dim(`    mcm add ${join(gameDir, 'mods', unmatched[0])}`));
+};
+
+const activateIfFirst = async name => {
+	if ((await readConfig()).activeInstance === undefined) await updateConfig({ activeInstance: name });
+};
+
+const importPack = async (path, flags) => {
+	const pack = await readPack(path, {
+		name: flags.name,
+		minecraft: flags.minecraft,
+		loader: flags.loader ? { type: flags.loader } : undefined,
+	});
+
+	assertSupportedLoader(pack.manifest.loader);
+
+	if (await instances.exists(pack.manifest.name))
+		throw new Error(`An instance named "${pack.manifest.name}" already exists`);
+
+	// A pack may name a loader without pinning it; the instance should still say which one it got.
+	if (pack.manifest.loader.type !== 'vanilla' && !pack.manifest.loader.version) {
+		pack.manifest.loader.version = await latestLoader(pack.manifest.minecraft);
+	}
+
+	const manifest = await instances.create(pack.manifest.name, {
+		...pack.manifest,
+		...(flags.gameDir ? { gameDir: resolve(flags.gameDir) } : {}),
+	});
+
+	const written = await unpackInto(path, pack, manifest.gameDir);
+
+	// Whatever the pack carried as loose files is asked about by hash, the same way an imported
+	// Prism instance is, so a bundled jar that is really a published mod becomes updatable.
+	const { entries, unmatched } = await identifyMods(instances.modsDir(manifest));
+	const known = new Set(manifest.mods.map(entryKey));
+
+	for (const entry of entries) {
+		if (!known.has(entryKey(entry))) manifest.mods.push(entry);
+	}
+
+	await instances.write(manifest);
+
+	done(
+		`Imported ${manifest.name} :: Minecraft ${manifest.minecraft}, ${manifest.loader.type} ${manifest.loader.version ?? ''}`,
+	);
+
+	if (pack.summary) info(paint.dim(`  ${pack.summary}`));
+
+	info(paint.dim(`  game dir  ${manifest.gameDir}`));
+	info(paint.dim(`  ${plural(written.length, 'file')} unpacked, ${plural(manifest.mods.length, 'mod')} declared`));
+
+	reportUnmanaged(unmatched, manifest.gameDir);
+
+	info('');
+	info(paint.dim(`  mcm sync -i ${manifest.name}   to fetch what the pack references`));
+
+	await activateIfFirst(manifest.name);
+
+	return 0;
+};
+
+const importPrismInstance = async (directory, flags) => {
 	step(`Reading ${directory}`);
 
 	const { manifest, unmatched } = await fromPrism(directory, { name: flags.name });
@@ -244,17 +313,23 @@ export const importPrism = async ({ positionals, flags }) => {
 	info(paint.dim(`  game dir  ${manifest.gameDir}`));
 	info(paint.dim(`  ${plural(manifest.mods.length, 'mod')} identified on Modrinth`));
 
-	if (unmatched.length > 0) {
-		info('');
-		warn(`${plural(unmatched.length, 'jar')} could not be identified and stay unmanaged:`);
+	reportUnmanaged(unmatched, manifest.gameDir);
 
-		for (const file of unmatched) info(`    ${file}`);
-
-		info(paint.dim('  They keep working. To have mcm manage one, add it by path:'));
-		info(paint.dim(`    mcm add ./${relative(process.cwd(), manifest.gameDir)}/mods/${unmatched[0]}`));
-	}
-
-	if ((await readConfig()).activeInstance === undefined) await updateConfig({ activeInstance: manifest.name });
+	await activateIfFirst(manifest.name);
 
 	return 0;
+};
+
+/** A Prism instance directory, or a modpack in any of the shapes people actually hand around. */
+export const importAny = async ({ positionals, flags }) => {
+	const [target] = positionals;
+
+	if (target === undefined) throw new Error('mcm import <prism-instance-directory | pack.mrpack | pack.zip>');
+
+	const path = resolve(target);
+	const info_ = await stat(path).catch(() => undefined);
+
+	if (info_ === undefined) throw new Error(`No such file or directory: ${target}`);
+
+	return info_.isDirectory() ? importPrismInstance(path, flags) : importPack(path, flags);
 };

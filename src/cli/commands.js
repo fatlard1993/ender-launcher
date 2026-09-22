@@ -65,10 +65,15 @@ export const commands = {
 		run: instanceCommands.remove,
 	},
 	import: {
-		summary: 'Adopt a Prism Launcher instance',
-		usage: 'mcm import <prism-instance-directory>',
-		flags: { name: { description: 'Name it something other than Prism did' } },
-		run: instanceCommands.importPrism,
+		summary: 'Adopt a Prism instance or a modpack',
+		usage: 'mcm import <prism-instance-dir | pack.mrpack | pack.zip>',
+		flags: {
+			name: { description: 'Name it something other than the pack did' },
+			gameDir: { description: 'Use an existing directory as the game directory' },
+			minecraft: { alias: 'm', description: 'Game version, for an archive that names none' },
+			loader: { alias: 'l', description: 'Loader, for an archive that names none' },
+		},
+		run: instanceCommands.importAny,
 	},
 
 	install: {

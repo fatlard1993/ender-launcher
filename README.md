@@ -17,6 +17,14 @@ bun install
 bun link            # puts `mcm` on your PATH
 ```
 
+If you have a modpack, start from it:
+
+```
+mcm import pack.mrpack
+mcm sync
+mcm launch
+```
+
 If you have a Prism instance already, adopt it rather than rebuild it:
 
 ```
@@ -26,6 +34,18 @@ mcm launch
 ```
 
 Import reads the version and loader out of `mmc-pack.json`, follows `.minecraft` to wherever it really points, and asks Modrinth to identify the jars already in `mods/`. What it recognizes becomes a declared mod. What it does not recognize is listed and then left exactly where it is.
+
+## Packs
+
+`mcm import` takes a pack as readily as an instance, and decides which kind it is by looking inside rather than at the extension:
+
+| Shape | What it carries | What import does |
+| --- | --- | --- |
+| Modrinth `.mrpack` | `modrinth.index.json` + `overrides/` | version, loader, and each referenced file as a checksummed mod entry |
+| CurseForge `.zip` | `manifest.json` + `overrides/` | version, loader, and each mod by project and file id |
+| A plain zip of jars | jars, and nothing else | lays them in `mods/`; needs `--minecraft`, because nothing in it says |
+
+Whatever a pack carries as loose files is unpacked into the game directory, then offered to Modrinth by hash. A bundled jar that turns out to be a published mod becomes a declared, updatable entry; one that does not is listed and left alone, the same as any jar you dropped in yourself. A pack's `client`/`server` markings are honored, so importing a pack into a server instance leaves out what it says is client-only.
 
 Otherwise, start fresh:
 

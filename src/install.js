@@ -2,7 +2,7 @@ import { mkdir } from 'node:fs/promises';
 
 import { ensureFile, pool } from './download';
 import { assetJobs, fetchAssetIndex } from './meta/mojang';
-import { extractArchive } from './natives';
+import { extractArchive } from './archive';
 import { detail, plural, progress, step } from './out';
 
 const runJobs = async (label, jobs, { concurrency = 8 } = {}) => {

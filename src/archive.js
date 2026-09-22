@@ -11,9 +11,9 @@ const STORED = 0;
 const DEFLATED = 8;
 
 /**
- * Enough of the zip format to unpack a natives jar: the central directory, then stored and
- * deflated entries. Minecraft before 1.19 ships its native libraries as jars the launcher is
- * expected to unpack, and Bun has no archive reader of its own.
+ * Enough of the zip format to read the archives this tool meets: the central directory, then
+ * stored and deflated entries. Natives jars before 1.19, and modpacks in every shape, are all
+ * zips, and Bun has no archive reader of its own.
  */
 const centralDirectory = buffer => {
 	// The end record sits at the tail, behind a comment of unknown length.
@@ -61,18 +61,51 @@ const contentOf = (buffer, entry) => {
 
 const excluded = (name, rules) => rules.some(rule => name.startsWith(rule));
 
+const openArchive = async path => {
+	const buffer = Buffer.from(await Bun.file(path).arrayBuffer());
+
+	return { buffer, entries: centralDirectory(buffer) };
+};
+
+/** Every file path inside the archive, directories omitted. */
+export const listEntries = async path => {
+	const { entries } = await openArchive(path);
+
+	return entries.filter(entry => !entry.name.endsWith('/')).map(entry => entry.name);
+};
+
+/** One entry's bytes, or undefined when the archive has no such entry. */
+export const readEntry = async (path, name) => {
+	const { buffer, entries } = await openArchive(path);
+	const entry = entries.find(candidate => candidate.name === name);
+
+	return entry && contentOf(buffer, entry);
+};
+
+export const readEntryJson = async (path, name) => {
+	const bytes = await readEntry(path, name);
+
+	return bytes && JSON.parse(bytes.toString('utf8'));
+};
+
 /**
- * Unpack an archive into a directory, dropping entries the version manifest excludes.
- * Entry names come from a downloaded archive, so each one is checked to land inside the target.
+ * Unpack an archive into a directory, dropping entries the caller excludes and stripping a leading
+ * path when one is given. Entry names come from a downloaded archive, so each one is checked to
+ * land inside the target.
  */
-export const extractArchive = async (archivePath, targetDirectory, { exclude = [] } = {}) => {
-	const buffer = Buffer.from(await Bun.file(archivePath).arrayBuffer());
+export const extractArchive = async (archivePath, targetDirectory, { exclude = [], prefix } = {}) => {
+	const { buffer, entries } = await openArchive(archivePath);
 	const written = [];
 
-	for (const entry of centralDirectory(buffer)) {
+	for (const entry of entries) {
 		if (entry.name.endsWith('/') || excluded(entry.name, exclude)) continue;
+		if (prefix !== undefined && !entry.name.startsWith(prefix)) continue;
 
-		const destination = join(targetDirectory, normalize(entry.name));
+		const relative = prefix === undefined ? entry.name : entry.name.slice(prefix.length);
+
+		if (relative === '') continue;
+
+		const destination = join(targetDirectory, normalize(relative));
 
 		if (!destination.startsWith(`${targetDirectory}/`)) {
 			throw new Error(`Archive entry escapes its directory: ${entry.name}`);
@@ -81,7 +114,7 @@ export const extractArchive = async (archivePath, targetDirectory, { exclude = [
 		await mkdir(dirname(destination), { recursive: true });
 		await writeFile(destination, contentOf(buffer, entry));
 
-		written.push(entry.name);
+		written.push(relative);
 	}
 
 	return written;
