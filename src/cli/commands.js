@@ -1,3 +1,4 @@
+import * as accountCommands from '../commands/account';
 import * as instanceCommands from '../commands/instances';
 import * as modCommands from '../commands/mods';
 import * as playCommands from '../commands/play';
@@ -155,6 +156,20 @@ export const commands = {
 		},
 	},
 
+	account: {
+		summary: 'Microsoft accounts to play as',
+		usage: 'mcm account [ls|add|use <name>|remove <name>|assign <name>|status]',
+		flags: instanceFlag,
+		subcommands: {
+			ls: { summary: 'List signed in accounts', run: accountCommands.ls },
+			add: { summary: 'Sign in to a Microsoft account', run: accountCommands.add },
+			use: { summary: 'Choose which account instances play as', run: accountCommands.use },
+			remove: { summary: 'Forget an account', run: accountCommands.remove },
+			assign: { summary: 'Bind one instance to one account', run: accountCommands.assign },
+			status: { summary: 'Show the sign in configuration', run: accountCommands.status },
+		},
+		run: accountCommands.ls,
+	},
 	config: {
 		summary: 'Read or write global settings',
 		usage: 'mcm config [key] [value]',

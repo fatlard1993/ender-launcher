@@ -1,7 +1,7 @@
 import { delimiter } from 'node:path';
 
 import { version } from '../package.json';
-import { offlineProfile } from './auth';
+import { profileFor } from './auth';
 import { selectJava } from './java';
 import { paths } from './paths';
 import { detail, step, warn } from './out';
@@ -29,10 +29,10 @@ const substitute = (argument, values) =>
 export const buildCommand = async (
 	plan,
 	instance,
-	{ javaPath, username, memory, extraJvmArgs = [], manageJava = true } = {},
+	{ javaPath, username, account, memory, extraJvmArgs = [], manageJava = true } = {},
 ) => {
 	const java = await selectJava(plan.javaMajor, javaPath, { component: plan.javaComponent, manage: manageJava });
-	const profile = offlineProfile(username);
+	const profile = await profileFor({ account, username });
 
 	const classpath = [...plan.libraries.map(({ path }) => path), plan.clientJar.path].join(delimiter);
 
@@ -77,7 +77,7 @@ export const buildCommand = async (
 export const launch = async (plan, instance, options) => {
 	const { command, java, profile } = await buildCommand(plan, instance, options);
 
-	step(`Launching ${instance.name} as ${profile.name} (offline)`);
+	step(`Launching ${instance.name} as ${profile.name}${profile.online ? '' : ' (offline)'}`);
 
 	detail('java', java.path);
 	detail('cwd', instance.gameDir);

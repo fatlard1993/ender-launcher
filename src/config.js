@@ -10,6 +10,7 @@ const defaults = {
 	memory: { min: 512, max: 4096 },
 	manageJava: true,
 	prerelease: false,
+	clientId: undefined,
 };
 
 export const readConfig = async () => ({ ...defaults, ...(await readJson(paths.config, {})) });

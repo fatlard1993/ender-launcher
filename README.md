@@ -58,9 +58,20 @@ With no flags at all, `mcm new suite` is the newest release on the newest stable
 
 ## Accounts
 
-Launching is offline only. The player UUID is derived from the name the way vanilla derives it, so worlds and inventories follow the name and a save made under an online account still knows you.
+```
+mcm account            who is signed in
+mcm account add        sign in to a Microsoft account
+mcm account use <name> choose which one instances play as
+mcm account assign <name>  bind one instance to one account
+```
 
-An offline client cannot join a server running `online-mode=true`. For a server this tool manages, `mcm server offline` turns that off, and a newly provisioned server is set that way from the start. For someone else's server, offline is simply not going to work, and that is not something a launcher can fix.
+Sign in is the Microsoft device code flow: mcm shows a short code, you type it into a browser, and the tokens live in `accounts.json` with owner-only permissions. A Minecraft token lasts a day and is renewed from the Microsoft one when it goes stale, so signing in is a thing you do once.
+
+**Signing in needs an Azure app registration of your own, and getting one approved is the hard part.** A new registration cannot use the Minecraft API until Microsoft reviews it, and there is no route designed for an individual: the documented answer points at the Xbox Developer program, which expects you to be shipping a game. Register an application in Microsoft Entra ID, add a mobile and desktop platform, allow public client flows, apply at <https://aka.ms/mce-reviewappid>, then `mcm config clientId <the application id>`. Until it is approved, Minecraft answers the sign in with a 403 and mcm says so plainly rather than leaving you to guess.
+
+Without an account, instances launch offline. The player UUID is derived from the name the way vanilla derives it, so worlds and inventories follow the name and a save made under an online account still knows you. A failed sign in is an error rather than a silent downgrade: a token that cannot be renewed is worth hearing about, not quietly swapping you into a game that cannot join anything.
+
+An offline client cannot join a server running `online-mode=true`. For a server this tool manages, `mcm server offline` turns that off, and a newly provisioned server is set that way from the start.
 
 ## Instances
 

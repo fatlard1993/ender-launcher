@@ -23,6 +23,7 @@ export const targetInstance = async explicit => {
 /** Instance settings win over global ones; global settings exist so every instance need not repeat them. */
 export const settingsFor = (manifest, config) => ({
 	username: manifest.username ?? config.username,
+	account: manifest.account,
 	memory: manifest.memory ?? config.memory,
 	javaPath: manifest.javaPath ?? config.javaPath,
 });

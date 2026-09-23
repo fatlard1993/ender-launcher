@@ -1,5 +1,6 @@
 import { mkdir } from 'node:fs/promises';
 
+import { profileFor } from '../auth';
 import { readConfig } from '../config';
 import * as instances from '../instance';
 import { installPlan } from '../install';
@@ -45,8 +46,12 @@ export const play = async ({ positionals, flags }) => {
 
 	const settings = settingsFor(manifest, config);
 
-	if (settings.username === undefined || settings.username === 'Player') {
-		warn('Launching as "Player". Set a name with "mcm config username <name>".');
+	const { accounts } = await import('../auth');
+
+	if ((await accounts.readAccounts()).active === undefined && !settings.account) {
+		if (settings.username === undefined || settings.username === 'Player') {
+			warn('Launching as "Player". Set a name with "mcm config username <name>", or sign in with "mcm account add".');
+		}
 	}
 
 	const plan = await planFor(manifest, 'client');
@@ -85,7 +90,13 @@ export const explain = async ({ positionals, flags }) => {
 	info(`  asset index ${plan.assetIndexId}`);
 	info(`  natives     ${plan.nativesDirectory}`);
 	info(`  game dir    ${manifest.gameDir}`);
-	info(`  user        ${settings.username ?? 'Player'} ${paint.dim('(offline)')}`);
+	const profile = await profileFor({ account: settings.account, username: settings.username ?? 'Player' }).catch(
+		() => undefined,
+	);
+
+	info(
+		`  user        ${profile?.name ?? settings.username ?? 'Player'} ${paint.dim(profile?.online ? '(signed in)' : '(offline)')}`,
+	);
 
 	return 0;
 };

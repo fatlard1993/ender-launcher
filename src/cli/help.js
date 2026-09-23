@@ -6,6 +6,7 @@ const GROUPS = [
 	['Running', ['install', 'launch', 'explain']],
 	['Mods', ['search', 'add', 'drop', 'sync', 'update']],
 	['Servers', ['server']],
+	['Accounts', ['account']],
 	['Settings', ['config', 'java']],
 ];
 
