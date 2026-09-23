@@ -1,4 +1,5 @@
 import { accounts } from '../auth';
+import * as instances from '../instance';
 import { readConfig } from '../config';
 import { done, info, paint, plural, warn } from '../out';
 import { targetInstance } from './context';
@@ -19,22 +20,39 @@ export const ls = async () => {
 	const found = await accounts.list();
 
 	if (found.length === 0) {
-		info('No accounts. Sign in with "mcm account add".');
-		info(paint.dim('  Without one, instances launch offline under the configured username.'));
+		info('No accounts yet.');
+		info(paint.dim('  mcm account add --offline <name>   an identity that needs no sign in'));
+		info(paint.dim('  mcm account add                   sign in to a Microsoft account'));
+		info(paint.dim('  Without either, instances launch offline under the configured username.'));
 
 		return 0;
 	}
 
 	for (const account of found) {
+		const kind = account.kind === 'offline' ? paint.dim('offline') : paint.cyan('microsoft');
+
 		info(
-			`${account.active ? paint.green('*') : ' '} ${paint.bold(account.name.padEnd(18))} ${paint.dim(account.uuid)}`,
+			`${account.active ? paint.green('*') : ' '} ${paint.bold(account.name.padEnd(18))} ${kind.padEnd(19)} ${paint.dim(account.uuid)}`,
 		);
 	}
 
 	return 0;
 };
 
-export const add = async () => {
+export const add = async ({ positionals, flags }) => {
+	if (flags.offline) {
+		const [name] = positionals;
+
+		if (name === undefined) throw new Error('mcm account add --offline <name>');
+
+		const account = await accounts.addOffline(name);
+
+		done(`Added offline account ${account.name}`);
+		info(paint.dim(`  ${account.uuid}`));
+
+		return 0;
+	}
+
 	const { clientId } = await readConfig();
 
 	if (!clientId) {
@@ -90,8 +108,6 @@ export const assign = async ({ positionals, flags }) => {
 		return 0;
 	}
 
-	const { default: instances } = await import('../instance');
-
 	manifest.account = name === 'none' ? undefined : name;
 
 	await instances.write(manifest);
@@ -104,9 +120,13 @@ export const assign = async ({ positionals, flags }) => {
 export const status = async () => {
 	const [found, config] = await Promise.all([accounts.list(), readConfig()]);
 
+	const active = found.find(account => account.active);
+
 	info(`  client id   ${config.clientId ?? paint.dim('unset')}`);
-	info(`  accounts    ${plural(found.length, 'account')}`);
-	info(`  active      ${found.find(account => account.active)?.name ?? paint.dim('none, launches offline')}`);
+	info(`  accounts    ${plural(found.length, 'account')} (${found.filter(a => a.kind === 'offline').length} offline)`);
+	info(
+		`  active      ${active ? `${active.name} ${paint.dim(`(${active.kind})`)}` : paint.dim(`none, launches offline as ${config.username ?? 'Player'}`)}`,
+	);
 
 	return 0;
 };

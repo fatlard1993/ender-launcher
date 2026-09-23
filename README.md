@@ -59,11 +59,14 @@ With no flags at all, `mcm new suite` is the newest release on the newest stable
 ## Accounts
 
 ```
-mcm account            who is signed in
-mcm account add        sign in to a Microsoft account
-mcm account use <name> choose which one instances play as
-mcm account assign <name>  bind one instance to one account
+mcm account                    who you can play as
+mcm account add --offline Bob  an identity that needs no sign in
+mcm account add                sign in to a Microsoft account
+mcm account use <name>         choose which one instances play as
+mcm account assign <name>      bind one instance to one account
 ```
+
+An account is either offline or Microsoft, and the two sit in one list and switch the same way. An offline one is a name and the uuid vanilla derives from it, so it is exactly the player a bare username would have been, only one you can keep several of and move between. That is what makes testing your own multiplayer worth doing locally: two instances, two names, two uuids, one `online-mode=false` server.
 
 Sign in is the Microsoft device code flow: mcm shows a short code, you type it into a browser, and the tokens live in `accounts.json` with owner-only permissions. A Minecraft token lasts a day and is renewed from the Microsoft one when it goes stale, so signing in is a thing you do once.
 

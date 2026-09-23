@@ -81,6 +81,61 @@ describe('account storage', () => {
 	});
 });
 
+describe('offline accounts', () => {
+	test('derive the same uuid a bare username would have', async () => {
+		const accounts = await accountsModule();
+		const account = await accounts.addOffline('Tester');
+
+		expect(account.kind).toBe('offline');
+		expect(account.uuid).toBe(offlineUuid('Tester'));
+	});
+
+	test('refuse a name Minecraft would not accept', async () => {
+		const accounts = await accountsModule();
+
+		for (const bad of ['no', 'way-too-long-a-name-here', 'has space', 'bad!']) {
+			await expect(accounts.addOffline(bad)).rejects.toThrow('not a usable Minecraft name');
+		}
+	});
+
+	test('will not quietly replace one that exists', async () => {
+		const accounts = await accountsModule();
+
+		await accounts.addOffline('Tester');
+		await expect(accounts.addOffline('Tester')).rejects.toThrow('already exists');
+	});
+
+	test('sit beside microsoft ones and switch the same way', async () => {
+		const accounts = await accountsModule();
+
+		await accounts.writeAccounts({
+			active: 'signedin',
+			accounts: {
+				signedin: { kind: 'microsoft', name: 'signedin', uuid: 'x', expiresAt: Date.now() + 1e6 },
+			},
+		});
+		await accounts.addOffline('Tester');
+		await accounts.use('Tester');
+
+		const listed = await accounts.list();
+
+		expect(listed.map(account => account.kind).sort()).toEqual(['microsoft', 'offline']);
+		expect(listed.find(account => account.active).name).toBe('Tester');
+	});
+
+	// An offline identity has no token, so resolving one must not try to renew anything.
+	test('resolve without reaching for the network', async () => {
+		const accounts = await accountsModule();
+
+		await accounts.addOffline('Tester');
+
+		const resolved = await accounts.resolveAccount('Tester');
+
+		expect(resolved.name).toBe('Tester');
+		expect(resolved.token).toBeUndefined();
+	});
+});
+
 describe('who an instance plays as', () => {
 	test('falls back to the offline identity when nobody is signed in', async () => {
 		const { profileFor } = await import('../src/auth');
@@ -91,13 +146,33 @@ describe('who an instance plays as', () => {
 		expect(profile.userType).toBe('legacy');
 	});
 
+	test('an offline account plays as itself, not as the configured username', async () => {
+		const accounts = await accountsModule();
+
+		await accounts.addOffline('Tester');
+
+		const { profileFor } = await import('../src/auth');
+		const profile = await profileFor({ username: 'Ignored' });
+
+		expect(profile.name).toBe('Tester');
+		expect(profile.online).toBe(false);
+		expect(profile.uuid).toBe(offlineUuid('Tester'));
+	});
+
 	test('uses a stored account when there is one, and says it is online', async () => {
 		const accounts = await accountsModule();
 
 		await accounts.writeAccounts({
 			active: 'player',
 			accounts: {
-				player: { name: 'player', uuid: 'abc', token: 'secret', expiresAt: Date.now() + 1e6, clientId: 'cid' },
+				player: {
+					kind: 'microsoft',
+					name: 'player',
+					uuid: 'abc',
+					token: 'secret',
+					expiresAt: Date.now() + 1e6,
+					clientId: 'cid',
+				},
 			},
 		});
 

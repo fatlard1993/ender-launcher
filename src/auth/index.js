@@ -14,7 +14,9 @@ export * as accounts from './accounts';
 export const profileFor = async ({ account, username } = {}) => {
 	const resolved = await resolveAccount(account);
 
-	if (resolved !== undefined) return { ...asProfile(resolved), online: true };
+	if (resolved !== undefined) return asProfile(resolved);
 
+	// No account chosen at all: the configured name, which is the identity mcm had before accounts
+	// were a thing and is still the shortest way to play.
 	return { ...offlineProfile(username ?? 'Player'), online: false };
 };

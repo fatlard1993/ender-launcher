@@ -3,7 +3,11 @@ import { chmod } from 'node:fs/promises';
 import { readJson, writeJson } from '../json';
 import { detail } from '../out';
 import { paths } from '../paths';
+import { offlineProfile, offlineUuid } from './offline';
 import { fetchProfile, refresh, signIn, toMinecraft } from './microsoft';
+
+/** Accounts stored before offline ones existed are all Microsoft ones. */
+const kindOf = account => account.kind ?? 'microsoft';
 
 const accountsPath = () => paths.accounts;
 
@@ -24,7 +28,11 @@ export const writeAccounts = async store => {
 export const list = async () => {
 	const { active, accounts } = await readAccounts();
 
-	return Object.values(accounts).map(account => ({ ...account, active: account.name === active }));
+	return Object.values(accounts).map(account => ({
+		...account,
+		kind: kindOf(account),
+		active: account.name === active,
+	}));
 };
 
 /** Sign in and keep the result under the profile name Minecraft reports. */
@@ -35,6 +43,7 @@ export const add = async ({ clientId, onPrompt } = {}) => {
 	const store = await readAccounts();
 
 	store.accounts[profile.name] = {
+		kind: 'microsoft',
 		name: profile.name,
 		uuid: profile.id,
 		clientId,
@@ -48,6 +57,27 @@ export const add = async ({ clientId, onPrompt } = {}) => {
 	await writeAccounts(store);
 
 	return store.accounts[profile.name];
+};
+
+/**
+ * An identity that needs no sign in. Its uuid is derived from the name the way vanilla derives it,
+ * so it is the same player a bare username would have been, just one you can name and switch to.
+ */
+export const addOffline = async name => {
+	if (!/^\w{3,16}$/.test(name)) {
+		throw new Error(`"${name}" is not a usable Minecraft name (3 to 16 letters, digits or underscore).`);
+	}
+
+	const store = await readAccounts();
+
+	if (store.accounts[name] !== undefined) throw new Error(`An account named "${name}" already exists`);
+
+	store.accounts[name] = { kind: 'offline', name, uuid: offlineUuid(name) };
+	store.active ??= name;
+
+	await writeAccounts(store);
+
+	return store.accounts[name];
 };
 
 export const remove = async name => {
@@ -87,6 +117,9 @@ export const resolveAccount = async wanted => {
 
 	if (account === undefined) throw new Error(`No account named "${name}". "mcm account" lists them.`);
 
+	// An offline identity has nothing to renew; it is a name and the uuid that follows from it.
+	if (kindOf(account) === 'offline') return account;
+
 	if (account.expiresAt > Date.now() + EXPIRY_MARGIN) return account;
 
 	detail('auth', `renewing ${account.name}`);
@@ -105,11 +138,15 @@ export const resolveAccount = async wanted => {
 	return account;
 };
 
-export const asProfile = account => ({
-	name: account.name,
-	uuid: account.uuid,
-	accessToken: account.token,
-	userType: 'msa',
-	xuid: account.xuid ?? '0',
-	clientId: account.clientId ?? '0',
-});
+export const asProfile = account =>
+	kindOf(account) === 'offline'
+		? { ...offlineProfile(account.name), online: false }
+		: {
+				name: account.name,
+				uuid: account.uuid,
+				accessToken: account.token,
+				userType: 'msa',
+				xuid: account.xuid ?? '0',
+				clientId: account.clientId ?? '0',
+				online: true,
+			};

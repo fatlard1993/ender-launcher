@@ -157,12 +157,12 @@ export const commands = {
 	},
 
 	account: {
-		summary: 'Microsoft accounts to play as',
+		summary: 'Who instances play as, online or offline',
 		usage: 'mcm account [ls|add|use <name>|remove <name>|assign <name>|status]',
-		flags: instanceFlag,
+		flags: { ...instanceFlag, offline: { type: 'boolean', description: 'Add an offline identity, no sign in' } },
 		subcommands: {
-			ls: { summary: 'List signed in accounts', run: accountCommands.ls },
-			add: { summary: 'Sign in to a Microsoft account', run: accountCommands.add },
+			ls: { summary: 'List accounts, online and offline', run: accountCommands.ls },
+			add: { summary: 'Sign in, or add an offline identity with --offline', run: accountCommands.add },
 			use: { summary: 'Choose which account instances play as', run: accountCommands.use },
 			remove: { summary: 'Forget an account', run: accountCommands.remove },
 			assign: { summary: 'Bind one instance to one account', run: accountCommands.assign },
