@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import * as instances from '../instance';
 import { entryKey, reportSync, resolveAll, sources, syncMods } from '../mods';
 import { done, fail, info, paint, plural, step, warn } from '../out';
-import { parseModSpec, targetInstance } from './context';
+import { parseModSpec, refineModSpec, targetInstance } from './context';
 
 const contextFor = (manifest, config, flags = {}) => ({
 	minecraft: manifest.minecraft,
@@ -12,6 +12,10 @@ const contextFor = (manifest, config, flags = {}) => ({
 	key: config.curseforgeKey,
 	githubToken: config.githubToken,
 	allowPrerelease: flags.pre ?? manifest.prerelease ?? config.prerelease ?? false,
+	// A source built from disk is rebuilt only when asked, because a gradle build is not something
+	// to run behind someone during an ordinary sync.
+	buildMissing: flags.build ?? false,
+	rebuild: flags.build ?? false,
 });
 
 export const syncInstance = async (manifest, config, { withDependencies = true, flags = {} } = {}) => {
@@ -53,11 +57,11 @@ export const add = async ({ positionals, flags }) => {
 	const added = [];
 
 	for (const spec of positionals) {
-		const entry = parseModSpec(spec);
+		const entry = await refineModSpec(parseModSpec(spec));
 
 		// A relative path means something different from every other directory, so it is anchored
 		// now, the way --game-dir already is, rather than at each sync.
-		if (entry.source === 'local') entry.path = resolve(entry.path);
+		if (entry.path) entry.path = resolve(entry.path);
 
 		if (existing.has(entryKey(entry))) {
 			warn(`${spec} is already declared`);
@@ -92,13 +96,15 @@ export const drop = async ({ positionals, flags }) => {
 	if (positionals.length === 0) throw new Error('mcm drop <mod> [mod...]');
 
 	const wanted = new Set(
-		positionals.map(spec => {
-			const entry = parseModSpec(spec);
+		await Promise.all(
+			positionals.map(async spec => {
+				const entry = await refineModSpec(parseModSpec(spec));
 
-			if (entry.source === 'local') entry.path = resolve(entry.path);
+				if (entry.path) entry.path = resolve(entry.path);
 
-			return entryKey(entry);
-		}),
+				return entryKey(entry);
+			}),
+		),
 	);
 	// Path and url entries carry no id. Without the filter every one of them matches `undefined`
 	// and a single unrelated argument drops the lot.
@@ -223,4 +229,4 @@ export const search = async ({ positionals, flags }) => {
 	return 0;
 };
 
-export { parseModSpec } from './context';
+export { parseModSpec, refineModSpec } from './context';

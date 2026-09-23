@@ -9,6 +9,7 @@ const instanceFlag = { instance: { alias: 'i', description: 'Instance to act on'
 const depsFlag = {
 	deps: { type: 'boolean', default: true, description: 'Also install required dependencies' },
 	pre: { type: 'boolean', description: 'Allow alpha and beta builds, not just releases' },
+	build: { type: 'boolean', description: 'Rebuild mods that come from a gradle project first' },
 };
 
 export const commands = {

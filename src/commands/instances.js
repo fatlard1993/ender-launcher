@@ -10,7 +10,7 @@ import { LOADER_SERVICES } from '../meta/resolve';
 import { resolveVersionId } from '../meta/mojang';
 import { assertKnownLoader, isLaunchable } from '../meta/resolve';
 import { done, info, paint, plural, step, warn } from '../out';
-import { parseModSpec, syncInstance } from './mods';
+import { parseModSpec, refineModSpec, syncInstance } from './mods';
 import { targetInstance, targetName } from './context';
 
 /** Said once, where the instance is made, rather than left for a failed launch to explain. */
@@ -58,13 +58,15 @@ export const create = async ({ positionals, flags }) => {
 		loader.version = flags.loaderVersion ?? (await LOADER_SERVICES[loaderType].latestLoader(minecraft));
 	}
 
-	const mods = specs.map(spec => {
-		const entry = parseModSpec(spec);
+	const mods = await Promise.all(
+		specs.map(async spec => {
+			const entry = await refineModSpec(parseModSpec(spec));
 
-		if (entry.source === 'local') entry.path = resolve(entry.path);
+			if (entry.path) entry.path = resolve(entry.path);
 
-		return entry;
-	});
+			return entry;
+		}),
+	);
 
 	// Resolved before the instance exists, so a typo leaves nothing behind to clean up.
 	const config = await readConfig();
@@ -74,6 +76,7 @@ export const create = async ({ positionals, flags }) => {
 		key: config.curseforgeKey,
 		githubToken: config.githubToken,
 		allowPrerelease: flags.pre ?? config.prerelease ?? false,
+		buildMissing: flags.build ?? false,
 	};
 
 	if (mods.length > 0) await resolveAll(mods, context, { withDependencies: false });

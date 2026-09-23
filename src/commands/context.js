@@ -1,5 +1,6 @@
 import { readConfig } from '../config';
 import * as instances from '../instance';
+import { isProject } from '../mods/gradle';
 
 /** Which instance a command acts on: what the caller resolved, then whatever `use` last set. */
 export const targetName = async (explicit, config) => {
@@ -29,11 +30,23 @@ export const settingsFor = (manifest, config) => ({
 const LOCAL = /^\.{0,2}\//;
 
 /** `sodium`, `modrinth:sodium@0.5.8`, `cf:jei`, `./build/libs/mod.jar`, or a url. */
+/**
+ * Refine a parsed spec against the disk: a path naming a gradle project is a source to build from,
+ * where a path naming a jar is the jar itself. Kept apart from parsing so the parse stays pure.
+ */
+export const refineModSpec = async entry => {
+	if (entry.source !== 'local') return entry;
+
+	return (await isProject(entry.path)) ? { source: 'gradle', path: entry.path } : entry;
+};
+
 export const parseModSpec = spec => {
 	if (spec.startsWith('http://') || spec.startsWith('https://')) return { source: 'url', url: spec };
 	if (LOCAL.test(spec) || spec.endsWith('.jar')) return { source: 'local', path: spec };
+	if (spec.startsWith('gradle:')) return { source: 'gradle', path: spec.slice(7) };
 
 	const aliases = {
+		gradle: 'gradle',
 		mr: 'modrinth',
 		modrinth: 'modrinth',
 		cf: 'curseforge',

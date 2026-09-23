@@ -109,6 +109,21 @@ A mod is written one of these ways:
 
 Required dependencies come along unless you pass `--no-deps`.
 
+### Mods you are writing
+
+A path naming a Gradle project is a mod source in its own right, not just a jar:
+
+```
+mcm add ../minecraft/pandorical
+mcm sync --build          # rebuild every project-sourced mod, then deploy
+```
+
+The version comes from the project's `gradle.properties` at every sync, so a rebuild is picked up with no manifest edit and the previous jar is removed. That is the whole reason to point at the project rather than at a jar: a path with a version in it goes stale the moment you bump it.
+
+The jar itself is found by its version rather than by its name, because the name is not derivable: some projects set `archives_base_name`, some compute it from `mod_id`, some append the author. What holds across all of them is that a jar ends with its version, and that `-sources` and `-testsupport` put their classifier after the version rather than before. `build/libs` keeps every version ever built, so the declared one is picked exactly rather than the newest file.
+
+A project built against a different game version than the instance is refused rather than deployed, and a version that was never built says so instead of silently installing an older jar. `--build` runs the project's own `gradlew` first; without it, nothing is built behind you.
+
 ### The file
 
 The manifest is the file, and `mcm add` is only a way of editing it. Instance state lives in `instances/<name>/instance.json`:

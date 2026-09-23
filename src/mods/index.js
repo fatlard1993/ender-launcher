@@ -5,9 +5,13 @@ import { checksumOf, checksumText, ensureFile, pool } from '../download';
 import { detail, fail, plural, progress, step, warn } from '../out';
 import * as curseforge from './curseforge';
 import * as github from './github';
+import * as gradle from './gradle';
 import * as modrinth from './modrinth';
 
+/** Sources that can be searched. A gradle project is found on disk, not looked up. */
 export const sources = { modrinth, curseforge, github };
+
+const resolvers = { ...sources, gradle };
 
 export const entryKey = entry => `${entry.source}:${entry.id ?? entry.path ?? entry.url}`;
 
@@ -55,7 +59,7 @@ export const resolveEntry = async (entry, context) => {
 	if (entry.source === 'local') return named(resolveLocal(entry));
 	if (entry.source === 'url') return named(resolveUrl(entry));
 
-	const source = sources[entry.source];
+	const source = resolvers[entry.source];
 
 	if (source === undefined) throw new Error(`Unknown mod source "${entry.source}"`);
 
