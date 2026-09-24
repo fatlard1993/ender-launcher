@@ -231,4 +231,4 @@ bun test
 
 ## License
 
-ISC.
+MIT, see [LICENSE](LICENSE).

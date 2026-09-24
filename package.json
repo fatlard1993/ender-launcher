@@ -11,7 +11,7 @@
 	},
 	"description": "Minecraft instances, mods and servers from the command line",
 	"author": "fatlard1993",
-	"license": "ISC",
+	"license": "MIT",
 	"scripts": {
 		"start": "bun index.js",
 		"test": "bun test",
