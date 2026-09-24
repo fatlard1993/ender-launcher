@@ -12,7 +12,7 @@ import { extractArchive } from '../src/archive';
 
 describe('maven coordinates cannot leave the repository root', () => {
 	test('an extension segment cannot climb out', () => {
-		expect(() => coordinateToPath('a:b:1:@../../../../../../home/chase/.bashrc')).toThrow('Unusable maven');
+		expect(() => coordinateToPath('a:b:1:@../../../../../../etc/passwd')).toThrow('Unusable maven');
 	});
 
 	test('dotted segments are refused', () => {
