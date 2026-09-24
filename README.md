@@ -70,7 +70,19 @@ An account is either offline or Microsoft, and the two sit in one list and switc
 
 Sign in is the Microsoft device code flow: ender shows a short code, you type it into a browser, and the tokens live in `accounts.json` with owner-only permissions. A Minecraft token lasts a day and is renewed from the Microsoft one when it goes stale, so signing in is a thing you do once.
 
-**Signing in needs an Azure app registration of your own, and getting one approved is the hard part.** A new registration cannot use the Minecraft API until Microsoft reviews it, and there is no route designed for an individual: the documented answer points at the Xbox Developer program, which expects you to be shipping a game. Register an application in Microsoft Entra ID, add a mobile and desktop platform, allow public client flows, apply at <https://aka.ms/mce-reviewappid>, then `ender config clientId <the application id>`. Until it is approved, Minecraft answers the sign in with a 403 and ender says so plainly rather than leaving you to guess.
+### The client id
+
+Signing in needs an OAuth client id that Microsoft has approved for the Minecraft API, and `ender` ships with none:
+
+```
+ender config clientId <application id>
+```
+
+**Getting one approved is the hard part, and worth knowing before you start.** A registration created today cannot call Minecraft Services until Microsoft reviews it; until then the sign in ends in a 403, which `ender` names rather than leaving you to guess at. Registrations that predate the review requirement were grandfathered, which is why established launchers have access without having applied.
+
+To register your own: sign in at the Azure portal, create an application under Microsoft Entra ID with **personal Microsoft accounts only** as the account type, turn on **allow public client flows** under Authentication, and apply at <https://aka.ms/mce-reviewappid> with the Application and Directory ids from its Overview page. Two things that will stop you before you get that far: the app name may not contain Mojang, Minecraft, Microsoft, Live, Xbox, Discord or Hypixel, and creating an application now requires a directory, which in practice means an Azure account with a card on file for identity verification. The review itself has no published criteria or timeline, and the documented route for someone who is not shipping a game points at the Xbox Developer program.
+
+`clientId` is configuration and not a default baked into this tool, so whichever id you use stays on your machine. Any approved id works; the flow does not care where it came from.
 
 Without an account, instances launch offline. The player UUID is derived from the name the way vanilla derives it, so worlds and inventories follow the name and a save made under an online account still knows you. A failed sign in is an error rather than a silent downgrade: a token that cannot be renewed is worth hearing about, not quietly swapping you into a game that cannot join anything.
 
