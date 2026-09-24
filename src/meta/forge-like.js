@@ -12,7 +12,7 @@ import { paths } from '../paths';
  * Neither publishes a launcher profile you can fetch. The profile is produced by running their
  * installer, which patches the game jar through a chain of tools and writes out the libraries and
  * the launch profile. Rather than reimplement that chain -- six processors, LZMA binary patches
- * and a mapping pass -- their own installer is run once, headless, with the Java mcm already
+ * and a mapping pass -- their own installer is run once, headless, with the Java ender already
  * manages. The output is an ordinary `inheritsFrom` profile, which is a shape this launcher
  * already merges.
  */

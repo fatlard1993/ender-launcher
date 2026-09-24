@@ -77,7 +77,7 @@ module.exports = {
 		'matcher',
 		'maven',
 		'mc',
-		'mcm',
+		'ender',
 		'mediafilez',
 		'mem',
 		'microsoft',

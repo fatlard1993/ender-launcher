@@ -11,9 +11,9 @@ const GROUPS = [
 ];
 
 export const usage = () => {
-	info(`${paint.bold('mcm')} :: Minecraft instances, mods, and servers`);
+	info(`${paint.bold('ender')} :: Minecraft instances, mods, and servers`);
 	info('');
-	info(`  ${paint.dim('mcm <command> [arguments] [flags]')}`);
+	info(`  ${paint.dim('ender <command> [arguments] [flags]')}`);
 
 	for (const [group, names] of GROUPS) {
 		info('');
@@ -23,13 +23,13 @@ export const usage = () => {
 	}
 
 	info('');
-	info(paint.dim("  mcm <command> --help  for a command's flags"));
+	info(paint.dim("  ender <command> --help  for a command's flags"));
 };
 
 export const commandHelp = (name, command) => {
 	info(`${paint.bold(name)} :: ${command.summary}`);
 	info('');
-	info(`  ${command.usage ?? `mcm ${name}`}`);
+	info(`  ${command.usage ?? `ender ${name}`}`);
 
 	if (command.subcommands) {
 		info('');

@@ -10,19 +10,19 @@ let home;
 let previous;
 
 beforeEach(async () => {
-	home = await mkdtemp(join(tmpdir(), 'mcm-auth-'));
-	previous = process.env.MCM_HOME;
-	process.env.MCM_HOME = home;
+	home = await mkdtemp(join(tmpdir(), 'ender-auth-'));
+	previous = process.env.ENDER_HOME;
+	process.env.ENDER_HOME = home;
 });
 
 afterEach(async () => {
-	if (previous === undefined) delete process.env.MCM_HOME;
-	else process.env.MCM_HOME = previous;
+	if (previous === undefined) delete process.env.ENDER_HOME;
+	else process.env.ENDER_HOME = previous;
 
 	await rm(home, { recursive: true, force: true });
 });
 
-// Paths are read when asked, so one import honors whatever MCM_HOME each test sets.
+// Paths are read when asked, so one import honors whatever ENDER_HOME each test sets.
 const accountsModule = async () => import('../src/auth/accounts');
 
 describe('account storage', () => {

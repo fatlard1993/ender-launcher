@@ -41,7 +41,7 @@ export const buildCommand = async (
 		library_directory: paths.libraries,
 		classpath_separator: delimiter,
 		classpath,
-		launcher_name: 'minecraft-manager',
+		launcher_name: 'ender-launcher',
 		launcher_version: version,
 		version_name: plan.id,
 		version_type: plan.versionType,

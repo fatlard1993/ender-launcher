@@ -50,7 +50,7 @@ export const status = async ({ positionals, flags }) => {
 	info(`  minecraft    ${manifest.minecraft}`);
 	info(`  loader       ${manifest.loader?.type ?? 'vanilla'} ${manifest.loader?.version ?? ''}`);
 	info(`  game dir     ${manifest.gameDir}`);
-	info(`  launcher jar ${(await Bun.file(jar).exists()) ? 'present' : 'missing (run "mcm server provision")'}`);
+	info(`  launcher jar ${(await Bun.file(jar).exists()) ? 'present' : 'missing (run "ender server provision")'}`);
 	info(`  online-mode  ${properties['online-mode'] ?? 'unset'}`);
 	info(`  port         ${properties['server-port'] ?? '25565'}`);
 	info(`  mods         ${(await instances.readLock(manifest.name)).mods.length} installed`);

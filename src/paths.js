@@ -3,9 +3,9 @@ import { join } from 'node:path';
 
 const xdg = (variable, fallback) => process.env[variable] || join(homedir(), fallback);
 
-export const dataRoot = () => process.env.MCM_HOME || join(xdg('XDG_DATA_HOME', '.local/share'), 'minecraft-manager');
+export const dataRoot = () => process.env.ENDER_HOME || join(xdg('XDG_DATA_HOME', '.local/share'), 'ender-launcher');
 
-export const configRoot = () => process.env.MCM_HOME || join(xdg('XDG_CONFIG_HOME', '.config'), 'minecraft-manager');
+export const configRoot = () => process.env.ENDER_HOME || join(xdg('XDG_CONFIG_HOME', '.config'), 'ender-launcher');
 
 /**
  * Read when asked rather than when imported, so the environment that decides where everything

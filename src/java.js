@@ -140,7 +140,7 @@ export const selectJava = async (required, override, { component, manage = true 
 	if (available.length === 0) {
 		throw new Error(
 			component
-				? `No Java installation found. Run "mcm java install ${component}", or set javaPath.`
+				? `No Java installation found. Run "ender java install ${component}", or set javaPath.`
 				: 'No Java installation found. Install a JDK or set javaPath.',
 		);
 	}

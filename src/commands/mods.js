@@ -51,7 +51,7 @@ export const sync = async ({ positionals, flags }) => {
 export const add = async ({ positionals, flags }) => {
 	const { manifest, config } = await targetInstance(flags.instance);
 
-	if (positionals.length === 0) throw new Error('mcm add <mod> [mod...]');
+	if (positionals.length === 0) throw new Error('ender add <mod> [mod...]');
 
 	const existing = new Set(manifest.mods.map(entryKey));
 	const added = [];
@@ -93,7 +93,7 @@ export const add = async ({ positionals, flags }) => {
 export const drop = async ({ positionals, flags }) => {
 	const { manifest, config } = await targetInstance(flags.instance);
 
-	if (positionals.length === 0) throw new Error('mcm drop <mod> [mod...]');
+	if (positionals.length === 0) throw new Error('ender drop <mod> [mod...]');
 
 	const wanted = new Set(
 		await Promise.all(
@@ -114,7 +114,7 @@ export const drop = async ({ positionals, flags }) => {
 	const dropped = manifest.mods.length - kept.length;
 
 	if (dropped === 0) {
-		warn('Nothing matched. "mcm info" lists what is declared.');
+		warn('Nothing matched. "ender info" lists what is declared.');
 
 		return 1;
 	}
@@ -165,7 +165,7 @@ export const update = async ({ positionals, flags }) => {
 export const search = async ({ positionals, flags }) => {
 	const query = positionals.join(' ');
 
-	if (query === '') throw new Error('mcm search <query>');
+	if (query === '') throw new Error('ender search <query>');
 
 	let minecraft = flags.minecraft;
 	let loader = flags.loader;

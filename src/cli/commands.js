@@ -20,7 +20,7 @@ export const commands = {
 	},
 	new: {
 		summary: 'Create an instance, optionally with mods',
-		usage: 'mcm new <name> [mod...]',
+		usage: 'ender new <name> [mod...]',
 		flags: {
 			...depsFlag,
 			minecraft: { alias: 'm', description: 'Game version, or "release" / "snapshot"' },
@@ -33,36 +33,36 @@ export const commands = {
 	},
 	use: {
 		summary: 'Set the active instance',
-		usage: 'mcm use <name>',
+		usage: 'ender use <name>',
 		run: instanceCommands.use,
 	},
 	info: {
 		summary: 'Show an instance and its mods',
-		usage: 'mcm info [name]',
+		usage: 'ender info [name]',
 		flags: instanceFlag,
 		run: instanceCommands.info_,
 	},
 	set: {
 		summary: 'Change an instance setting',
-		usage: 'mcm set [key] [value]',
+		usage: 'ender set [key] [value]',
 		flags: instanceFlag,
 		run: instanceCommands.set,
 	},
 	bump: {
 		summary: 'Move an instance to another Minecraft version',
-		usage: 'mcm bump <minecraft-version>',
+		usage: 'ender bump <minecraft-version>',
 		flags: { ...instanceFlag, loaderVersion: { description: 'Pin the loader instead of taking the newest' } },
 		run: instanceCommands.bump,
 	},
 	clone: {
 		summary: 'Copy an instance under a new name',
-		usage: 'mcm clone <source> <new-name>',
+		usage: 'ender clone <source> <new-name>',
 		flags: { gameDir: { description: 'Give the copy an existing directory' } },
 		run: instanceCommands.clone,
 	},
 	delete: {
 		summary: 'Delete an instance',
-		usage: 'mcm delete <name> [--purge] [--yes]',
+		usage: 'ender delete <name> [--purge] [--yes]',
 		flags: {
 			...instanceFlag,
 			purge: { type: 'boolean', description: 'Delete the game directory too' },
@@ -72,7 +72,7 @@ export const commands = {
 	},
 	import: {
 		summary: 'Adopt a Prism instance or a modpack',
-		usage: 'mcm import <prism-instance-dir | pack.mrpack | pack.zip>',
+		usage: 'ender import <prism-instance-dir | pack.mrpack | pack.zip>',
 		flags: {
 			name: { description: 'Name it something other than the pack did' },
 			gameDir: { description: 'Use an existing directory as the game directory' },
@@ -84,13 +84,13 @@ export const commands = {
 
 	install: {
 		summary: 'Download everything an instance needs, without launching',
-		usage: 'mcm install [name]',
+		usage: 'ender install [name]',
 		flags: { ...instanceFlag, assets: { type: 'boolean', default: true, description: 'Include game assets' } },
 		run: playCommands.install,
 	},
 	launch: {
 		summary: 'Launch an instance',
-		usage: 'mcm launch [name]',
+		usage: 'ender launch [name]',
 		flags: {
 			...instanceFlag,
 			install: { type: 'boolean', default: true, description: 'Verify files before launching' },
@@ -101,14 +101,14 @@ export const commands = {
 	},
 	explain: {
 		summary: 'Show what would be launched and where each piece comes from',
-		usage: 'mcm explain [name]',
+		usage: 'ender explain [name]',
 		flags: instanceFlag,
 		run: playCommands.explain,
 	},
 
 	search: {
 		summary: 'Search Modrinth and CurseForge',
-		usage: 'mcm search <query>',
+		usage: 'ender search <query>',
 		flags: {
 			...instanceFlag,
 			source: { alias: 's', description: 'modrinth or curseforge' },
@@ -121,32 +121,32 @@ export const commands = {
 	},
 	add: {
 		summary: 'Add mods to an instance',
-		usage: 'mcm add <mod> [mod...]',
+		usage: 'ender add <mod> [mod...]',
 		flags: { ...instanceFlag, ...depsFlag },
 		run: modCommands.add,
 	},
 	drop: {
 		summary: 'Remove mods from an instance',
-		usage: 'mcm drop <mod> [mod...]',
+		usage: 'ender drop <mod> [mod...]',
 		flags: { ...instanceFlag, ...depsFlag },
 		run: modCommands.drop,
 	},
 	sync: {
 		summary: 'Make the mods directory match the manifest',
-		usage: 'mcm sync [--instance name]',
+		usage: 'ender sync [--instance name]',
 		flags: { ...instanceFlag, ...depsFlag },
 		run: modCommands.sync,
 	},
 	update: {
 		summary: 'Move mods to the newest compatible build',
-		usage: 'mcm update [mod...]',
+		usage: 'ender update [mod...]',
 		flags: { ...instanceFlag, ...depsFlag },
 		run: modCommands.update,
 	},
 
 	server: {
 		summary: 'Server instance management',
-		usage: 'mcm server <provision|start|offline|status>',
+		usage: 'ender server <provision|start|offline|status>',
 		flags: instanceFlag,
 		subcommands: {
 			provision: { summary: 'Download the Fabric server launcher', run: serveCommands.provision },
@@ -158,7 +158,7 @@ export const commands = {
 
 	account: {
 		summary: 'Who instances play as, online or offline',
-		usage: 'mcm account [ls|add|use <name>|remove <name>|assign <name>|status]',
+		usage: 'ender account [ls|add|use <name>|remove <name>|assign <name>|status]',
 		flags: { ...instanceFlag, offline: { type: 'boolean', description: 'Add an offline identity, no sign in' } },
 		subcommands: {
 			ls: { summary: 'List accounts, online and offline', run: accountCommands.ls },
@@ -172,12 +172,12 @@ export const commands = {
 	},
 	config: {
 		summary: 'Read or write global settings',
-		usage: 'mcm config [key] [value]',
+		usage: 'ender config [key] [value]',
 		run: settingsCommands.config,
 	},
 	java: {
 		summary: 'Java runtimes: what is here, and what Mojang publishes',
-		usage: 'mcm java [install <component>]',
+		usage: 'ender java [install <component>]',
 		flags: { refresh: { type: 'boolean', description: 'Probe again instead of using the cache' } },
 		subcommands: {
 			list: { summary: 'Show managed, system and installable runtimes', run: settingsCommands.javaList },

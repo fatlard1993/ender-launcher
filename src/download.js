@@ -4,7 +4,7 @@ import { basename, dirname } from 'node:path';
 import { version } from '../package.json';
 import { detail } from './out';
 
-export const userAgent = `minecraft-manager/${version} (github.com/fatlard1993/minecraft-manager)`;
+export const userAgent = `ender-launcher/${version} (github.com/fatlard1993/ender-launcher)`;
 
 const digestOf = async (path, algorithm) => {
 	const hasher = new Bun.CryptoHasher(algorithm);
@@ -110,7 +110,7 @@ const adoptDonor = async (path, donors, checksum, size) => {
 	return false;
 };
 
-// The pid keeps two mcm processes apart; this keeps two tasks in one pool apart.
+// The pid keeps two ender processes apart; this keeps two tasks in one pool apart.
 let scratchSequence = 0;
 
 /**

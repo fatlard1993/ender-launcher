@@ -23,7 +23,7 @@ const zip = async (name, build) => {
 };
 
 beforeAll(async () => {
-	directory = await mkdtemp(join(tmpdir(), 'mcm-pack-'));
+	directory = await mkdtemp(join(tmpdir(), 'ender-pack-'));
 });
 
 afterAll(async () => {

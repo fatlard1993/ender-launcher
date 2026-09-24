@@ -17,7 +17,7 @@ const jar = async name => {
 };
 
 beforeEach(async () => {
-	root = await mkdtemp(join(tmpdir(), 'mcm-test-'));
+	root = await mkdtemp(join(tmpdir(), 'ender-test-'));
 	modsDir = join(root, 'mods');
 
 	await mkdir(modsDir, { recursive: true });

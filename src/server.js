@@ -194,7 +194,7 @@ const STRATEGIES = {
 export const strategyFor = manifest => {
 	const strategy = STRATEGIES[manifest.loader?.type ?? 'vanilla'];
 
-	if (strategy === undefined) throw new Error(`mcm cannot run a ${manifest.loader.type} server`);
+	if (strategy === undefined) throw new Error(`ender cannot run a ${manifest.loader.type} server`);
 
 	return strategy;
 };
@@ -222,7 +222,7 @@ export const warnIfUnreachableOffline = async manifest => {
 	if (properties['online-mode'] === 'false') return false;
 
 	warn(
-		`${manifest.name} has online-mode=true, which rejects offline clients. Run "mcm server offline ${manifest.name}" to turn it off.`,
+		`${manifest.name} has online-mode=true, which rejects offline clients. Run "ender server offline ${manifest.name}" to turn it off.`,
 	);
 
 	return true;

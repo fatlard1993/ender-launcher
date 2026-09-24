@@ -115,7 +115,7 @@ export const resolveAccount = async wanted => {
 
 	const account = store.accounts[name];
 
-	if (account === undefined) throw new Error(`No account named "${name}". "mcm account" lists them.`);
+	if (account === undefined) throw new Error(`No account named "${name}". "ender account" lists them.`);
 
 	// An offline identity has nothing to renew; it is a name and the uuid that follows from it.
 	if (kindOf(account) === 'offline') return account;

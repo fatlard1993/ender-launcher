@@ -87,7 +87,7 @@ describe('a download with no checksum still has to be the right length', () => {
 	let directory;
 
 	beforeAll(async () => {
-		directory = await mkdtemp(join(tmpdir(), 'mcm-verify-'));
+		directory = await mkdtemp(join(tmpdir(), 'ender-verify-'));
 		server = Bun.serve({ port: 0, fetch: () => new Response('nowhere near a jar') });
 	});
 
@@ -124,7 +124,7 @@ describe('natives archives', () => {
 	let directory;
 
 	beforeAll(async () => {
-		directory = await mkdtemp(join(tmpdir(), 'mcm-zip-'));
+		directory = await mkdtemp(join(tmpdir(), 'ender-zip-'));
 	});
 
 	afterAll(async () => {

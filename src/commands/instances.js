@@ -17,7 +17,7 @@ import { targetInstance, targetName } from './context';
 const warnIfUnlaunchable = manifest => {
 	if (isLaunchable(manifest.loader?.type)) return;
 
-	warn(`mcm cannot start a ${manifest.loader.type} instance yet.`);
+	warn(`ender cannot start a ${manifest.loader.type} instance yet.`);
 	info(paint.dim('  Its mods are managed here as usual; launch it from another launcher.'));
 };
 
@@ -25,7 +25,7 @@ export const ls = async () => {
 	const [found, config] = await Promise.all([instances.list(), readConfig()]);
 
 	if (found.length === 0) {
-		info('No instances yet. Create one with "mcm new <name>", or adopt a Prism one with "mcm import <path>".');
+		info('No instances yet. Create one with "ender new <name>", or adopt a Prism one with "ender import <path>".');
 
 		return 0;
 	}
@@ -48,7 +48,7 @@ export const ls = async () => {
 export const create = async ({ positionals, flags }) => {
 	const [name, ...specs] = positionals;
 
-	if (name === undefined) throw new Error('mcm new <name> [mod...]');
+	if (name === undefined) throw new Error('ender new <name> [mod...]');
 
 	const minecraft = await resolveVersionId(flags.minecraft);
 	const loaderType = assertKnownLoader({ type: flags.loader ?? 'fabric' });
@@ -106,7 +106,7 @@ export const create = async ({ positionals, flags }) => {
 export const use = async ({ positionals }) => {
 	const [name] = positionals;
 
-	if (name === undefined) throw new Error('mcm use <name>');
+	if (name === undefined) throw new Error('ender use <name>');
 	if (!(await instances.exists(name))) throw new Error(`No instance named "${name}"`);
 
 	await updateConfig({ activeInstance: name });
@@ -162,8 +162,8 @@ export const set = async ({ positionals, flags }) => {
 		return 0;
 	}
 
-	if (!SETTABLE.has(key)) throw new Error(`"${key}" is not settable. "mcm set" lists what is.`);
-	if (rest.length === 0) throw new Error(`mcm set ${key} <value>`);
+	if (!SETTABLE.has(key)) throw new Error(`"${key}" is not settable. "ender set" lists what is.`);
+	if (rest.length === 0) throw new Error(`ender set ${key} <value>`);
 
 	const raw = rest.join(' ');
 
@@ -201,7 +201,7 @@ export const set = async ({ positionals, flags }) => {
 export const bump = async ({ positionals, flags }) => {
 	const [wanted] = positionals;
 
-	if (wanted === undefined) throw new Error('mcm bump <minecraft-version>');
+	if (wanted === undefined) throw new Error('ender bump <minecraft-version>');
 
 	const { manifest } = await targetInstance(flags.instance);
 	const minecraft = await resolveVersionId(wanted);
@@ -223,7 +223,7 @@ export const bump = async ({ positionals, flags }) => {
 	done(
 		`${manifest.name}: ${was} -> ${minecraft}${manifest.loader?.version ? `, loader ${manifest.loader.version}` : ''}`,
 	);
-	info(paint.dim('  run "mcm update" to move the mods, then "mcm launch"'));
+	info(paint.dim('  run "ender update" to move the mods, then "ender launch"'));
 
 	return 0;
 };
@@ -231,7 +231,7 @@ export const bump = async ({ positionals, flags }) => {
 export const clone = async ({ positionals, flags }) => {
 	const [source, destination] = positionals;
 
-	if (source === undefined || destination === undefined) throw new Error('mcm clone <source> <new-name>');
+	if (source === undefined || destination === undefined) throw new Error('ender clone <source> <new-name>');
 
 	const original = await instances.read(source);
 
@@ -244,7 +244,7 @@ export const clone = async ({ positionals, flags }) => {
 
 	done(`Cloned ${source} -> ${destination}`);
 	info(paint.dim(`  ${copy.gameDir}`));
-	info(paint.dim('  run "mcm sync -i ' + destination + '" to install its mods'));
+	info(paint.dim('  run "ender sync -i ' + destination + '" to install its mods'));
 
 	return 0;
 };
@@ -282,8 +282,8 @@ const reportUnmanaged = (unmatched, gameDir) => {
 
 	for (const file of unmatched) info(`    ${file}`);
 
-	info(paint.dim('  They keep working. To have mcm manage one, add it by path:'));
-	info(paint.dim(`    mcm add ${join(gameDir, 'mods', unmatched[0])}`));
+	info(paint.dim('  They keep working. To have ender manage one, add it by path:'));
+	info(paint.dim(`    ender add ${join(gameDir, 'mods', unmatched[0])}`));
 };
 
 const activateIfFirst = async name => {
@@ -341,7 +341,7 @@ const importPack = async (path, flags) => {
 	warnIfUnlaunchable(manifest);
 
 	info('');
-	info(paint.dim(`  mcm sync -i ${manifest.name}   to fetch what the pack references`));
+	info(paint.dim(`  ender sync -i ${manifest.name}   to fetch what the pack references`));
 
 	await activateIfFirst(manifest.name);
 
@@ -376,7 +376,7 @@ const importPrismInstance = async (directory, flags) => {
 export const importAny = async ({ positionals, flags }) => {
 	const [target] = positionals;
 
-	if (target === undefined) throw new Error('mcm import <prism-instance-directory | pack.mrpack | pack.zip>');
+	if (target === undefined) throw new Error('ender import <prism-instance-directory | pack.mrpack | pack.zip>');
 
 	const path = resolve(target);
 	const info_ = await stat(path).catch(() => undefined);

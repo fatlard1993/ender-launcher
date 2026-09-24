@@ -1,15 +1,15 @@
 {
-	"name": "minecraft-manager",
+	"name": "ender-launcher",
 	"version": "0.1.0",
 	"type": "module",
 	"bin": {
-		"mcm": "./index.js"
+		"ender": "./index.js"
 	},
 	"exports": {
 		"./package.json": "./package.json",
 		".": "./index.js"
 	},
-	"description": "Minecraft instance, mod, and server management from the command line",
+	"description": "Minecraft instances, mods and servers from the command line",
 	"author": "fatlard1993",
 	"license": "ISC",
 	"scripts": {
@@ -18,17 +18,17 @@
 		"lint": "bun --bun eslint",
 		"lint:fix": "bun --bun eslint --fix",
 		"format": "bun run lint:fix && bun --bun prettier --write .",
-		"compile": "bun build --compile index.js --outfile mcm",
+		"compile": "bun build --compile index.js --outfile ender",
 		"version": "npm version"
 	},
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/fatlard1993/minecraft-manager.git"
+		"url": "git+https://github.com/fatlard1993/ender-launcher.git"
 	},
 	"bugs": {
-		"url": "https://github.com/fatlard1993/minecraft-manager/issues"
+		"url": "https://github.com/fatlard1993/ender-launcher/issues"
 	},
-	"homepage": "https://github.com/fatlard1993/minecraft-manager#readme",
+	"homepage": "https://github.com/fatlard1993/ender-launcher#readme",
 	"dependencies": {
 		"log": "github:fatlard1993/log#e4cb364"
 	},

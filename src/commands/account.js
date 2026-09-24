@@ -11,7 +11,7 @@ const CLIENT_ID_HELP = [
 	'    1. Register an application at https://portal.azure.com (Microsoft Entra ID)',
 	'    2. Add a "Mobile and desktop" platform and allow public client flows',
 	'    3. Apply for Minecraft API access at https://aka.ms/mce-reviewappid',
-	'    4. mcm config clientId <the application id>',
+	'    4. ender config clientId <the application id>',
 	'',
 	'  Until a registration is approved, instances launch offline.',
 ].join('\n');
@@ -21,8 +21,8 @@ export const ls = async () => {
 
 	if (found.length === 0) {
 		info('No accounts yet.');
-		info(paint.dim('  mcm account add --offline <name>   an identity that needs no sign in'));
-		info(paint.dim('  mcm account add                   sign in to a Microsoft account'));
+		info(paint.dim('  ender account add --offline <name>   an identity that needs no sign in'));
+		info(paint.dim('  ender account add                   sign in to a Microsoft account'));
 		info(paint.dim('  Without either, instances launch offline under the configured username.'));
 
 		return 0;
@@ -43,7 +43,7 @@ export const add = async ({ positionals, flags }) => {
 	if (flags.offline) {
 		const [name] = positionals;
 
-		if (name === undefined) throw new Error('mcm account add --offline <name>');
+		if (name === undefined) throw new Error('ender account add --offline <name>');
 
 		const account = await accounts.addOffline(name);
 
@@ -74,7 +74,7 @@ export const add = async ({ positionals, flags }) => {
 export const use = async ({ positionals }) => {
 	const [name] = positionals;
 
-	if (name === undefined) throw new Error('mcm account use <name>');
+	if (name === undefined) throw new Error('ender account use <name>');
 
 	await accounts.use(name);
 
@@ -86,7 +86,7 @@ export const use = async ({ positionals }) => {
 export const remove = async ({ positionals }) => {
 	const [name] = positionals;
 
-	if (name === undefined) throw new Error('mcm account remove <name>');
+	if (name === undefined) throw new Error('ender account remove <name>');
 
 	await accounts.remove(name);
 

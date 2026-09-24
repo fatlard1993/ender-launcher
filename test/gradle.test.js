@@ -19,7 +19,7 @@ const project = async (name, properties, jars = []) => {
 };
 
 beforeAll(async () => {
-	root = await mkdtemp(join(tmpdir(), 'mcm-gradle-'));
+	root = await mkdtemp(join(tmpdir(), 'ender-gradle-'));
 });
 
 afterAll(async () => {

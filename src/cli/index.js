@@ -52,7 +52,7 @@ export const run = async argv => {
 
 		if (sub !== undefined && command.subcommands[sub]) {
 			// The child's own usage, under the name actually typed, rather than the parent's page.
-			definition = { ...command, usage: `mcm ${name} ${sub}`, subcommands: undefined, ...command.subcommands[sub] };
+			definition = { ...command, usage: `ender ${name} ${sub}`, subcommands: undefined, ...command.subcommands[sub] };
 			argumentsForCommand = subRest;
 			title = `${name} ${sub}`;
 		} else if (sub !== undefined && !sub.startsWith('-')) {

@@ -18,7 +18,7 @@ export const paint = {
 // `log` prepends its reset code unconditionally, so the reset is blanked rather than the colour
 // flag trusted. Colour here is decided by `paint`, which knows whether anyone is watching a tty.
 export const log = new Log({
-	tag: 'mcm',
+	tag: 'ender',
 	silentTag: true,
 	verbosity: 1,
 	color: false,

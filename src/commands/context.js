@@ -7,7 +7,7 @@ export const targetName = async (explicit, config) => {
 	const name = explicit ?? (config ?? (await readConfig())).activeInstance;
 
 	if (name === undefined) {
-		throw new Error('No instance given and none is active. Try "mcm use <name>" or pass --instance.');
+		throw new Error('No instance given and none is active. Try "ender use <name>" or pass --instance.');
 	}
 
 	return name;

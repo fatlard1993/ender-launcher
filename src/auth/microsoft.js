@@ -49,7 +49,7 @@ class NotApprovedError extends Error {
 /** Ask Microsoft for a code the user types into their browser, then wait for them to do it. */
 export const signIn = async ({ clientId, onPrompt } = {}) => {
 	if (!clientId) {
-		throw new Error('No Azure client id configured. Set one with "mcm config clientId <id>".');
+		throw new Error('No Azure client id configured. Set one with "ender config clientId <id>".');
 	}
 
 	const start = await (await fetchWithRetry(DEVICE_CODE, form({ client_id: clientId, scope: SCOPE }))).json();

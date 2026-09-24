@@ -8,7 +8,7 @@ import { forge, neoforge } from './forge-like';
 import * as mojang from './mojang';
 import { applicableArguments } from './rules';
 
-/** Loaders mcm understands well enough to hold an instance and manage its mods. */
+/** Loaders ender understands well enough to hold an instance and manage its mods. */
 export const KNOWN_LOADERS = new Set(['fabric', 'quilt', 'forge', 'neoforge', 'vanilla']);
 
 /**
@@ -26,7 +26,7 @@ export const assertKnownLoader = loader => {
 
 	if (KNOWN_LOADERS.has(type)) return type;
 
-	throw new Error(`"${type}" is not a Minecraft loader mcm knows. It knows: ${[...KNOWN_LOADERS].join(', ')}.`);
+	throw new Error(`"${type}" is not a Minecraft loader ender knows. It knows: ${[...KNOWN_LOADERS].join(', ')}.`);
 };
 
 export const assertLaunchableLoader = loader => {
@@ -34,7 +34,7 @@ export const assertLaunchableLoader = loader => {
 
 	if (isLaunchable(type)) return type;
 
-	throw new Error(`mcm cannot build a ${type} launch. It builds: ${[...LAUNCHABLE_LOADERS].join(', ')}.`);
+	throw new Error(`ender cannot build a ${type} launch. It builds: ${[...LAUNCHABLE_LOADERS].join(', ')}.`);
 };
 
 /** Arguments older manifests assume rather than state. */

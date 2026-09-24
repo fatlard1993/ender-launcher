@@ -22,7 +22,7 @@ export const config = async ({ positionals }) => {
 	const [head, tail] = key.split('.');
 
 	if (!(head in current)) {
-		warn(`"${head}" is not a setting. "mcm config" lists them.`);
+		warn(`"${head}" is not a setting. "ender config" lists them.`);
 
 		return 1;
 	}
@@ -70,9 +70,9 @@ export const javaList = async ({ flags }) => {
 
 	const managedPaths = new Set(managed.map(entry => entry.path));
 
-	info(paint.bold('Managed by mcm'));
+	info(paint.bold('Managed by ender'));
 
-	if (managed.length === 0) info(paint.dim('  none yet; mcm installs one when a version needs it'));
+	if (managed.length === 0) info(paint.dim('  none yet; ender installs one when a version needs it'));
 
 	for (const entry of managed) {
 		const probed = found.find(candidate => candidate.path === entry.path);
@@ -100,7 +100,7 @@ export const javaList = async ({ flags }) => {
 		}
 
 		info('');
-		info(paint.dim('  mcm java install <component>'));
+		info(paint.dim('  ender java install <component>'));
 	}
 
 	return 0;
@@ -109,7 +109,7 @@ export const javaList = async ({ flags }) => {
 export const javaInstall = async ({ positionals }) => {
 	const [component] = positionals;
 
-	if (component === undefined) throw new Error('mcm java install <component> :: "mcm java" lists them');
+	if (component === undefined) throw new Error('ender java install <component> :: "ender java" lists them');
 	if (await isInstalled(component)) {
 		done(`${component} is already installed`);
 
