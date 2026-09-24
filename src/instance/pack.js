@@ -2,7 +2,6 @@ import { mkdir } from 'node:fs/promises';
 import { basename, extname, join } from 'node:path';
 
 import { extractArchive, listEntries, readEntryJson } from '../archive';
-import { checksumOf } from '../download';
 import { detail, plural, step } from '../out';
 
 const MRPACK_INDEX = 'modrinth.index.json';
@@ -164,4 +163,3 @@ export const unpackInto = async (path, pack, gameDir) => {
 	return written;
 };
 
-export const checksumFor = entry => checksumOf(entry.checksum);

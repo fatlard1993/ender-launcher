@@ -9,7 +9,7 @@ import { versionMeta } from './meta/mojang';
 import { quilt } from './meta/quilt';
 import { detail, step, warn } from './out';
 
-export const propertiesPath = manifest => join(manifest.gameDir, 'server.properties');
+const propertiesPath = manifest => join(manifest.gameDir, 'server.properties');
 
 export const readProperties = async manifest => {
 	const text = await Bun.file(propertiesPath(manifest))
@@ -207,7 +207,12 @@ export const provision = async (manifest, options) => {
 	// Every client this launcher builds is an offline one. A server born rejecting them would be a
 	// server that cannot be joined by the only clients around, so the default is set before the
 	// game writes its own. An existing properties file is left alone.
-	if (!(await Bun.file(propertiesPath(manifest)).exists())) {
+	if (await Bun.file(propertiesPath(manifest)).exists()) {
+		// Said here too, not only on start: leaving an existing file alone is right, but doing
+		// it silently let a server sit on online-mode=true under a comment promising the
+		// offline client on the same machine could reach it.
+		await warnIfUnreachableOffline(manifest);
+	} else {
 		await writeProperties(manifest, { 'online-mode': 'false' });
 
 		detail('server.properties', 'seeded with online-mode=false');
@@ -228,10 +233,10 @@ export const warnIfUnreachableOffline = async manifest => {
 	return true;
 };
 
-export const requiredJava = async manifest =>
+const requiredJava = async manifest =>
 	(await versionMeta(manifest.minecraft)).meta.javaVersion?.majorVersion ?? 8;
 
-export const javaComponentFor = async manifest => (await versionMeta(manifest.minecraft)).meta.javaVersion?.component;
+const javaComponentFor = async manifest => (await versionMeta(manifest.minecraft)).meta.javaVersion?.component;
 
 export const run = async (manifest, { javaPath, memory, javaMajor, extraArgs = [], manageJava = true } = {}) => {
 	const strategy = strategyFor(manifest);

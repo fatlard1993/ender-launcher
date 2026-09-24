@@ -21,8 +21,17 @@ const warnIfUnlaunchable = manifest => {
 	info(paint.dim('  Its mods are managed here as usual; launch it from another launcher.'));
 };
 
-export const ls = async () => {
+export const ls = async ({ flags = {} } = {}) => {
 	const [found, config] = await Promise.all([instances.list(), readConfig()]);
+
+	// One name per line and nothing else, for callers that have to branch on whether an
+	// instance exists. Without it they matched this listing's prose, which made its column
+	// layout a contract nothing declared.
+	if (flags.names) {
+		for (const manifest of found) info(manifest.name);
+
+		return 0;
+	}
 
 	if (found.length === 0) {
 		info('No instances yet. Create one with "ender new <name>", or adopt a Prism one with "ender import <path>".');
@@ -145,6 +154,8 @@ const SETTABLE = new Set([
 	'memory.max',
 	'javaPath',
 	'server',
+	'window.width',
+	'window.height',
 ]);
 
 /** Everything about an instance except its mods was fixed at creation until this existed. */

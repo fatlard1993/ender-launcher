@@ -40,6 +40,11 @@ export const forgeLike = ({ name, versionsFor, installerUrl, profileId }) => {
 		const installer = join(directory, 'installer.jar');
 
 		await mkdir(directory, { recursive: true });
+		// Said before the wait, not after: this is a headless vendor installer patching the game
+		// jar, and a minute of no output is indistinguishable from a hang. The notice existed as
+		// an exported function nothing ever called.
+		warn('Forge and NeoForge are installed by running their own installer, which takes a minute the first time.');
+
 		await ensureFile({ url: installerUrl(minecraft, loaderVersion), path: installer });
 
 		// Any reasonably modern Java runs the installer; it is a plain tool, not the game, so no
@@ -219,7 +224,3 @@ export const neoforge = forgeLike({
 	profileId: (minecraft, loaderVersion) => `neoforge-${loaderVersion}`,
 });
 
-export const forgeFamily = { forge, neoforge };
-
-export const warnAboutInstaller = () =>
-	warn('Forge and NeoForge are installed by running their own installer, which takes a minute the first time.');

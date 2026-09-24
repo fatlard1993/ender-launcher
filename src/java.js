@@ -51,7 +51,7 @@ const candidatePaths = async () => {
 };
 
 /** Ask the binary itself; a path's name lies often enough that reading it is not worth the risk. */
-export const probe = async path => {
+const probe = async path => {
 	const process_ = Bun.spawn([path, '-version'], { stdout: 'pipe', stderr: 'pipe' });
 	const [stderr, stdout] = await Promise.all([
 		new Response(process_.stderr).text(),

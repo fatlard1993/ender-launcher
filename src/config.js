@@ -15,7 +15,7 @@ const defaults = {
 
 export const readConfig = async () => ({ ...defaults, ...(await readJson(paths.config, {})) });
 
-export const writeConfig = async config => {
+const writeConfig = async config => {
 	await writeJson(paths.config, config);
 
 	return config;

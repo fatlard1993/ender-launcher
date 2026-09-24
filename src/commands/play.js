@@ -27,20 +27,32 @@ const planFor = async (manifest, side, features) =>
  * names. Without both, the arguments are dropped and the game opens at the title screen.
  */
 const intentOf = (manifest, flags) => {
-	const server = flags.server ?? manifest.server;
+	const asked = flags.server;
+	const server = asked ?? manifest.server;
 	const world = flags.world;
+
+	// A flag that wants a number and got a word arrives here as NaN, which is falsy, so the
+	// resolution was dropped and the game opened at whatever size it liked.
+	for (const [name, value] of [
+		['--width', flags.width],
+		['--height', flags.height],
+	]) {
+		if (value !== undefined && !Number.isFinite(value)) throw new Error(`${name} wants a number.`);
+	}
+
 	const width = flags.width ?? manifest.window?.width;
 	const height = flags.height ?? manifest.window?.height;
 	const resolution = width && height ? { width, height } : undefined;
 
-	if (server && world) throw new Error('Pick one: --server joins a server, --world opens a save.');
+	// Asked for, not merged: `server` also carries the address the instance stores, so
+	// testing that made `--world` on its own fail with a message naming a flag nobody typed
+	// - and made single-player impossible on any instance with a server set.
+	if (asked && world) throw new Error('Pick one: --server joins a server, --world opens a save.');
 
 	return {
 		quickPlay: { server, world, logPath: flags.quickPlayLog },
 		resolution,
 		features: {
-			// Gates --quickPlayPath, which is where the game writes a quick-play log. Asking for it
-			// without a path to write to puts an empty argument on the line.
 			has_quick_plays_support: Boolean(flags.quickPlayLog),
 			is_quick_play_multiplayer: Boolean(server),
 			is_quick_play_singleplayer: Boolean(world),

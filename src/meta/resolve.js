@@ -87,9 +87,6 @@ export const resolvePlan = async ({ minecraft, loader, side = 'client', donors =
 		meta,
 		libraries: mojang.libraryJobs(meta, libraryDonors),
 		jvmArguments: meta.arguments ? applicableArguments(meta.arguments.jvm, features) : [...LEGACY_JVM_ARGUMENTS],
-		// Features decide which of the version's own optional arguments apply: joining a server on
-		// launch, opening a world, a window size. Mojang gates each behind a rule, and a plan built
-		// without them silently drops every one.
 		gameArguments: meta.arguments
 			? applicableArguments(meta.arguments.game, features)
 			: (meta.minecraftArguments ?? '').split(/\s+/).filter(Boolean),

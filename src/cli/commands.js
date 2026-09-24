@@ -21,6 +21,7 @@ const depsFlag = {
 export const commands = {
 	ls: {
 		summary: 'List instances',
+		flags: { names: { type: 'boolean', description: 'List just the instance names, one per line' } },
 		run: instanceCommands.ls,
 	},
 	new: {
@@ -117,6 +118,7 @@ export const commands = {
 			world: { alias: 'w', description: 'Open this save as soon as the game is up' },
 			width: { type: 'number', description: 'Window width' },
 			height: { type: 'number', description: 'Window height' },
+			quickPlayLog: { description: 'Where the game should write its quick play log' },
 			demo: { type: 'boolean', description: 'Run the demo rather than the full game' },
 			dryRun: { type: 'boolean', description: 'Print the java command instead of running it' },
 		},
