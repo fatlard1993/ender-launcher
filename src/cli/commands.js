@@ -8,7 +8,12 @@ import * as settingsCommands from '../commands/settings';
 const instanceFlag = { instance: { alias: 'i', description: 'Instance to act on' } };
 
 const depsFlag = {
-	deps: { type: 'boolean', default: true, description: 'Also install required dependencies' },
+	deps: {
+		type: 'boolean',
+		default: true,
+		description: 'Also install required dependencies',
+		off: 'Install only what was named, not its dependencies',
+	},
 	pre: { type: 'boolean', description: 'Allow alpha and beta builds, not just releases' },
 	build: { type: 'boolean', description: 'Rebuild mods that come from a gradle project first' },
 };
@@ -85,7 +90,10 @@ export const commands = {
 	install: {
 		summary: 'Download everything an instance needs, without launching',
 		usage: 'ender install [name]',
-		flags: { ...instanceFlag, assets: { type: 'boolean', default: true, description: 'Include game assets' } },
+		flags: {
+			...instanceFlag,
+			assets: { type: 'boolean', default: true, description: 'Include game assets', off: 'Leave the game assets out' },
+		},
 		run: playCommands.install,
 	},
 	launch: {
@@ -93,8 +101,18 @@ export const commands = {
 		usage: 'ender launch [name]',
 		flags: {
 			...instanceFlag,
-			install: { type: 'boolean', default: true, description: 'Verify files before launching' },
-			assets: { type: 'boolean', default: true, description: 'Include game assets' },
+			install: {
+				type: 'boolean',
+				default: true,
+				description: 'Verify files before launching',
+				off: 'Launch without verifying the files first',
+			},
+			assets: {
+				type: 'boolean',
+				default: true,
+				description: 'Include game assets',
+				off: 'Launch without fetching missing assets',
+			},
 			server: { alias: 's', description: 'Join this address as soon as the game is up' },
 			world: { alias: 'w', description: 'Open this save as soon as the game is up' },
 			width: { type: 'number', description: 'Window width' },
@@ -168,7 +186,12 @@ export const commands = {
 			...instanceFlag,
 			offline: { type: 'boolean', description: 'Add an offline identity, no sign in' },
 			names: { type: 'boolean', description: 'List just the account names, one per line' },
-			qr: { type: 'boolean', default: true, description: 'Show a scannable code for signing in from a phone' },
+			qr: {
+				type: 'boolean',
+				default: true,
+				description: 'Show a scannable code for signing in from a phone',
+				off: 'Show only the code, no scannable square',
+			},
 		},
 		subcommands: {
 			ls: { summary: 'List accounts, online and offline', run: accountCommands.ls },

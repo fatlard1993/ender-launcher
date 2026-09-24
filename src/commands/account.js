@@ -20,9 +20,9 @@ export const ls = async ({ flags = {} } = {}) => {
 	const found = await accounts.list();
 
 	// One name per line and nothing else, for callers that have to branch on whether an
-	// account exists. The listing below is prose, and prose is matched by shape: the
-	// dotfiles hook tested for "a marker, a space, a word", which the indented help text
-	// underneath "No accounts yet." satisfies, so every machine read as already set up.
+	// account exists. The listing below is prose, and prose gets matched by shape: a
+	// script testing for "a marker, a space, a word" also matches the indented help text
+	// under "No accounts yet.", so a machine with no account reads as already set up.
 	if (flags.names) {
 		for (const account of found) info(account.name);
 

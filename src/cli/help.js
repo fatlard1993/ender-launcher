@@ -55,8 +55,11 @@ export const commandHelp = (name, command) => {
 			const name = spec.type === 'boolean' && spec.default === true ? `--no-${kebab(flag)}` : `--${kebab(flag)}`;
 			const shown = `${alias}${name}${spec.type === 'boolean' ? '' : ' <value>'}`;
 			const note = spec.default === undefined || spec.type === 'boolean' ? '' : paint.dim(` (${spec.default})`);
+			// The name shown is the negation, so the sentence beside it has to be too, or the
+			// row says the opposite of what typing it does: "--no-assets  Include game assets".
+			const description = (name.startsWith('--no-') ? spec.off : undefined) ?? spec.description ?? '';
 
-			info(`  ${paint.cyan(shown.padEnd(26))} ${spec.description ?? ''}${note}`);
+			info(`  ${paint.cyan(shown.padEnd(26))} ${description}${note}`);
 		}
 	}
 };

@@ -187,10 +187,10 @@ describe('who an instance plays as', () => {
 });
 
 describe('account listing for scripts', () => {
-	// The dotfiles hook decides whether to add an offline identity by looking at this
-	// output. It used to read the human listing and match "a marker, a space, a word",
-	// which the indented help under "No accounts yet." also satisfies - so a machine with
-	// no account at all read as already set up, and never got one.
+	// A provisioning script decides whether to add an offline identity by looking at this
+	// output. Reading the human listing meant matching "a marker, a space, a word", which
+	// the indented help under "No accounts yet." also satisfies - so a machine with no
+	// account at all read as already set up, and never got one.
 	const captured = async flags => {
 		const { ls } = await import('../src/commands/account');
 		const lines = [];
