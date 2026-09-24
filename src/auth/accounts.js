@@ -36,8 +36,8 @@ export const list = async () => {
 };
 
 /** Sign in and keep the result under the profile name Minecraft reports. */
-export const add = async ({ clientId, onPrompt } = {}) => {
-	const tokens = await signIn({ clientId, onPrompt });
+export const add = async ({ clientId, onPrompt, qr } = {}) => {
+	const tokens = await signIn({ clientId, onPrompt, qr });
 	const minecraft = await toMinecraft(tokens.accessToken, clientId);
 	const profile = await fetchProfile(minecraft.token);
 	const store = await readAccounts();

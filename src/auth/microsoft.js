@@ -1,3 +1,7 @@
+// Called on the module rather than destructured: generate() reads its error correction level
+// off `this`, and a loose reference to it throws.
+import qrcode from 'qrcode-terminal';
+
 import { fetchWithRetry } from '../download';
 import { detail, info, paint, step } from '../out';
 
@@ -47,14 +51,24 @@ class NotApprovedError extends Error {
 }
 
 /** Ask Microsoft for a code the user types into their browser, then wait for them to do it. */
-export const signIn = async ({ clientId, onPrompt } = {}) => {
+/**
+ * The page the code is meant to be typed into, with the code already in it.
+ *
+ * Microsoft does not return a pre-filled url of its own for this flow, but its device pages take
+ * the code as `otc`, which is what makes a scannable code worth anything: a phone that lands on a
+ * blank form still has an eight character code to type by hand.
+ */
+export const verificationLink = ({ verification_uri: uri, user_code: code }) =>
+	`${uri}${uri.includes('?') ? '&' : '?'}otc=${encodeURIComponent(code)}`;
+
+export const signIn = async ({ clientId, onPrompt, qr = true } = {}) => {
 	if (!clientId) {
 		throw new Error('No Azure client id configured. Set one with "ender config clientId <id>".');
 	}
 
 	const start = await (await fetchWithRetry(DEVICE_CODE, form({ client_id: clientId, scope: SCOPE }))).json();
 
-	(onPrompt ?? defaultPrompt)(start);
+	(onPrompt ?? defaultPrompt)(start, { qr });
 
 	const deadline = Date.now() + start.expires_in * 1000;
 	let interval = (start.interval ?? 5) * 1000;
@@ -74,7 +88,7 @@ export const signIn = async ({ clientId, onPrompt } = {}) => {
 
 		if (response.ok) return { refreshToken: body.refresh_token, accessToken: body.access_token, clientId };
 
-		// Still waiting on the person is not a failure; being told to slow down is a instruction.
+		// Still waiting on the person is not a failure; being told to slow down is an instruction.
 		if (body.error === 'authorization_pending') continue;
 		if (body.error === 'slow_down') {
 			interval += 5000;
@@ -91,13 +105,20 @@ export const signIn = async ({ clientId, onPrompt } = {}) => {
 	throw new Error('The sign in code expired before it was used.');
 };
 
-const defaultPrompt = start => {
+const defaultPrompt = (start, { qr = true } = {}) => {
 	step('Sign in to Microsoft');
 	info('');
-	info(`  Open ${paint.cyan(start.verification_uri)}`);
-	info(`  Enter the code ${paint.bold(start.user_code)}`);
+
+	if (qr) {
+		// Rendered before the code, so a phone can be pointed at it without reading anything first.
+		qrcode.generate(verificationLink(start), { small: true }, rendered => info(rendered));
+	}
+
+	info(`  Scan the code above, or open ${paint.cyan(start.verification_uri)}`);
+	info(`  and enter ${paint.bold(start.user_code)}`);
 	info('');
-	info(paint.dim('  Waiting for you to finish, this window can stay open.'));
+	info(paint.dim('  Waiting for you to finish. Leave this running: the account is only saved'));
+	info(paint.dim('  once the browser is done and three more exchanges have completed.'));
 };
 
 export const refresh = async ({ refreshToken, clientId }) => {

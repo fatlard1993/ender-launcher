@@ -159,7 +159,11 @@ export const commands = {
 	account: {
 		summary: 'Who instances play as, online or offline',
 		usage: 'ender account [ls|add|use <name>|remove <name>|assign <name>|status]',
-		flags: { ...instanceFlag, offline: { type: 'boolean', description: 'Add an offline identity, no sign in' } },
+		flags: {
+			...instanceFlag,
+			offline: { type: 'boolean', description: 'Add an offline identity, no sign in' },
+			qr: { type: 'boolean', default: true, description: 'Show a scannable code for signing in from a phone' },
+		},
 		subcommands: {
 			ls: { summary: 'List accounts, online and offline', run: accountCommands.ls },
 			add: { summary: 'Sign in, or add an offline identity with --offline', run: accountCommands.add },

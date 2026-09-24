@@ -50,7 +50,9 @@ export const play = async ({ positionals, flags }) => {
 
 	if ((await accounts.readAccounts()).active === undefined && !settings.account) {
 		if (settings.username === undefined || settings.username === 'Player') {
-			warn('Launching as "Player". Set a name with "ender config username <name>", or sign in with "ender account add".');
+			warn(
+				'Launching as "Player". Set a name with "ender config username <name>", or sign in with "ender account add".',
+			);
 		}
 	}
 

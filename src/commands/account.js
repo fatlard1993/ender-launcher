@@ -63,7 +63,7 @@ export const add = async ({ positionals, flags }) => {
 		return 1;
 	}
 
-	const account = await accounts.add({ clientId });
+	const account = await accounts.add({ clientId, qr: flags.qr !== false });
 
 	done(`Signed in as ${account.name}`);
 	info(paint.dim(`  ${account.uuid}`));

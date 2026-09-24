@@ -30,7 +30,8 @@
 	},
 	"homepage": "https://github.com/fatlard1993/ender-launcher#readme",
 	"dependencies": {
-		"log": "github:fatlard1993/log#e4cb364"
+		"log": "github:fatlard1993/log#e4cb364",
+		"qrcode-terminal": "^0.12.0"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^2.1.0",
