@@ -185,3 +185,44 @@ describe('who an instance plays as', () => {
 		expect(profile.accessToken).toBe('secret');
 	});
 });
+
+describe('account listing for scripts', () => {
+	// The dotfiles hook decides whether to add an offline identity by looking at this
+	// output. It used to read the human listing and match "a marker, a space, a word",
+	// which the indented help under "No accounts yet." also satisfies - so a machine with
+	// no account at all read as already set up, and never got one.
+	const captured = async flags => {
+		const { ls } = await import('../src/commands/account');
+		const lines = [];
+		const real = console.log;
+
+		console.log = (...args) => lines.push(args.join(' '));
+
+		try {
+			await ls({ flags });
+		} finally {
+			console.log = real;
+		}
+
+		return lines;
+	};
+
+	test('says nothing at all when there are no accounts', async () => {
+		expect(await captured({ names: true })).toEqual([]);
+	});
+
+	test('prints one bare name per account', async () => {
+		const accounts = await accountsModule();
+
+		await accounts.addOffline('Steve');
+		await accounts.addOffline('Alex');
+
+		expect((await captured({ names: true })).sort()).toEqual(['Alex', 'Steve']);
+	});
+
+	test('still prints the guidance without the flag', async () => {
+		const lines = await captured({});
+
+		expect(lines.some(line => line.includes('No accounts yet'))).toBe(true);
+	});
+});

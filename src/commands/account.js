@@ -16,8 +16,18 @@ const CLIENT_ID_HELP = [
 	'  Until a registration is approved, instances launch offline.',
 ].join('\n');
 
-export const ls = async () => {
+export const ls = async ({ flags = {} } = {}) => {
 	const found = await accounts.list();
+
+	// One name per line and nothing else, for callers that have to branch on whether an
+	// account exists. The listing below is prose, and prose is matched by shape: the
+	// dotfiles hook tested for "a marker, a space, a word", which the indented help text
+	// underneath "No accounts yet." satisfies, so every machine read as already set up.
+	if (flags.names) {
+		for (const account of found) info(account.name);
+
+		return 0;
+	}
 
 	if (found.length === 0) {
 		info('No accounts yet.');

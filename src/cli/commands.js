@@ -167,6 +167,7 @@ export const commands = {
 		flags: {
 			...instanceFlag,
 			offline: { type: 'boolean', description: 'Add an offline identity, no sign in' },
+			names: { type: 'boolean', description: 'List just the account names, one per line' },
 			qr: { type: 'boolean', default: true, description: 'Show a scannable code for signing in from a phone' },
 		},
 		subcommands: {
