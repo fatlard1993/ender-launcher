@@ -144,6 +144,7 @@ const SETTABLE = new Set([
 	'memory.min',
 	'memory.max',
 	'javaPath',
+	'server',
 ]);
 
 /** Everything about an instance except its mods was fixed at creation until this existed. */

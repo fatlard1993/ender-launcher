@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 
 import { ensureFile } from '../src/download';
 import { coordinateToPath } from '../src/meta/maven';
+import { applicableArguments } from '../src/meta/rules';
 import { LOADER_SERVICES, assertKnownLoader, assertLaunchableLoader, isLaunchable } from '../src/meta/resolve';
 import { chooseAsset } from '../src/mods/github';
 import { strategyFor } from '../src/server';
@@ -174,5 +175,44 @@ describe('server strategies', () => {
 		expect(strategyFor(instance('quilt')).jarPath(instance('quilt'))).toEndWith('quilt-server-launch.jar');
 		expect(strategyFor(instance('vanilla')).jarPath(instance('vanilla'))).toEndWith('server.jar');
 		expect(strategyFor(instance('forge')).jarPath).toBeUndefined();
+	});
+});
+
+describe('launch intent gates the version’s optional arguments', () => {
+	const gameArgs = [
+		'--username',
+		'${auth_player_name}',
+		{ rules: [{ action: 'allow', features: { is_demo_user: true } }], value: '--demo' },
+		{
+			rules: [{ action: 'allow', features: { has_custom_resolution: true } }],
+			value: ['--width', '${resolution_width}'],
+		},
+		{
+			rules: [{ action: 'allow', features: { is_quick_play_multiplayer: true } }],
+			value: ['--quickPlayMultiplayer', '${quickPlayMultiplayer}'],
+		},
+	];
+
+	// A plan built without features drops every optional argument, which is how joining a server
+	// on launch silently did nothing.
+	test('asking for nothing yields only the unconditional arguments', () => {
+		expect(applicableArguments(gameArgs)).toEqual(['--username', '${auth_player_name}']);
+	});
+
+	test('a feature turns on exactly its own argument', () => {
+		expect(applicableArguments(gameArgs, { is_quick_play_multiplayer: true })).toEqual([
+			'--username',
+			'${auth_player_name}',
+			'--quickPlayMultiplayer',
+			'${quickPlayMultiplayer}',
+		]);
+	});
+
+	test('features are independent of one another', () => {
+		const both = applicableArguments(gameArgs, { has_custom_resolution: true, is_demo_user: true });
+
+		expect(both).toContain('--demo');
+		expect(both).toContain('--width');
+		expect(both).not.toContain('--quickPlayMultiplayer');
 	});
 });

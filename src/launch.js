@@ -29,7 +29,7 @@ const substitute = (argument, values) =>
 export const buildCommand = async (
 	plan,
 	instance,
-	{ javaPath, username, account, memory, extraJvmArgs = [], manageJava = true } = {},
+	{ javaPath, username, account, memory, extraJvmArgs = [], manageJava = true, quickPlay = {}, resolution } = {},
 ) => {
 	const java = await selectJava(plan.javaMajor, javaPath, { component: plan.javaComponent, manage: manageJava });
 	const profile = await profileFor({ account, username });
@@ -54,6 +54,12 @@ export const buildCommand = async (
 		auth_xuid: profile.xuid,
 		clientid: profile.clientId,
 		user_type: profile.userType,
+		// Only read when the matching feature put the argument on the line in the first place.
+		quickPlayMultiplayer: quickPlay.server ?? '',
+		quickPlaySingleplayer: quickPlay.world ?? '',
+		quickPlayPath: quickPlay.logPath ?? '',
+		resolution_width: String(resolution?.width ?? ''),
+		resolution_height: String(resolution?.height ?? ''),
 	};
 
 	const memoryArgs = [`-Xms${memory.min}M`, `-Xmx${memory.max}M`];

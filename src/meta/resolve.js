@@ -63,7 +63,7 @@ const dedupeLibraries = jobs => {
 };
 
 /** Everything needed to install and launch a pairing of game version and loader. */
-export const resolvePlan = async ({ minecraft, loader, side = 'client', donors = {} }) => {
+export const resolvePlan = async ({ minecraft, loader, side = 'client', donors = {}, features = {} }) => {
 	assertLaunchableLoader(loader);
 
 	const libraryDonors = donors.libraries ?? [];
@@ -86,9 +86,12 @@ export const resolvePlan = async ({ minecraft, loader, side = 'client', donors =
 		versionType: meta.type,
 		meta,
 		libraries: mojang.libraryJobs(meta, libraryDonors),
-		jvmArguments: meta.arguments ? applicableArguments(meta.arguments.jvm) : [...LEGACY_JVM_ARGUMENTS],
+		jvmArguments: meta.arguments ? applicableArguments(meta.arguments.jvm, features) : [...LEGACY_JVM_ARGUMENTS],
+		// Features decide which of the version's own optional arguments apply: joining a server on
+		// launch, opening a world, a window size. Mojang gates each behind a rule, and a plan built
+		// without them silently drops every one.
 		gameArguments: meta.arguments
-			? applicableArguments(meta.arguments.game)
+			? applicableArguments(meta.arguments.game, features)
 			: (meta.minecraftArguments ?? '').split(/\s+/).filter(Boolean),
 	};
 
@@ -139,8 +142,8 @@ export const resolvePlan = async ({ minecraft, loader, side = 'client', donors =
 		plan.loader = { type: loader.type, version, source: service.source };
 		plan.mainClass = loaderProfile.mainClass;
 		plan.libraries = [...service.libraryJobs(loaderProfile, libraryDonors), ...plan.libraries];
-		plan.jvmArguments = [...plan.jvmArguments, ...applicableArguments(loaderProfile.arguments?.jvm)];
-		plan.gameArguments = [...plan.gameArguments, ...applicableArguments(loaderProfile.arguments?.game)];
+		plan.jvmArguments = [...plan.jvmArguments, ...applicableArguments(loaderProfile.arguments?.jvm, features)];
+		plan.gameArguments = [...plan.gameArguments, ...applicableArguments(loaderProfile.arguments?.game, features)];
 	}
 
 	plan.libraries = dedupeLibraries(plan.libraries);
