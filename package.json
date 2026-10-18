@@ -13,6 +13,8 @@
 	"author": "fatlard1993",
 	"license": "MIT",
 	"scripts": {
+		"prepare": "bun run prepare:githooks",
+		"prepare:githooks": "[ -n \"$CI\" ] && exit 0 || (git config --local core.hooksPath .githooks || echo 'Cannot set core.hooksPath -- pre-commit checks will not run')",
 		"start": "bun index.js",
 		"test": "bun test",
 		"lint": "bun --bun eslint",
@@ -36,7 +38,7 @@
 	"devDependencies": {
 		"@eslint/compat": "^2.1.0",
 		"@eslint/js": "^10.0.1",
-		"@vanilla-bean/components": "^4.4.0",
+		"@vanilla-bean/components": "^4.5.0",
 		"bun-types": "^1.3.14",
 		"eslint": "^10.7.0",
 		"eslint-plugin-compat": "^7.0.2",

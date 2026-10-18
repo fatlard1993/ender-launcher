@@ -3,7 +3,8 @@ const globals = require('globals');
 module.exports = [
 	...require('@vanilla-bean/components/eslint.app.config.cjs'),
 	{
-		files: ['index.js', 'src/**/*.js', 'test/**/*.js'],
+		// The app profile gives test/ node globals; this is a command line tool all through, src/ and index.js too
+		files: ['index.js', 'src/**/*.js'],
 		languageOptions: {
 			globals: {
 				...globals.node,
