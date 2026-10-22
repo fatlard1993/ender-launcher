@@ -17,6 +17,8 @@ bun install
 bun link            # puts `ender` on your PATH
 ```
 
+`bun run compile` instead builds `ender` as a single binary that runs without bun.
+
 If you have a modpack, start from it:
 
 ```
