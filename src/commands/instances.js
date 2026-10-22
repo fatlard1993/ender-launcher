@@ -6,20 +6,11 @@ import * as instances from '../instance';
 import { fromPrism, identifyMods } from '../instance/import';
 import { readPack, unpackInto } from '../instance/pack';
 import { entryKey, resolveAll } from '../mods';
-import { LOADER_SERVICES } from '../meta/resolve';
 import { resolveVersionId } from '../meta/mojang';
-import { assertKnownLoader, isLaunchable } from '../meta/resolve';
+import { LOADER_SERVICES, assertKnownLoader } from '../meta/resolve';
 import { done, info, paint, plural, step, warn } from '../out';
 import { parseModSpec, refineModSpec, syncInstance } from './mods';
 import { targetInstance, targetName } from './context';
-
-/** Said once, where the instance is made, rather than left for a failed launch to explain. */
-const warnIfUnlaunchable = manifest => {
-	if (isLaunchable(manifest.loader?.type)) return;
-
-	warn(`ender cannot start a ${manifest.loader.type} instance yet.`);
-	info(paint.dim('  Its mods are managed here as usual; launch it from another launcher.'));
-};
 
 export const ls = async ({ flags = {} } = {}) => {
 	const [found, config] = await Promise.all([instances.list(), readConfig()]);
@@ -100,8 +91,6 @@ export const create = async ({ positionals, flags }) => {
 
 	done(`Created ${name} :: Minecraft ${minecraft}, ${loader.type}${loader.version ? ` ${loader.version}` : ''}`);
 	info(paint.dim(`  ${manifest.gameDir}`));
-
-	warnIfUnlaunchable(manifest);
 
 	await activateIfFirst(name);
 
@@ -187,8 +176,6 @@ export const set = async ({ positionals, flags }) => {
 		manifest.loader = { type };
 
 		if (LOADER_SERVICES[type]) manifest.loader.version = await LOADER_SERVICES[type].latestLoader(manifest.minecraft);
-
-		warnIfUnlaunchable(manifest);
 	} else if (key === 'loaderVersion') {
 		manifest.loader = { ...manifest.loader, version: raw };
 	} else if (key === 'gameDir') {
@@ -350,8 +337,6 @@ const importPack = async (path, flags) => {
 
 	reportUnmanaged(unmatched, manifest.gameDir);
 
-	warnIfUnlaunchable(manifest);
-
 	info('');
 	info(paint.dim(`  ender sync -i ${manifest.name}   to fetch what the pack references`));
 
@@ -376,8 +361,6 @@ const importPrismInstance = async (directory, flags) => {
 	info(paint.dim(`  ${plural(manifest.mods.length, 'mod')} identified on Modrinth`));
 
 	reportUnmanaged(unmatched, manifest.gameDir);
-
-	warnIfUnlaunchable(manifest);
 
 	await activateIfFirst(manifest.name);
 

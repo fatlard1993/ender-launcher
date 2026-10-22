@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { ensureFile } from '../src/download';
 import { coordinateToPath } from '../src/meta/maven';
 import { applicableArguments } from '../src/meta/rules';
-import { LOADER_SERVICES, assertKnownLoader, assertLaunchableLoader, isLaunchable } from '../src/meta/resolve';
+import { LOADER_SERVICES, assertKnownLoader } from '../src/meta/resolve';
 import { chooseAsset } from '../src/mods/github';
 import { strategyFor } from '../src/server';
 import { extractArchive } from '../src/archive';
@@ -31,7 +31,7 @@ describe('maven coordinates cannot leave the repository root', () => {
 	});
 });
 
-describe('holding an instance and launching it are separate abilities', () => {
+describe('loaders', () => {
 	test('every real loader can be held', () => {
 		for (const type of ['fabric', 'quilt', 'forge', 'neoforge', 'vanilla']) {
 			expect(assertKnownLoader({ type })).toBe(type);
@@ -44,21 +44,7 @@ describe('holding an instance and launching it are separate abilities', () => {
 		expect(() => assertKnownLoader({ type: 'banana' })).toThrow('not a Minecraft loader');
 	});
 
-	test('every known loader can now be launched', () => {
-		for (const type of ['fabric', 'quilt', 'forge', 'neoforge', 'vanilla']) {
-			expect(isLaunchable(type)).toBe(true);
-			expect(assertLaunchableLoader({ type })).toBe(type);
-		}
-
-		expect(isLaunchable(undefined)).toBe(true);
-	});
-
-	test('a loader that does not exist is refused at both gates', () => {
-		expect(() => assertKnownLoader({ type: 'banana' })).toThrow('not a Minecraft loader');
-		expect(() => assertLaunchableLoader({ type: 'banana' })).toThrow('not a Minecraft loader');
-	});
-
-	test('vanilla needs no service; every other launchable loader has one', () => {
+	test('vanilla needs no service; every other loader has one', () => {
 		expect(LOADER_SERVICES.vanilla).toBeUndefined();
 
 		for (const type of ['fabric', 'quilt', 'forge', 'neoforge']) {

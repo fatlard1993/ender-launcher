@@ -8,7 +8,7 @@ import { forge, neoforge } from './forge-like';
 import * as mojang from './mojang';
 import { applicableArguments } from './rules';
 
-/** Loaders ender understands well enough to hold an instance and manage its mods. */
+/** Loaders ender can hold an instance of, manage the mods of, and launch. */
 export const KNOWN_LOADERS = new Set(['fabric', 'quilt', 'forge', 'neoforge', 'vanilla']);
 
 /**
@@ -17,24 +17,12 @@ export const KNOWN_LOADERS = new Set(['fabric', 'quilt', 'forge', 'neoforge', 'v
  */
 export const LOADER_SERVICES = { fabric, quilt, forge, neoforge };
 
-export const LAUNCHABLE_LOADERS = new Set(['fabric', 'quilt', 'forge', 'neoforge', 'vanilla']);
-
-export const isLaunchable = type => LAUNCHABLE_LOADERS.has(type ?? 'vanilla');
-
 export const assertKnownLoader = loader => {
 	const type = loader?.type ?? 'vanilla';
 
 	if (KNOWN_LOADERS.has(type)) return type;
 
 	throw new Error(`"${type}" is not a Minecraft loader ender knows. It knows: ${[...KNOWN_LOADERS].join(', ')}.`);
-};
-
-export const assertLaunchableLoader = loader => {
-	const type = assertKnownLoader(loader);
-
-	if (isLaunchable(type)) return type;
-
-	throw new Error(`ender cannot build a ${type} launch. It builds: ${[...LAUNCHABLE_LOADERS].join(', ')}.`);
 };
 
 /** Arguments older manifests assume rather than state. */
@@ -64,7 +52,7 @@ const dedupeLibraries = jobs => {
 
 /** Everything needed to install and launch a pairing of game version and loader. */
 export const resolvePlan = async ({ minecraft, loader, side = 'client', donors = {}, features = {} }) => {
-	assertLaunchableLoader(loader);
+	assertKnownLoader(loader);
 
 	const libraryDonors = donors.libraries ?? [];
 	const { meta } = await mojang.versionMeta(minecraft);
