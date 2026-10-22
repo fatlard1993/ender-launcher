@@ -174,7 +174,7 @@ export const commands = {
 		usage: 'ender server <provision|start|offline|status>',
 		flags: instanceFlag,
 		subcommands: {
-			provision: { summary: 'Download the Fabric server launcher', run: serveCommands.provision },
+			provision: { summary: 'Fetch or install the server for its loader', run: serveCommands.provision },
 			start: { summary: 'Run the server in the foreground', run: serveCommands.start },
 			offline: { summary: 'Set online-mode=false so offline clients can join', run: serveCommands.offline },
 			status: { summary: 'Show the server instance', run: serveCommands.status },
