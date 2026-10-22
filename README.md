@@ -64,11 +64,12 @@ ender account add --offline Bob  an identity that needs no sign in
 ender account add                sign in to a Microsoft account
 ender account use <name>         choose which one instances play as
 ender account assign <name>      bind one instance to one account
+ender account remove <name>      forget one
 ```
 
 An account is either offline or Microsoft, and the two sit in one list and switch the same way. An offline one is a name and the uuid vanilla derives from it, so it is exactly the player a bare username would have been, only one you can keep several of and move between. That is what makes testing your own multiplayer worth doing locally: two instances, two names, two uuids, one `online-mode=false` server.
 
-Sign in is the Microsoft device code flow: ender shows a short code, you type it into a browser, and the tokens live in `accounts.json` with owner-only permissions. A Minecraft token lasts a day and is renewed from the Microsoft one when it goes stale, so signing in is a thing you do once.
+Sign in is the Microsoft device code flow: ender shows a short code and a scannable square for a phone (`--no-qr` leaves the square out), you type the code into a browser, and the tokens live in `accounts.json` with owner-only permissions. A Minecraft token lasts a day and is renewed from the Microsoft one when it goes stale, so signing in is a thing you do once.
 
 ### The client id
 
@@ -108,7 +109,18 @@ Only the mod list used to be changeable after creation. `ender bump 26.4` moves 
 
 The game directory is the instance's own by default, but `--game-dir` points at a directory you already have. A working tree is a perfectly good game directory.
 
-`--loader` takes `fabric` (the default) or `vanilla`. Quilt, Forge and NeoForge each need their own loader metadata and launch shape, so naming one is refused rather than quietly answered with a vanilla launch.
+`--loader` takes `fabric` (the default), `quilt`, `forge`, `neoforge` or `vanilla`, and each launches with its own loader metadata. A loader ender does not know is refused rather than quietly answered with a vanilla launch.
+
+`ender launch` takes a few more things for the game itself:
+
+```
+ender launch --server play.example.net   join a server as soon as the game is up
+ender launch --world "New World"         open a save the same way
+ender launch --width 1280 --height 720   the window size
+ender launch --dry-run                   print the java command instead of running it
+```
+
+`ender install` downloads everything an instance needs without launching it, and `ender ls --names` and `ender account --names` print bare names, one per line, for scripts.
 
 ## Mods
 
@@ -120,7 +132,7 @@ ender sync                   make mods/ match the manifest
 ender update                 move to the newest compatible builds
 ```
 
-Fabric is the default loader and the only one ender builds launches for; `--loader vanilla` is the other option. Fabric API is not added for you, because it is not always wanted (Sodium and Lithium declare no dependencies at all) and because anything that does need it names it as a dependency, which ender follows on its own.
+Fabric is the default loader; `--loader` picks Quilt, Forge, NeoForge or vanilla instead. Fabric API is not added for you, because it is not always wanted (Sodium and Lithium declare no dependencies at all) and because anything that does need it names it as a dependency, which ender follows on its own.
 
 A mod is written one of these ways:
 
@@ -197,7 +209,7 @@ Unauthenticated GitHub allows sixty requests an hour. `ender config githubToken 
 
 ```
 ender new world --server --minecraft 26.3
-ender server provision       fetch the Fabric server launcher
+ender server provision       fetch or install the server for its loader
 ender server start           run it in the foreground
 ender server offline         set online-mode=false
 ender server status          version, port, online-mode, what is installed
