@@ -1,6 +1,9 @@
 import { join } from 'node:path';
 
-import { fetchJson } from '../download';
+import { fetchWithRetry } from '../download';
+import { readJson, writeJson } from '../json';
+import { warn } from '../out';
+import { paths } from '../paths';
 import { satisfies } from './range';
 
 /** The published ender-index. `ender config index` points elsewhere: another URL, or a local checkout's data directory. */
@@ -20,6 +23,39 @@ const PLATFORM = new Set([
 
 const loaded = new Map();
 
+/** Index files are read once per process; this forgets them, as a new process would. */
+export const forgetLoaded = () => loaded.clear();
+
+const copyOf = url => join(paths.cache, 'index', `${new Bun.CryptoHasher('sha1').update(url).digest('hex')}.json`);
+
+/**
+ * Fetch an index file, keeping a copy to ask about with If-None-Match, so an unchanged index costs
+ * one small answer rather than the whole file. Unreachable, the copy is used and that is said.
+ */
+const fetchKept = async url => {
+	const kept = await readJson(copyOf(url), {});
+
+	try {
+		const response = await fetchWithRetry(url, kept.etag ? { headers: { 'if-none-match': kept.etag } } : {});
+		const body = await response.json();
+		const etag = response.headers.get('etag');
+
+		if (etag) await writeJson(copyOf(url), { etag, fetched: new Date().toISOString(), body });
+
+		return body;
+	} catch (error) {
+		if (error.status === 304 && kept.body !== undefined) return kept.body;
+		if (error.status === 404) return undefined;
+		const transient = error.status === undefined || error.status === 429 || error.status >= 500;
+
+		if (!transient || kept.body === undefined) throw error;
+
+		warn(`The index could not be reached (${error.message}); using the copy from ${kept.fetched}`);
+
+		return kept.body;
+	}
+};
+
 export const indexBase = context => context?.index ?? DEFAULT_INDEX;
 
 const load = (base, path) => {
@@ -29,15 +65,7 @@ const load = (base, path) => {
 		loaded.set(
 			key,
 			(async () => {
-				if (/^https?:\/\//.test(base)) {
-					try {
-						return await fetchJson(key);
-					} catch (error) {
-						if (error.status === 404) return undefined;
-
-						throw error;
-					}
-				}
+				if (/^https?:\/\//.test(base)) return fetchKept(key);
 
 				const file = Bun.file(join(base, path));
 

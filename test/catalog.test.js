@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 
 import { parseModSpec, refineModSpec } from '../src/commands/context';
-import { fit, providerOf, requiredIds } from '../src/mods/catalog';
+import { fit, forgetLoaded, providerOf, requiredIds } from '../src/mods/catalog';
 import { resolveFromRecord, search } from '../src/mods/github';
 
 const mod = (id, extra) => ({
@@ -259,5 +259,77 @@ describe('a bare name', () => {
 		await expect(refineModSpec(parseModSpec('jei'), { index })).rejects.toThrow(
 			'"jei" is not a mod the index knows. For Modrinth write mr:jei, for CurseForge cf:jei.',
 		);
+	});
+});
+
+describe('a published index', () => {
+	let server;
+	let home;
+	let previousHome;
+	let answer;
+	const served = [];
+
+	beforeAll(async () => {
+		home = await mkdtemp(join(tmpdir(), 'ender-home-'));
+		previousHome = process.env.ENDER_HOME;
+		process.env.ENDER_HOME = home;
+		server = Bun.serve({
+			port: 0,
+			fetch: request => {
+				const status = answer(request);
+
+				served.push(status);
+
+				if (status === 304) return new Response(undefined, { status: 304 });
+				if (status !== 200) return new Response('no', { status });
+
+				return Response.json(listing, { headers: { etag: '"v1"' } });
+			},
+		});
+	});
+
+	afterAll(async () => {
+		server.stop();
+
+		if (previousHome === undefined) delete process.env.ENDER_HOME;
+		else process.env.ENDER_HOME = previousHome;
+
+		await rm(home, { recursive: true, force: true });
+	});
+
+	const base = name => `http://localhost:${server.port}/${name}`;
+
+	test('is fetched whole once, and after that only asked whether it changed', async () => {
+		answer = request => (request.headers.get('if-none-match') === '"v1"' ? 304 : 200);
+
+		const first = await search('menu', { index: base('a') });
+
+		served.length = 0;
+		forgetLoaded();
+
+		const again = await search('menu', { index: base('a') });
+
+		expect(served).toEqual([304]);
+		expect(again).toEqual(first);
+	});
+
+	test('unreachable, the kept copy is used and that is said', async () => {
+		answer = () => 200;
+
+		await search('menu', { index: base('b') });
+
+		answer = () => 503;
+		forgetLoaded();
+
+		const warned = spyOn(console, 'warn').mockImplementation(() => {});
+
+		try {
+			const hits = await search('menu', { index: base('b') });
+
+			expect(hits.map(hit => hit.id)).toEqual(['TerraformersMC/ModMenu']);
+			expect(warned.mock.calls[0][0]).toContain('The index could not be reached');
+		} finally {
+			warned.mockRestore();
+		}
 	});
 });
