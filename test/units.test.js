@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 
 import { offlineUuid } from '../src/auth';
-import { parseModSpec } from '../src/commands/context';
+import { parseModSpec, specFor } from '../src/commands/context';
+import { sources } from '../src/mods';
 import { parseArgv } from '../src/cli/parse';
 import { coordinateToPath, coordinateToUrl } from '../src/meta/maven';
 import { allowed, applicableArguments } from '../src/meta/rules';
@@ -114,8 +115,17 @@ describe('argument parsing', () => {
 });
 
 describe('mod specs', () => {
-	test('defaults to modrinth', () => {
-		expect(parseModSpec('sodium')).toEqual({ source: 'modrinth', id: 'sodium' });
+	test('a bare name is a mod id for the index, and a bare owner/repo is that repository', () => {
+		expect(parseModSpec('sodium')).toEqual({ source: 'index', id: 'sodium' });
+		expect(parseModSpec('CaffeineMC/sodium')).toEqual({ source: 'github', id: 'CaffeineMC/sodium' });
+	});
+
+	// Search prints these; pasted into add, each has to reach the source it was found in.
+	test('a search hit is written so it reads back to its own source', () => {
+		for (const source of Object.keys(sources)) {
+			expect(parseModSpec(specFor(source, 'owner/some-mod'))).toEqual({ source, id: 'owner/some-mod' });
+			expect(parseModSpec(specFor(source, 'some-mod')).source).toBe(source);
+		}
 	});
 
 	test('understands source prefixes', () => {

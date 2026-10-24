@@ -12,7 +12,7 @@ import { readMods } from './metadata';
 import * as modrinth from './modrinth';
 
 /** Sources that can be searched. A gradle project is found on disk, not looked up. */
-export const sources = { modrinth, curseforge, github };
+export const sources = { github, modrinth, curseforge };
 
 const resolvers = { ...sources, gradle };
 

@@ -52,7 +52,7 @@ Whatever a pack carries as loose files is unpacked into the game directory, then
 Otherwise, start fresh. `new` takes mods, so an instance and its contents are one command:
 
 ```
-ender new suite fabric-api sodium
+ender new suite lithium modmenu mr:sodium
 ender launch suite
 ```
 
@@ -127,9 +127,9 @@ ender launch --dry-run                   print the java command instead of runni
 ## Mods
 
 ```
-ender search sodium          the index, Modrinth and CurseForge, narrowed to the active instance
-ender add sodium cf:jei      add and install
-ender drop sodium            remove from the manifest and from disk
+ender search backpack        the index, Modrinth and CurseForge, narrowed to the active instance
+ender add lithium cf:jei     add and install
+ender drop lithium           remove from the manifest and from disk
 ender sync                   make mods/ match the manifest
 ender update                 move to the newest compatible builds
 ```
@@ -138,14 +138,16 @@ Fabric is the default loader; `--loader` picks Quilt, Forge, NeoForge or vanilla
 
 A mod is written one of these ways:
 
-| Written                                         | Source                                |
-| ----------------------------------------------- | ------------------------------------- |
-| `sodium`                                        | Modrinth, the default for a bare name |
-| `modrinth:sodium@0.5.8` or `mr:sodium`          | Modrinth, optionally pinned           |
-| `cf:jei` or `curseforge:jei@<file name>`        | CurseForge                            |
-| `gh:FabricMC/fabric` or `github:owner/repo@tag` | a GitHub release                      |
-| `./build/libs/mod.jar`                          | a jar on disk                         |
-| `https://example.com/mod.jar`                   | a direct download                     |
+| Written                                         | Source                      |
+| ----------------------------------------------- | --------------------------- |
+| `lithium` or `lithium@<tag>`                    | the index, by mod id        |
+| `CaffeineMC/lithium` or `gh:CaffeineMC/lithium` | a GitHub release            |
+| `modrinth:sodium@0.5.8` or `mr:sodium`          | Modrinth, optionally pinned |
+| `cf:jei` or `curseforge:jei@<file name>`        | CurseForge                  |
+| `./build/libs/mod.jar`                          | a jar on disk               |
+| `https://example.com/mod.jar`                   | a direct download           |
+
+A bare name is a mod id, and it is looked up in the index: the repository whose own jars declare that id. `ender add lithium` says `lithium is gh:CaffeineMC/lithium` and declares that. A name the index does not know is refused rather than looked for elsewhere, and the refusal names the `mr:` and `cf:` spellings that reach Modrinth and CurseForge. Sodium is the common case today: its source is on GitHub, but its releases carry no jars, so it is `mr:sodium`. Entries already in a manifest keep the source they were declared with.
 
 Required dependencies come along unless you pass `--no-deps`.
 

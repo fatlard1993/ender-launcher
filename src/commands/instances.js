@@ -58,9 +58,10 @@ export const create = async ({ positionals, flags }) => {
 		loader.version = flags.loaderVersion ?? (await LOADER_SERVICES[loaderType].latestLoader(minecraft));
 	}
 
+	const config = await readConfig();
 	const mods = await Promise.all(
 		specs.map(async spec => {
-			const entry = await refineModSpec(parseModSpec(spec));
+			const entry = await refineModSpec(parseModSpec(spec), { index: config.index });
 
 			if (entry.path) entry.path = resolve(entry.path);
 
@@ -69,7 +70,6 @@ export const create = async ({ positionals, flags }) => {
 	);
 
 	// Resolved before the instance exists, so a typo leaves nothing behind to clean up.
-	const config = await readConfig();
 	const context = {
 		minecraft,
 		loader: loaderType === 'vanilla' ? undefined : loaderType,

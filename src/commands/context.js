@@ -1,6 +1,8 @@
 import { readConfig } from '../config';
 import * as instances from '../instance';
+import { listing, providerOf } from '../mods/catalog';
 import { isProject } from '../mods/gradle';
+import { info, paint } from '../out';
 
 /** Which instance a command acts on: what the caller resolved, then whatever `use` last set. */
 export const targetName = async (explicit, config) => {
@@ -35,11 +37,32 @@ const LOCAL = /^\.{0,2}\//;
  * Refine a parsed spec against the disk: a path naming a gradle project is a source to build from,
  * where a path naming a jar is the jar itself. Kept apart from parsing so the parse stays pure.
  */
-export const refineModSpec = async entry => {
+export const refineModSpec = async (entry, context) => {
+	if (entry.source === 'index') return fromIndex(entry, context);
 	if (entry.source !== 'local') return entry;
 
 	return (await isProject(entry.path)) ? { source: 'gradle', path: entry.path } : entry;
 };
+
+/** A bare name is a mod id, found in the index as the repository whose jars declare it. */
+const fromIndex = async (entry, context) => {
+	const repo = providerOf(entry.id, await listing(context));
+
+	if (repo === undefined) {
+		throw new Error(
+			`"${entry.id}" is not a mod the index knows. For Modrinth write mr:${entry.id}, for CurseForge cf:${entry.id}.`,
+		);
+	}
+
+	info(paint.dim(`  ${entry.id} is gh:${repo}`));
+
+	return { source: 'github', id: repo, ...(entry.version ? { version: entry.version } : {}) };
+};
+
+const PREFIXES = { github: 'gh:', modrinth: 'mr:', curseforge: 'cf:' };
+
+/** How a mod found by search is written so that parseModSpec reads it back to the source it came from. */
+export const specFor = (source, id) => `${PREFIXES[source]}${id}`;
 
 export const parseModSpec = spec => {
 	if (spec.startsWith('http://') || spec.startsWith('https://')) return { source: 'url', url: spec };
@@ -57,13 +80,15 @@ export const parseModSpec = spec => {
 	};
 	const separator = spec.indexOf(':');
 
-	let source = 'modrinth';
+	let source = 'index';
 	let remainder = spec;
 
 	if (separator !== -1 && aliases[spec.slice(0, separator)]) {
 		source = aliases[spec.slice(0, separator)];
 		remainder = spec.slice(separator + 1);
 	}
+
+	if (source === 'index' && remainder.includes('/')) source = 'github';
 
 	const at = remainder.lastIndexOf('@');
 

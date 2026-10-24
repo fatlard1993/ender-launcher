@@ -132,11 +132,11 @@ export const commands = {
 	},
 
 	search: {
-		summary: 'Search Modrinth and CurseForge',
+		summary: 'Search the index, Modrinth and CurseForge',
 		usage: 'ender search <query>',
 		flags: {
 			...instanceFlag,
-			source: { alias: 's', description: 'modrinth or curseforge' },
+			source: { alias: 's', description: 'github, modrinth or curseforge' },
 			minecraft: { alias: 'm', description: 'Narrow to a game version' },
 			loader: { alias: 'l', description: 'Narrow to a loader' },
 			limit: { type: 'number', alias: 'n', default: 8, description: 'Results per source' },

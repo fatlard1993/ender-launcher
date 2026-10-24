@@ -100,7 +100,8 @@ describe('mod specs for the new sources', () => {
 		});
 	});
 
-	test('still treats a bare name as modrinth', () => {
-		expect(parseModSpec('sodium').source).toBe('modrinth');
+	test('modrinth is asked for by name', () => {
+		expect(parseModSpec('mr:sodium').source).toBe('modrinth');
+		expect(parseModSpec('modrinth:sodium').source).toBe('modrinth');
 	});
 });

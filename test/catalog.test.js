@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 
+import { parseModSpec, refineModSpec } from '../src/commands/context';
 import { fit, providerOf, requiredIds } from '../src/mods/catalog';
 import { resolveFromRecord, search } from '../src/mods/github';
 
@@ -230,6 +231,33 @@ describe('searching the index', () => {
 	test('a missing index says where it looked', async () => {
 		await expect(search('x', { index: join(index, 'nowhere') })).rejects.toThrow(
 			`No mod index at ${join(index, 'nowhere')}`,
+		);
+	});
+});
+
+describe('a bare name', () => {
+	test('becomes the repository whose jars declare that mod id', async () => {
+		const logged = spyOn(console, 'log').mockImplementation(() => {});
+
+		try {
+			expect(await refineModSpec(parseModSpec('modmenu'), { index })).toEqual({
+				source: 'github',
+				id: 'TerraformersMC/ModMenu',
+			});
+			expect(await refineModSpec(parseModSpec('fabric-api@0.165.0+26.3'), { index })).toEqual({
+				source: 'github',
+				id: 'FabricMC/fabric-api',
+				version: '0.165.0+26.3',
+			});
+			expect(logged.mock.calls.map(([line]) => line)).toContain('  modmenu is gh:TerraformersMC/ModMenu');
+		} finally {
+			logged.mockRestore();
+		}
+	});
+
+	test('the index does not know is refused, naming the prefixes that reach elsewhere', async () => {
+		await expect(refineModSpec(parseModSpec('jei'), { index })).rejects.toThrow(
+			'"jei" is not a mod the index knows. For Modrinth write mr:jei, for CurseForge cf:jei.',
 		);
 	});
 });

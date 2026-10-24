@@ -6,7 +6,7 @@ import * as instances from '../instance';
 import { entryKey, reportSync, resolveAll, sources, syncMods } from '../mods';
 import { done, fail, info, paint, plural, step, warn } from '../out';
 import { paths } from '../paths';
-import { parseModSpec, refineModSpec, targetInstance } from './context';
+import { parseModSpec, refineModSpec, specFor, targetInstance } from './context';
 
 const contextFor = (manifest, config, flags = {}) => ({
 	minecraft: manifest.minecraft,
@@ -20,6 +20,18 @@ const contextFor = (manifest, config, flags = {}) => ({
 	buildMissing: flags.build ?? false,
 	rebuild: flags.build ?? false,
 });
+
+/**
+ * A spec naming something already declared: a bare name the index cannot place may still be an
+ * older entry's own id, such as a Modrinth slug, so it is matched as written rather than refused.
+ */
+const leniently = async (spec, config) => {
+	try {
+		return await refineModSpec(parseModSpec(spec), { index: config.index });
+	} catch {
+		return parseModSpec(spec);
+	}
+};
 
 export const syncInstance = async (manifest, config, { withDependencies = true, flags = {} } = {}) => {
 	const directory = instances.modsDir(manifest);
@@ -61,7 +73,7 @@ export const add = async ({ positionals, flags }) => {
 	const added = [];
 
 	for (const spec of positionals) {
-		const entry = await refineModSpec(parseModSpec(spec));
+		const entry = await refineModSpec(parseModSpec(spec), { index: config.index });
 
 		// A relative path means something different from every other directory, so it is anchored
 		// now, the way --game-dir already is, rather than at each sync.
@@ -102,7 +114,7 @@ export const drop = async ({ positionals, flags }) => {
 	const wanted = new Set(
 		await Promise.all(
 			positionals.map(async spec => {
-				const entry = await refineModSpec(parseModSpec(spec));
+				const entry = await leniently(spec, config);
 
 				if (entry.path) entry.path = resolve(entry.path);
 
@@ -138,7 +150,16 @@ export const drop = async ({ positionals, flags }) => {
 export const update = async ({ positionals, flags }) => {
 	const { manifest, config } = await targetInstance(flags.instance);
 
-	const targeted = positionals.length > 0 ? new Set(positionals.map(spec => parseModSpec(spec).id)) : undefined;
+	const targeted =
+		positionals.length > 0
+			? new Set(
+					(
+						await Promise.all(
+							positionals.map(async spec => [parseModSpec(spec).id, (await leniently(spec, config)).id]),
+						)
+					).flat(),
+				)
+			: undefined;
 	let unpinned = 0;
 
 	manifest.mods = manifest.mods.map(entry => {
@@ -219,10 +240,9 @@ export const search = async ({ positionals, flags }) => {
 		info(`${paint.bold(source.label)} ${paint.dim(scope + note)}`);
 
 		for (const hit of hits) {
-			const prefix = { curseforge: 'cf:', github: 'gh:' }[name] ?? '';
 			const count = `${hit.downloads.toLocaleString()} ${hit.stars ? 'stars' : 'downloads'}`;
 
-			info(`  ${paint.cyan(prefix + hit.id)} ${paint.dim(hit.note ? `${count} · ${hit.note}` : count)}`);
+			info(`  ${paint.cyan(specFor(name, hit.id))} ${paint.dim(hit.note ? `${count} · ${hit.note}` : count)}`);
 			info(`    ${hit.name} ${paint.dim('--')} ${hit.description?.slice(0, 90) ?? ''}`);
 		}
 
