@@ -33,6 +33,11 @@ export const settingsFor = (manifest, config) => ({
 const LOCAL = /^\.{0,2}\//;
 
 /** `sodium`, `modrinth:sodium@0.5.8`, `cf:jei`, `./build/libs/mod.jar`, or a url. */
+const PREFIXES = { github: 'gh:', codeberg: 'cb:', gitlab: 'gl:', modrinth: 'mr:', curseforge: 'cf:' };
+
+/** How a mod found by search is written so that parseModSpec reads it back to the source it came from. */
+export const specFor = (source, id) => `${PREFIXES[source]}${id}`;
+
 /**
  * Refine a parsed spec against the disk: a path naming a gradle project is a source to build from,
  * where a path naming a jar is the jar itself. Kept apart from parsing so the parse stays pure.
@@ -46,23 +51,20 @@ export const refineModSpec = async (entry, context) => {
 
 /** A bare name is a mod id, found in the index as the repository whose jars declare it. */
 const fromIndex = async (entry, context) => {
-	const repo = providerOf(entry.id, await listing(context));
+	const provider = providerOf(entry.id, await listing(context));
 
-	if (repo === undefined) {
+	if (provider === undefined) {
 		throw new Error(
 			`"${entry.id}" is not a mod the index knows. For Modrinth write mr:${entry.id}, for CurseForge cf:${entry.id}.`,
 		);
 	}
 
-	info(paint.dim(`  ${entry.id} is gh:${repo}`));
+	const source = provider.host ?? 'github';
 
-	return { source: 'github', id: repo, ...(entry.version ? { version: entry.version } : {}) };
+	info(paint.dim(`  ${entry.id} is ${specFor(source, provider.repo)}`));
+
+	return { source, id: provider.repo, ...(entry.version ? { version: entry.version } : {}) };
 };
-
-const PREFIXES = { github: 'gh:', modrinth: 'mr:', curseforge: 'cf:' };
-
-/** How a mod found by search is written so that parseModSpec reads it back to the source it came from. */
-export const specFor = (source, id) => `${PREFIXES[source]}${id}`;
 
 export const parseModSpec = spec => {
 	if (spec.startsWith('http://') || spec.startsWith('https://')) return { source: 'url', url: spec };
@@ -77,6 +79,10 @@ export const parseModSpec = spec => {
 		curseforge: 'curseforge',
 		gh: 'github',
 		github: 'github',
+		cb: 'codeberg',
+		codeberg: 'codeberg',
+		gl: 'gitlab',
+		gitlab: 'gitlab',
 	};
 	const separator = spec.indexOf(':');
 

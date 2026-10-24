@@ -85,7 +85,11 @@ export const listing = async context => {
 	return entries;
 };
 
-export const record = (fullName, context) => load(indexBase(context), `mods/${fullName}.json`);
+/** Where a host's records live in the index; a dotted directory cannot collide with a GitHub owner. */
+const DIRECTORIES = { github: '', codeberg: 'codeberg.org/', gitlab: 'gitlab.com/' };
+
+export const record = (fullName, context, host = 'github') =>
+	load(indexBase(context), `mods/${DIRECTORIES[host]}${fullName}.json`);
 
 /** Quilt loads Fabric mods as its own. */
 export const loaderFits = (declared, loader) =>
@@ -104,7 +108,7 @@ export const fit = (mods, { minecraft, loader } = {}) =>
 	);
 
 /**
- * The repository that satisfies a dependency on a mod id: one whose own mod has that id, or else one
+ * The index entry, on whichever host, whose repository satisfies a dependency on a mod id: one whose own mod has that id, or else one
  * that provides it. A library is often bundled inside the mods that use it, so among providers the
  * one providing the most is taken, which is the library's own release rather than a mod carrying a
  * copy of part of it.
@@ -113,13 +117,13 @@ export const providerOf = (id, entries) => {
 	const byStars = (a, b) => (b.stars ?? 0) - (a.stars ?? 0);
 	const own = entries.filter(entry => entry.latest?.mods.some(mod => mod.id === id)).sort(byStars);
 
-	if (own.length > 0) return own[0].repo;
+	if (own.length > 0) return own[0];
 
 	const providers = entries
 		.filter(entry => entry.latest?.provides?.includes(id))
 		.sort((a, b) => b.latest.provides.length - a.latest.provides.length || byStars(a, b));
 
-	return providers[0]?.repo;
+	return providers[0];
 };
 
 /** The ids a jar's mods require from elsewhere: not the platform, and not what the jar already carries. */

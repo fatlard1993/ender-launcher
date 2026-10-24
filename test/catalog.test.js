@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 
 import { parseModSpec, refineModSpec } from '../src/commands/context';
 import { fit, forgetLoaded, providerOf, requiredIds } from '../src/mods/catalog';
-import { resolveFromRecord, search } from '../src/mods/github';
+import { hosted, resolveFromRecord, search } from '../src/mods/indexed';
 
 const mod = (id, extra) => ({
 	loader: 'fabric',
@@ -61,6 +61,7 @@ const listing = [
 		description: 'Carry more',
 	}),
 	entry('b/old', [mod('old-backpacks')], { archived: true }),
+	entry('lib/core', [mod('core-lib')], { host: 'gitlab' }),
 ];
 
 beforeAll(async () => {
@@ -88,12 +89,12 @@ describe('the index catalog', () => {
 	});
 
 	test('a dependency goes to the repository whose own mod has that id', () => {
-		expect(providerOf('modmenu', listing)).toBe('TerraformersMC/ModMenu');
+		expect(providerOf('modmenu', listing).repo).toBe('TerraformersMC/ModMenu');
 	});
 
 	// ModMenu carries fabric-api-base inside its own jar; Fabric API is still where it comes from.
 	test('a bundled module is credited to the release that provides the most', () => {
-		expect(providerOf('fabric-api-base', listing)).toBe('FabricMC/fabric-api');
+		expect(providerOf('fabric-api-base', listing).repo).toBe('FabricMC/fabric-api');
 		expect(providerOf('nobody-has-this', listing)).toBeUndefined();
 	});
 
@@ -143,7 +144,7 @@ describe('resolving from an index record', () => {
 			],
 		};
 
-		expect((await resolveFromRecord(record, { id: 'a/m' }, context())).version).toBe('1.0');
+		expect((await resolveFromRecord(record, { source: 'github', id: 'a/m' }, context())).version).toBe('1.0');
 	});
 
 	test('picks the jar for the instance loader out of a multiloader release', async () => {
@@ -156,7 +157,9 @@ describe('resolving from an index record', () => {
 			],
 		};
 
-		expect((await resolveFromRecord(record, { id: 'a/m' }, context())).file.filename).toBe('m-fabric-1.0.jar');
+		expect((await resolveFromRecord(record, { source: 'github', id: 'a/m' }, context())).file.filename).toBe(
+			'm-fabric-1.0.jar',
+		);
 	});
 
 	test('skips jars that failed, are gone, or do not match the asset pattern', async () => {
@@ -171,19 +174,23 @@ describe('resolving from an index record', () => {
 			],
 		};
 
-		expect((await resolveFromRecord(record, { id: 'a/m', asset: '^m\\.jar$' }, context())).file.filename).toBe('m.jar');
+		expect(
+			(await resolveFromRecord(record, { source: 'github', id: 'a/m', asset: '^m\\.jar$' }, context())).file.filename,
+		).toBe('m.jar');
 	});
 
 	test('nothing fitting leaves it to the GitHub API', async () => {
 		const record = { releases: [release('1.0', [asset('m.jar', [mod('m', { minecraft: '~26.1' })])])] };
 
-		expect(await resolveFromRecord(record, { id: 'a/m' }, context())).toBeUndefined();
+		expect(await resolveFromRecord(record, { source: 'github', id: 'a/m' }, context())).toBeUndefined();
 	});
 
 	test('refuses a jar listed as known bad', async () => {
 		const record = { releases: [release('1.0', [asset('m.jar', [mod('m')], { knownBad: 'carries a stealer' })])] };
 
-		await expect(resolveFromRecord(record, { id: 'a/m' }, context())).rejects.toThrow('known bad: carries a stealer');
+		await expect(resolveFromRecord(record, { source: 'github', id: 'a/m' }, context())).rejects.toThrow(
+			'known bad: carries a stealer',
+		);
 	});
 
 	test('says when the jar was replaced after it was published, and when a dependency has no home', async () => {
@@ -199,7 +206,7 @@ describe('resolving from an index record', () => {
 		const warned = spyOn(console, 'warn').mockImplementation(() => {});
 
 		try {
-			await resolveFromRecord(record, { id: 'a/m' }, context());
+			await resolveFromRecord(record, { source: 'github', id: 'a/m' }, context());
 
 			const lines = warned.mock.calls.map(([line]) => line);
 
@@ -331,5 +338,34 @@ describe('a published index', () => {
 		} finally {
 			warned.mockRestore();
 		}
+	});
+});
+
+describe('mods on Codeberg and GitLab', () => {
+	const context = () => ({ minecraft: '26.3', loader: 'fabric', index });
+
+	test('resolve from their records, kept apart from GitHub owners', async () => {
+		await Bun.write(
+			join(index, 'mods', 'codeberg.org', 'enjarai', 'barrel.json'),
+			JSON.stringify({ releases: [release('3.8.4', [asset('barrel.jar', [mod('do_a_barrel_roll')])])] }),
+		);
+
+		const resolved = await hosted('codeberg').resolve({ source: 'codeberg', id: 'enjarai/barrel' }, context());
+
+		expect(resolved.source).toBe('codeberg');
+		expect(resolved.version).toBe('3.8.4');
+	});
+
+	test('one the index has not crawled says how to get it crawled', async () => {
+		await expect(hosted('gitlab').resolve({ source: 'gitlab', id: 'g/missing' }, context())).rejects.toThrow(
+			`gitlab:g/missing is not in the index; add "gitlab:g/missing" to ender-index's repos.txt`,
+		);
+	});
+
+	test('a dependency on a mod hosted elsewhere is declared from that host', async () => {
+		const record = { releases: [release('1.0', [asset('m.jar', [mod('m', { depends: ['core-lib'] })])])] };
+		const resolved = await resolveFromRecord(record, { source: 'github', id: 'a/m' }, context());
+
+		expect(resolved.dependencies).toEqual([{ source: 'gitlab', id: 'lib/core' }]);
 	});
 });

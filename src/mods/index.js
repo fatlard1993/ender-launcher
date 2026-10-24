@@ -8,13 +8,21 @@ import { gainedSince, scanJar } from './capabilities';
 import * as curseforge from './curseforge';
 import * as github from './github';
 import * as gradle from './gradle';
+import * as indexed from './indexed';
 import { readMods } from './metadata';
 import * as modrinth from './modrinth';
 
 /** Sources that can be searched. A gradle project is found on disk, not looked up. */
-export const sources = { github, modrinth, curseforge };
+export const sources = { index: indexed, modrinth, curseforge };
 
-const resolvers = { ...sources, gradle };
+const resolvers = {
+	github,
+	codeberg: indexed.hosted('codeberg'),
+	gitlab: indexed.hosted('gitlab'),
+	modrinth,
+	curseforge,
+	gradle,
+};
 
 export const entryKey = entry => `${entry.source}:${entry.id ?? entry.path ?? entry.url}`;
 

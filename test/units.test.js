@@ -2,7 +2,6 @@ import { describe, expect, test } from 'bun:test';
 
 import { offlineUuid } from '../src/auth';
 import { parseModSpec, specFor } from '../src/commands/context';
-import { sources } from '../src/mods';
 import { parseArgv } from '../src/cli/parse';
 import { coordinateToPath, coordinateToUrl } from '../src/meta/maven';
 import { allowed, applicableArguments } from '../src/meta/rules';
@@ -122,7 +121,7 @@ describe('mod specs', () => {
 
 	// Search prints these; pasted into add, each has to reach the source it was found in.
 	test('a search hit is written so it reads back to its own source', () => {
-		for (const source of Object.keys(sources)) {
+		for (const source of ['github', 'codeberg', 'gitlab', 'modrinth', 'curseforge']) {
 			expect(parseModSpec(specFor(source, 'owner/some-mod'))).toEqual({ source, id: 'owner/some-mod' });
 			expect(parseModSpec(specFor(source, 'some-mod')).source).toBe(source);
 		}

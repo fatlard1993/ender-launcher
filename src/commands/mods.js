@@ -208,7 +208,8 @@ export const search = async ({ positionals, flags }) => {
 		}
 	}
 
-	const wanted = flags.source ? [flags.source] : Object.keys(sources);
+	// `github` searched the index before the index covered more than GitHub.
+	const wanted = flags.source ? [flags.source === 'github' ? 'index' : flags.source] : Object.keys(sources);
 	let printed = 0;
 
 	for (const name of wanted) {
@@ -243,7 +244,7 @@ export const search = async ({ positionals, flags }) => {
 		for (const hit of hits) {
 			const count = `${hit.downloads.toLocaleString()} ${hit.stars ? 'stars' : 'downloads'}`;
 
-			info(`  ${paint.cyan(specFor(name, hit.id))} ${paint.dim(hit.note ? `${count} · ${hit.note}` : count)}`);
+			info(`  ${paint.cyan(specFor(hit.source, hit.id))} ${paint.dim(hit.note ? `${count} · ${hit.note}` : count)}`);
 			info(`    ${hit.name} ${paint.dim('--')} ${hit.description?.slice(0, 90) ?? ''}`);
 		}
 
