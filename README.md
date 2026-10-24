@@ -127,7 +127,7 @@ ender launch --dry-run                   print the java command instead of runni
 ## Mods
 
 ```
-ender search sodium          Modrinth, narrowed to the active instance
+ender search sodium          the index, Modrinth and CurseForge, narrowed to the active instance
 ender add sodium cf:jei      add and install
 ender drop sodium            remove from the manifest and from disk
 ender sync                   make mods/ match the manifest
@@ -201,11 +201,17 @@ Setting `ender config curseforgeKey <key>` with a key from [their console](https
 
 ### GitHub releases
 
-`ender add gh:owner/repo` takes the newest release that ships a jar; `@tag` pins one. Recent release assets carry a sha256 digest and are verified against it. Older releases predate that field, and those fall back to the declared length like any other source.
+`ender add gh:owner/repo` takes a mod straight from the releases of the repository its source lives in; `@tag` pins one.
 
-Picking the jar takes some care, because a Gradle release usually ships the artifact alongside its sources and javadoc. Those are skipped, then a jar naming the loader wins, then one naming the game version, then the shortest name, which is the plain artifact rather than a variant. When a release ships several real jars, an `asset` pattern in the manifest entry settles it, and the error tells you what the release actually contains.
+Repositories that ship jars in their releases are crawled nightly by [ender-index](https://github.com/fatlard1993/ender-index), which reads each jar's own metadata and scans what its code can reach. `ender search` searches that index, and only lists repositories whose jars declare a loader and game version the instance can use. Each hit says which loaders it ships for and what its newest release can reach, and says so when one of its releases was changed after it was published.
 
-Unauthenticated GitHub allows sixty requests an hour. `ender config githubToken <token>` raises that, `GITHUB_TOKEN` is read if set, and otherwise the `gh` CLI is asked for its own token.
+A repository the index has crawled resolves from it. The release is the one whose jar declares the instance's loader and game version, read out of the jar rather than guessed from its name, so one release carrying fabric and neoforge jars side by side hands over the right one. The download is checked against the sha256 the index computed. Dependencies come along through the index too: each mod id a jar requires is found as a repository's own mod, or else as one bundled in a release (Fabric API is forty-four modules in one jar), and anything the jar already carries inside itself is not fetched again. A required id the index does not know is said, not dropped. A jar the index lists as known bad is refused.
+
+A repository the index has not crawled, or whose watched releases do not fit, resolves from the GitHub API instead. The newest release that ships a jar is taken. Recent release assets carry a sha256 digest and are verified against it; older ones fall back to the declared length like any other source. Picking the jar takes some care, because a Gradle release usually ships the artifact alongside its sources and javadoc. Those are skipped, then a jar naming the loader wins, then one naming the game version, then the shortest name, which is the plain artifact rather than a variant. When a release ships several real jars, an `asset` pattern in the manifest entry settles it, and the error tells you what the release actually contains.
+
+`ender config index <url or directory>` points at another index, such as a local checkout's `data` directory.
+
+Unauthenticated GitHub allows sixty requests an hour. `ender config githubToken <token>` raises that, `GITHUB_TOKEN` is read if set, and otherwise the `gh` CLI is asked for its own token. Reading the index spends none of them.
 
 ### What an update can reach
 

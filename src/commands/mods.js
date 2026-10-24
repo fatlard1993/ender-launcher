@@ -1,6 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
+import { readConfig } from '../config';
 import * as instances from '../instance';
 import { entryKey, reportSync, resolveAll, sources, syncMods } from '../mods';
 import { done, fail, info, paint, plural, step, warn } from '../out';
@@ -11,6 +12,7 @@ const contextFor = (manifest, config, flags = {}) => ({
 	loader: manifest.loader?.type === 'vanilla' ? undefined : manifest.loader?.type,
 	key: config.curseforgeKey,
 	githubToken: config.githubToken,
+	index: config.index,
 	allowPrerelease: flags.pre ?? manifest.prerelease ?? config.prerelease ?? false,
 	// A source built from disk is rebuilt only when asked, because a gradle build is not something
 	// to run behind someone during an ordinary sync.
@@ -169,17 +171,14 @@ export const search = async ({ positionals, flags }) => {
 
 	let minecraft = flags.minecraft;
 	let loader = flags.loader;
-	let key;
-	let githubToken;
+	const config = await readConfig();
 
 	if (flags.instance !== undefined || (minecraft === undefined && flags.any !== true)) {
 		try {
-			const { manifest, config } = await targetInstance(flags.instance);
+			const { manifest } = await targetInstance(flags.instance);
 
 			minecraft ??= manifest.minecraft;
 			loader ??= manifest.loader?.type === 'vanilla' ? undefined : manifest.loader?.type;
-			key = config.curseforgeKey;
-			githubToken = config.githubToken;
 		} catch {
 			// Searching without an instance is fine; it just cannot narrow by version.
 		}
@@ -193,13 +192,17 @@ export const search = async ({ positionals, flags }) => {
 
 		if (source === undefined) throw new Error(`Unknown source "${name}"`);
 
-		// GitHub repository search is too noisy to mix into a mod search unasked.
-		if (name === 'github' && !flags.source) continue;
-
 		let hits;
 
 		try {
-			hits = await source.search(query, { minecraft, loader, limit: flags.limit, key, githubToken });
+			hits = await source.search(query, {
+				minecraft,
+				loader,
+				limit: flags.limit,
+				key: config.curseforgeKey,
+				githubToken: config.githubToken,
+				index: config.index,
+			});
 		} catch (error) {
 			fail(`${source.label}: ${error.message}`);
 
@@ -217,7 +220,7 @@ export const search = async ({ positionals, flags }) => {
 			const prefix = { curseforge: 'cf:', github: 'gh:' }[name] ?? '';
 			const count = `${hit.downloads.toLocaleString()} ${hit.stars ? 'stars' : 'downloads'}`;
 
-			info(`  ${paint.cyan(prefix + hit.id)} ${paint.dim(count)}`);
+			info(`  ${paint.cyan(prefix + hit.id)} ${paint.dim(hit.note ? `${count} · ${hit.note}` : count)}`);
 			info(`    ${hit.name} ${paint.dim('--')} ${hit.description?.slice(0, 90) ?? ''}`);
 		}
 

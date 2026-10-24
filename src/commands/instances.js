@@ -75,6 +75,7 @@ export const create = async ({ positionals, flags }) => {
 		loader: loaderType === 'vanilla' ? undefined : loaderType,
 		key: config.curseforgeKey,
 		githubToken: config.githubToken,
+		index: config.index,
 		allowPrerelease: flags.pre ?? config.prerelease ?? false,
 		buildMissing: flags.build ?? false,
 	};

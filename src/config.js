@@ -6,6 +6,7 @@ const defaults = {
 	username: 'Player',
 	curseforgeKey: undefined,
 	githubToken: undefined,
+	index: undefined,
 	javaPath: undefined,
 	memory: { min: 512, max: 4096 },
 	manageJava: true,
