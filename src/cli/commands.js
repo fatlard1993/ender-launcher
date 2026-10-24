@@ -156,6 +156,12 @@ export const commands = {
 		flags: { ...instanceFlag, ...depsFlag },
 		run: modCommands.drop,
 	},
+	scan: {
+		summary: 'Show what mods can reach: exec, classloading, native, network, unsafe',
+		usage: 'ender scan [jar|mod...]',
+		flags: { ...instanceFlag, json: { type: 'boolean', description: 'Print the findings as JSON' } },
+		run: modCommands.scan,
+	},
 	sync: {
 		summary: 'Make the mods directory match the manifest',
 		usage: 'ender sync [--instance name]',

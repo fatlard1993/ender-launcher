@@ -132,6 +132,7 @@ ender add lithium cf:jei     add and install
 ender drop lithium           remove from the manifest and from disk
 ender sync                   make mods/ match the manifest
 ender update                 move to the newest compatible builds
+ender scan [jar|mod]         what installed mods, or any jar, can reach
 ```
 
 Fabric is the default loader; `--loader` picks Quilt, Forge, NeoForge or vanilla instead. Fabric API is not added for you, because it is not always wanted (Sodium and Lithium declare no dependencies at all) and because anything that does need it names it as a dependency, which ender follows on its own.
@@ -225,6 +226,8 @@ When a sync replaces a downloaded jar, whether by `ender update` or by a floatin
 ```
 
 The capabilities are `exec`, `classloading`, `native`, `network` and `unsafe`, read from the classes themselves, nested jars included, by the exact methods they call. A capability the mod already had is not news, so an update checker that was there last version stays quiet. A jar can also gain classes nothing can read, which is reported the same way.
+
+A first install has nothing to compare against, so `ender scan` answers the same question directly: with no arguments, one line for every jar in `mods/`, hand-placed ones included; given a jar path or an installed mod, the classes and calls behind each capability and the hosts its strings name. `--json` prints the findings whole, for scripts.
 
 This is evidence, not a verdict, and the sync still succeeds. What it is for is the case where a mod you trust is quietly replaced: an author's account taken over and a payload slipped into a real release, which is how fractureiser spread. A rendering mod that suddenly loads classes from a URL is worth hearing about before you launch it. Jars you built yourself, and jars on disk, are not compared.
 

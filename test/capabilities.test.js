@@ -1,8 +1,9 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 
+import { scan } from '../src/commands/mods';
 import { scanJar } from '../src/mods/capabilities';
 import { readClass } from '../src/mods/classfile';
 import { classFile, jar as jarIn } from './jars';
@@ -136,5 +137,41 @@ describe('jars', () => {
 		const outer = await jar({ 'META-INF/jars/inner.jar': await Bun.file(inner).bytes() });
 
 		await expect(scanJar(outer, { limit: 2048 })).rejects.toThrow('unpacks past 2048 bytes');
+	});
+});
+
+describe('ender scan', () => {
+	const run = async (positionals, flags = {}) => {
+		const logged = spyOn(console, 'log').mockImplementation(() => {});
+
+		try {
+			const status = await scan({ positionals, flags });
+
+			return { status, lines: logged.mock.calls.map(([line]) => line) };
+		} finally {
+			logged.mockRestore();
+		}
+	};
+
+	test('names each capability with its evidence', async () => {
+		const path = await jar({ 'a/A.class': classFile({ name: 'a/A', members: ['java/lang/Runtime.exec'] }) });
+		const { status, lines } = await run([path]);
+
+		expect(status).toBe(0);
+		expect(lines).toContain('  exec         a/A.class (java/lang/Runtime.exec)');
+	});
+
+	test('says plainly when a jar reaches none of them', async () => {
+		const path = await jar({ 'a/A.class': classFile({ name: 'a/A' }) });
+		const { lines } = await run([path]);
+
+		expect(lines[0]).toEndWith('reaches none of exec, classloading, native, network, unsafe');
+	});
+
+	test('--json prints the findings keyed by path, for scripts', async () => {
+		const path = await jar({ 'a/A.class': classFile({ name: 'a/A', members: ['java/net/Socket.<init>'] }) });
+		const { lines } = await run([path], { json: true });
+
+		expect(JSON.parse(lines[0])[path].capabilities).toEqual({ network: { 'a/A.class': ['java/net/Socket.<init>'] } });
 	});
 });

@@ -349,7 +349,7 @@ export const syncMods = async ({ entries, modsDir, lock, context, withDependenci
 	};
 };
 
-const evidence = classes => {
+export const evidence = classes => {
 	const [[where, via], ...rest] = Object.entries(classes);
 
 	return `${where} (${via.join(', ')})${rest.length > 0 ? ` and ${plural(rest.length, 'more class', 'es')}` : ''}`;

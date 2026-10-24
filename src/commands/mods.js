@@ -1,9 +1,10 @@
-import { mkdir } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { mkdir, readdir } from 'node:fs/promises';
+import { basename, join, resolve } from 'node:path';
 
 import { readConfig } from '../config';
 import * as instances from '../instance';
-import { entryKey, reportSync, resolveAll, sources, syncMods } from '../mods';
+import { scanJar } from '../mods/capabilities';
+import { entryKey, evidence, reportSync, resolveAll, sources, syncMods } from '../mods';
 import { done, fail, info, paint, plural, step, warn } from '../out';
 import { paths } from '../paths';
 import { parseModSpec, refineModSpec, specFor, targetInstance } from './context';
@@ -252,6 +253,81 @@ export const search = async ({ positionals, flags }) => {
 	if (printed === 0) info('Nothing matched.');
 
 	return 0;
+};
+
+/** The jars a scan covers: jar files named by path, installed mods named by file, id or key, or else all of mods/. */
+const scanTargets = async (positionals, flags) => {
+	const onDisk = await Promise.all(positionals.map(target => Bun.file(resolve(target)).exists()));
+
+	if (positionals.length > 0 && onDisk.every(Boolean)) return positionals.map(target => resolve(target));
+
+	const { manifest } = await targetInstance(flags.instance);
+	const directory = instances.modsDir(manifest);
+
+	if (positionals.length === 0) {
+		return (await readdir(directory).catch(() => []))
+			.filter(file => file.endsWith('.jar'))
+			.sort()
+			.map(file => join(directory, file));
+	}
+
+	const { mods } = await instances.readLock(manifest.name);
+
+	return positionals.map((target, index) => {
+		if (onDisk[index]) return resolve(target);
+
+		const match = mods.find(mod => [mod.filename, mod.id, mod.key].includes(target));
+
+		if (match === undefined) throw new Error(`${target} is neither a jar file nor a mod installed in ${manifest.name}`);
+
+		return join(directory, match.filename);
+	});
+};
+
+/** What each jar's code can reach: one line per jar for a whole mods/, the evidence for named ones. */
+export const scan = async ({ positionals, flags }) => {
+	const paths = await scanTargets(positionals, flags);
+	const detailed = positionals.length > 0;
+	const results = [];
+	let failed = 0;
+
+	if (paths.length > 3) step(`Scanning ${plural(paths.length, 'jar')}`);
+
+	for (const path of paths) {
+		try {
+			results.push({ path, findings: await scanJar(path) });
+		} catch (error) {
+			fail(`${basename(path)} :: ${error.message}`);
+
+			++failed;
+		}
+	}
+
+	if (flags.json) {
+		info(JSON.stringify(Object.fromEntries(results.map(({ path, findings }) => [path, findings])), undefined, '\t'));
+
+		return failed > 0 ? 1 : 0;
+	}
+
+	for (const { path, findings } of results) {
+		const reach = Object.keys(findings.capabilities);
+		const hosts = Object.keys(findings.hosts);
+
+		info(
+			`${paint.bold(basename(path))} ${reach.length > 0 ? reach.join(' ') : paint.dim('reaches none of exec, classloading, native, network, unsafe')}`,
+		);
+
+		if (!detailed) continue;
+
+		for (const [capability, classes] of Object.entries(findings.capabilities))
+			info(`  ${capability.padEnd(12)} ${evidence(classes)}`);
+		if (hosts.length > 0) info(`  ${'hosts'.padEnd(12)} ${hosts.join(' ')}`);
+		if (findings.unreadable.length > 0) info(`  ${'unreadable'.padEnd(12)} ${findings.unreadable.join(' ')}`);
+
+		info(paint.dim(`  ${plural(findings.classes, 'class', 'es')}, ${plural(findings.jars.length, 'nested jar')}`));
+	}
+
+	return failed > 0 ? 1 : 0;
 };
 
 export { parseModSpec, refineModSpec } from './context';
