@@ -7,7 +7,9 @@
 	},
 	"exports": {
 		"./package.json": "./package.json",
-		".": "./index.js"
+		".": "./index.js",
+		"./archive": "./src/archive.js",
+		"./scan": "./src/mods/capabilities.js"
 	},
 	"description": "Minecraft instances, mods and servers from the command line",
 	"author": "fatlard1993",
