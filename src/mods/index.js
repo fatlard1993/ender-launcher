@@ -3,6 +3,7 @@ import { basename, join, resolve as resolvePath } from 'node:path';
 
 import { checksumOf, checksumText, ensureFile, pool } from '../download';
 import { detail, fail, plural, progress, step, warn } from '../out';
+import { gainedSince, scanJar } from './capabilities';
 import * as curseforge from './curseforge';
 import * as github from './github';
 import * as gradle from './gradle';
@@ -117,6 +118,82 @@ const install = async (resolution, modsDir) => {
 	return path;
 };
 
+/** A download takes the place of what the lock recorded under its key when any of these moved. */
+const replaces = (resolution, locked) =>
+	locked.filename !== resolution.file.filename ||
+	locked.version !== resolution.version ||
+	(locked.checksum !== undefined &&
+		resolution.file.checksum !== undefined &&
+		locked.checksum !== checksumText(resolution.file.checksum));
+
+/**
+ * Scan the jars that downloads are about to replace. This happens before installing, because a
+ * replacement under the same file name would overwrite its own baseline.
+ */
+const scanBaselines = async (resolved, previous, modsDir) => {
+	const locked = new Map(previous.map(mod => [mod.key, mod]));
+	const replacing = resolved.filter(
+		resolution =>
+			resolution.file.url !== undefined &&
+			locked.has(resolution.key) &&
+			replaces(resolution, locked.get(resolution.key)),
+	);
+	const baselines = new Map();
+	const bar = progress();
+
+	for (const [index, resolution] of replacing.entries()) {
+		const { filename, version } = locked.get(resolution.key);
+
+		bar.update(`   scanning ${index + 1}/${replacing.length}`);
+
+		try {
+			baselines.set(resolution.key, { from: version, scan: await scanJar(join(modsDir, filename)) });
+		} catch (error) {
+			baselines.set(resolution.key, {
+				from: version,
+				error:
+					error.code === 'ENOENT' ? new Error(`${filename} is gone, so there is nothing to compare against`) : error,
+			});
+		}
+	}
+
+	bar.clear();
+
+	return baselines;
+};
+
+/** What each installed replacement can reach that the jar it replaced could not. */
+const compareReplacements = async (installed, baselines, modsDir) => {
+	const gained = [];
+	const notCompared = [];
+	const bar = progress();
+	let index = 0;
+
+	for (const resolution of installed) {
+		const baseline = baselines.get(resolution.key);
+
+		if (baseline === undefined) continue;
+
+		bar.update(`   comparing ${++index}/${baselines.size}`);
+
+		try {
+			if (baseline.error) throw baseline.error;
+
+			const found = gainedSince(baseline.scan, await scanJar(join(modsDir, resolution.file.filename)));
+
+			if (Object.keys(found.capabilities).length + Object.keys(found.hosts).length + found.unreadable.length > 0) {
+				gained.push({ resolution, from: baseline.from, gained: found });
+			}
+		} catch (error) {
+			notCompared.push({ resolution, from: baseline.from, error });
+		}
+	}
+
+	bar.clear();
+
+	return { gained, notCompared };
+};
+
 /**
  * Make the mods directory match the manifest.
  *
@@ -134,6 +211,8 @@ export const syncMods = async ({ entries, modsDir, lock, context, withDependenci
 		if (!byFile.has(resolution.file.filename)) byFile.set(resolution.file.filename, resolution);
 
 	const resolved = [...byFile.values()];
+	const previous = lock?.mods ?? [];
+	const baselines = await scanBaselines(resolved, previous, modsDir);
 	const failures = [];
 	let installed = resolved;
 
@@ -162,8 +241,8 @@ export const syncMods = async ({ entries, modsDir, lock, context, withDependenci
 		installed = outcomes.filter(Boolean);
 	}
 
+	const { gained, notCompared } = await compareReplacements(installed, baselines, modsDir);
 	const wanted = new Set(installed.map(resolution => resolution.file.filename));
-	const previous = lock?.mods ?? [];
 	const removed = [];
 
 	for (const stale of previous) {
@@ -184,6 +263,8 @@ export const syncMods = async ({ entries, modsDir, lock, context, withDependenci
 	return {
 		resolved: installed,
 		failures,
+		gained,
+		notCompared,
 		removed,
 		unmanaged,
 		lock: {
@@ -202,7 +283,13 @@ export const syncMods = async ({ entries, modsDir, lock, context, withDependenci
 	};
 };
 
-export const reportSync = ({ resolved, failures = [], removed, unmanaged }) => {
+const evidence = classes => {
+	const [[where, via], ...rest] = Object.entries(classes);
+
+	return `${where} (${via.join(', ')})${rest.length > 0 ? ` and ${plural(rest.length, 'more class', 'es')}` : ''}`;
+};
+
+export const reportSync = ({ resolved, failures = [], gained = [], notCompared = [], removed, unmanaged }) => {
 	for (const resolution of resolved) {
 		detail(resolution.requested ? '  ' : '  +', resolution.name, resolution.version);
 	}
@@ -210,6 +297,25 @@ export const reportSync = ({ resolved, failures = [], removed, unmanaged }) => {
 	step(`${plural(resolved.length, 'mod')} in place${removed.length > 0 ? `, ${removed.length} removed` : ''}`);
 
 	if (unmanaged.length > 0) warn(`Left alone (not in the manifest): ${unmanaged.join(', ')}`);
+
+	for (const { resolution, from, gained: found } of gained) {
+		const mod = `${resolution.source}:${resolution.id} ${resolution.version}`;
+
+		for (const [capability, classes] of Object.entries(found.capabilities)) {
+			warn(`${mod} gained ${capability} since ${from}: ${evidence(classes)}`);
+		}
+
+		for (const [host, classes] of Object.entries(found.hosts)) {
+			warn(`${mod} names a new host since ${from}: ${host} in ${classes[0]}`);
+		}
+
+		if (found.unreadable.length > 0)
+			warn(`${mod} has unreadable classes since ${from}: ${found.unreadable.join(', ')}`);
+	}
+
+	for (const { resolution, from, error } of notCompared) {
+		warn(`${resolution.source}:${resolution.id} ${resolution.version} was not compared with ${from}: ${error.message}`);
+	}
 
 	for (const { resolution, error } of failures) fail(`${resolution.source}:${resolution.id} :: ${error.message}`);
 

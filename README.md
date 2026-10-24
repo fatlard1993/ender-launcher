@@ -207,6 +207,19 @@ Picking the jar takes some care, because a Gradle release usually ships the arti
 
 Unauthenticated GitHub allows sixty requests an hour. `ender config githubToken <token>` raises that, `GITHUB_TOKEN` is read if set, and otherwise the `gh` CLI is asked for its own token.
 
+### What an update can reach
+
+When a sync replaces a downloaded jar, whether by `ender update` or by a floating entry moving on, the jar it replaces is read before the new one lands, and the two are compared. Anything the new one can reach that the old one could not is said, one line each:
+
+```
+!! github:SwordfishBE/TravelBag 1.0.4 gained network since 1.0.3: net/travelbag/util/ModrinthUpdateChecker.class (java/net/http/HttpClient.send, ...)
+!! github:SwordfishBE/TravelBag 1.0.4 names a new host since 1.0.3: api.modrinth.com in net/travelbag/util/ModrinthUpdateChecker.class
+```
+
+The capabilities are `exec`, `classloading`, `native`, `network` and `unsafe`, read from the classes themselves, nested jars included, by the exact methods they call. A capability the mod already had is not news, so an update checker that was there last version stays quiet. A jar can also gain classes nothing can read, which is reported the same way.
+
+This is evidence, not a verdict, and the sync still succeeds. What it is for is the case where a mod you trust is quietly replaced: an author's account taken over and a payload slipped into a real release, which is how fractureiser spread. A rendering mod that suddenly loads classes from a URL is worth hearing about before you launch it. Jars you built yourself, and jars on disk, are not compared.
+
 ## Servers
 
 ```

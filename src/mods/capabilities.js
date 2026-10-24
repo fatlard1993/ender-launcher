@@ -128,3 +128,18 @@ export const scanJar = async (path, { limit = DEFAULT_LIMIT } = {}) => {
 
 	return findings;
 };
+
+/**
+ * What a newer scan of a mod has that an older one lacked: whole capabilities and hosts, not
+ * classes, since a refactor moves code between classes without the mod reaching anything new.
+ * Unreadable classes count only when the older jar had none.
+ */
+export const gainedSince = (before, after) => {
+	const fresh = (record, known) => Object.fromEntries(Object.entries(record).filter(([key]) => !(key in known)));
+
+	return {
+		capabilities: fresh(after.capabilities, before.capabilities),
+		hosts: fresh(after.hosts, before.hosts),
+		unreadable: before.unreadable.length === 0 ? after.unreadable : [],
+	};
+};
