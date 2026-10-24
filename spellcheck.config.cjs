@@ -41,6 +41,7 @@ module.exports = {
 		'djava',
 		'ender',
 		'entra',
+		'etag',
 		'eula',
 		'fabri',
 		'fabricloader',
