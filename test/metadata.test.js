@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 
-import { readMods } from '../src/mods/metadata';
+import { parseLeniently, readMods } from '../src/mods/metadata';
 import { jar as jarIn } from './jars';
 
 let directory;
@@ -127,5 +127,19 @@ describe('mods declared in a built jar', () => {
 
 	test('a jar that declares nothing holds no mods', async () => {
 		expect(await readMods(await jar({ 'a/A.class': 'x' }))).toEqual([]);
+	});
+});
+
+describe('metadata as published', () => {
+	// A real release jar describes itself over several raw lines, and loads.
+	test('a line break written raw inside a string is read as one', () => {
+		expect(parseLeniently('{ "id": "ba", "description": "BA items\nDeveloper: \\"Cirno\\"\tqwa" }')).toEqual({
+			id: 'ba',
+			description: 'BA items\nDeveloper: "Cirno"\tqwa',
+		});
+	});
+
+	test('what is broken otherwise still fails, with the original complaint', () => {
+		expect(() => parseLeniently('{ "id": ')).toThrow();
 	});
 });

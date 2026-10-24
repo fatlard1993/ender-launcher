@@ -2,6 +2,41 @@ import { listEntries, readEntry, zipEntries } from '../archive';
 
 const text = async (jar, name) => (await readEntry(jar, name))?.toString('utf8');
 
+const CONTROL = { '\n': '\\n', '\r': '\\r', '\t': '\\t' };
+
+/**
+ * Parse mod metadata as JSON, and failing that, again with line breaks and tabs inside strings
+ * escaped: published jars carry multi-line descriptions written raw, and the loaders read them.
+ */
+export const parseLeniently = source => {
+	try {
+		return JSON.parse(source);
+	} catch (error) {
+		let inString = false;
+		let escaped = false;
+		let repaired = '';
+
+		for (const character of source) {
+			if (inString && !escaped && CONTROL[character]) {
+				repaired += CONTROL[character];
+
+				continue;
+			}
+
+			if (character === '"' && !escaped) inString = !inString;
+
+			escaped = character === '\\' && !escaped;
+			repaired += character;
+		}
+
+		try {
+			return JSON.parse(repaired);
+		} catch {
+			throw error;
+		}
+	}
+};
+
 /** A line of a jar manifest, which wraps long values onto lines that begin with a space. */
 const manifestValue = (manifest, key) => {
 	const unwrapped = manifest.replaceAll(/\r?\n /g, '');
@@ -56,9 +91,9 @@ const bundledIds = async (jar, entries) => {
 
 		try {
 			for (const entry of zipEntries(await readEntry(jar, name))) {
-				if (entry.name === 'fabric.mod.json') ids.push(JSON.parse(entry.read(NESTED_LIMIT).toString('utf8')).id);
+				if (entry.name === 'fabric.mod.json') ids.push(parseLeniently(entry.read(NESTED_LIMIT).toString('utf8')).id);
 				if (entry.name === 'quilt.mod.json')
-					ids.push(JSON.parse(entry.read(NESTED_LIMIT).toString('utf8')).quilt_loader?.id);
+					ids.push(parseLeniently(entry.read(NESTED_LIMIT).toString('utf8')).quilt_loader?.id);
 			}
 		} catch {
 			// A nested jar that cannot be read provides nothing that can be named; the scan reports it as unreadable.
@@ -109,8 +144,8 @@ export const readMods = async jar => {
 	const mods = [];
 
 	if (entries.has('fabric.mod.json'))
-		mods.push(fabric(JSON.parse(await text(jar, 'fabric.mod.json')), 'fabric', bundled));
-	if (entries.has('quilt.mod.json')) mods.push(quilt(JSON.parse(await text(jar, 'quilt.mod.json')), bundled));
+		mods.push(fabric(parseLeniently(await text(jar, 'fabric.mod.json')), 'fabric', bundled));
+	if (entries.has('quilt.mod.json')) mods.push(quilt(parseLeniently(await text(jar, 'quilt.mod.json')), bundled));
 	if (entries.has('META-INF/neoforge.mods.toml'))
 		mods.push(...toml(await text(jar, 'META-INF/neoforge.mods.toml'), 'neoforge', manifest));
 	if (entries.has('META-INF/mods.toml')) mods.push(...toml(await text(jar, 'META-INF/mods.toml'), 'forge', manifest));
