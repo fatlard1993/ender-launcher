@@ -2,6 +2,7 @@ import { readdir, unlink } from 'node:fs/promises';
 import { basename, join, resolve as resolvePath } from 'node:path';
 
 import { checksumOf, checksumText, ensureFile, pool } from '../download';
+import { readJson, writeJson } from '../json';
 import { detail, fail, plural, progress, step, warn } from '../out';
 import { gainedSince, scanJar } from './capabilities';
 import * as curseforge from './curseforge';
@@ -232,7 +233,7 @@ const compareReplacements = async (installed, baselines, modsDir) => {
  * Only files a previous sync recorded in the lock are ever removed, so a jar dropped in by hand
  * stays where it was put.
  */
-export const syncMods = async ({ entries, modsDir, lock, context, withDependencies = true }) => {
+export const syncMods = async ({ entries, modsDir, lock, context, withDependencies = true, modIdCache }) => {
 	const all = await resolveAll(entries, context, { withDependencies });
 
 	// The same mod can be declared by slug and arrive again by project id. Two keys, one file:
@@ -242,7 +243,16 @@ export const syncMods = async ({ entries, modsDir, lock, context, withDependenci
 	for (const resolution of all)
 		if (!byFile.has(resolution.file.filename)) byFile.set(resolution.file.filename, resolution);
 
-	const resolved = [...byFile.values()];
+	const knownIds = modIdCache ? await readJson(modIdCache, {}) : {};
+	const idsOf = resolution => knownIds[checksumText(resolution.file.checksum)];
+
+	// Jars whose ids are already known by checksum settle their clashes before anything downloads.
+	// Only a jar that would lose under the full rule is dropped here, so the result is the same.
+	const early = duplicateMods(
+		[...byFile.values()].filter(idsOf).map(resolution => ({ ...resolution, modIds: idsOf(resolution) })),
+	).dropped;
+	const earlyKeys = new Set(early.map(({ resolution }) => resolution.key));
+	const resolved = [...byFile.values()].filter(resolution => !earlyKeys.has(resolution.key));
 	const previous = lock?.mods ?? [];
 	const baselines = await scanBaselines(resolved, previous, modsDir);
 	const failures = [];
@@ -273,11 +283,26 @@ export const syncMods = async ({ entries, modsDir, lock, context, withDependenci
 		installed = outcomes.filter(Boolean);
 	}
 
-	const { kept, dropped: duplicates } = duplicateMods(
-		await Promise.all(installed.map(resolution => withModIds(resolution, modsDir))),
-	);
+	const identified = await Promise.all(installed.map(resolution => withModIds(resolution, modsDir)));
+	const { kept, dropped: late } = duplicateMods(identified);
+	const duplicates = [...early, ...late];
 
-	for (const { resolution } of duplicates) await unlink(join(modsDir, resolution.file.filename)).catch(() => {});
+	for (const { resolution } of late) await unlink(join(modsDir, resolution.file.filename)).catch(() => {});
+
+	if (modIdCache) {
+		let learned = false;
+
+		for (const resolution of identified) {
+			const key = checksumText(resolution.file.checksum);
+
+			if (key !== undefined && knownIds[key] === undefined) {
+				knownIds[key] = resolution.modIds;
+				learned = true;
+			}
+		}
+
+		if (learned) await writeJson(modIdCache, knownIds);
+	}
 
 	installed = kept;
 

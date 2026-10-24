@@ -1,10 +1,11 @@
 import { mkdir } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { readConfig } from '../config';
 import * as instances from '../instance';
 import { entryKey, reportSync, resolveAll, sources, syncMods } from '../mods';
 import { done, fail, info, paint, plural, step, warn } from '../out';
+import { paths } from '../paths';
 import { parseModSpec, refineModSpec, targetInstance } from './context';
 
 const contextFor = (manifest, config, flags = {}) => ({
@@ -31,6 +32,7 @@ export const syncInstance = async (manifest, config, { withDependencies = true, 
 		lock: await instances.readLock(manifest.name),
 		context: contextFor(manifest, config, flags),
 		withDependencies,
+		modIdCache: join(paths.cache, 'mod-ids.json'),
 	});
 
 	await instances.writeLock(manifest.name, result.lock);

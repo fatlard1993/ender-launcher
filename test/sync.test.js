@@ -214,3 +214,63 @@ describe('one mod from two sources', () => {
 		expect(result.lock.mods.map(mod => mod.filename)).toEqual(['sodium-a.jar']);
 	});
 });
+
+describe('mod ids known by checksum', () => {
+	let server;
+	const hits = new Map();
+	const bodies = new Map();
+
+	const sha1 = bytes => new Bun.CryptoHasher('sha1').update(bytes).digest('hex');
+	const served = async (name, id) => {
+		bodies.set(
+			`/${name}`,
+			await Bun.file(await jarIn(root, { 'fabric.mod.json': JSON.stringify({ id, version: name }) })).bytes(),
+		);
+
+		return { source: 'url', url: `http://localhost:${server.port}/${name}`, sha1: sha1(bodies.get(`/${name}`)) };
+	};
+
+	beforeAll(() => {
+		server = Bun.serve({
+			port: 0,
+			fetch: request => {
+				const { pathname } = new URL(request.url);
+
+				hits.set(pathname, (hits.get(pathname) ?? 0) + 1);
+
+				return new Response(bodies.get(pathname));
+			},
+		});
+	});
+
+	afterAll(() => {
+		server.stop();
+	});
+
+	test('a jar that repeats a known mod id is not downloaded again', async () => {
+		const modIdCache = join(root, 'mod-ids.json');
+		const entries = [await served('fabric-api-a.jar', 'fabric-api'), await served('fabric-api-b.jar', 'fabric-api')];
+		const first = await syncMods({
+			entries,
+			modsDir,
+			lock: { mods: [] },
+			context: {},
+			withDependencies: false,
+			modIdCache,
+		});
+		const second = await syncMods({
+			entries,
+			modsDir,
+			lock: first.lock,
+			context: {},
+			withDependencies: false,
+			modIdCache,
+		});
+
+		expect(first.duplicates.map(({ resolution }) => resolution.file.filename)).toEqual(['fabric-api-b.jar']);
+		expect(second.duplicates.map(({ resolution }) => resolution.file.filename)).toEqual(['fabric-api-b.jar']);
+		expect(hits.get('/fabric-api-b.jar')).toBe(1);
+		expect(await readdir(modsDir)).toEqual(['fabric-api-a.jar']);
+		expect(Object.values(await Bun.file(modIdCache).json())).toEqual([['fabric-api'], ['fabric-api']]);
+	});
+});
