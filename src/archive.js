@@ -46,15 +46,37 @@ const centralDirectory = buffer => {
 	return entries;
 };
 
-const contentOf = (buffer, entry) => {
+const tooLarge = (entry, limit) =>
+	Object.assign(new RangeError(`${entry.name} unpacks past ${limit} bytes`), { code: 'ERR_BUFFER_TOO_LARGE' });
+
+const contentOf = (buffer, entry, limit) => {
 	// The local header repeats the name and extra fields, at its own lengths.
 	const nameLength = buffer.readUInt16LE(entry.localOffset + 26);
 	const extraLength = buffer.readUInt16LE(entry.localOffset + 28);
 	const start = entry.localOffset + 30 + nameLength + extraLength;
 	const raw = buffer.subarray(start, start + entry.compressedSize);
 
-	if (entry.method === STORED) return raw;
-	if (entry.method === DEFLATED) return inflateRawSync(raw);
+	if (entry.method === STORED) {
+		if (limit !== undefined && raw.length > limit) throw tooLarge(entry, limit);
+
+		return raw;
+	}
+
+	if (entry.method === DEFLATED) {
+		if (limit === undefined) return inflateRawSync(raw);
+
+		try {
+			const content = inflateRawSync(raw, { maxOutputLength: Math.max(1, limit) });
+
+			if (content.length > limit) throw tooLarge(entry, limit);
+
+			return content;
+		} catch (error) {
+			if (error.code === 'ERR_BUFFER_TOO_LARGE') throw tooLarge(entry, limit);
+
+			throw error;
+		}
+	}
 
 	throw new Error(`Unsupported zip compression method ${entry.method} for ${entry.name}`);
 };
@@ -66,6 +88,16 @@ const openArchive = async path => {
 
 	return { buffer, entries: centralDirectory(buffer) };
 };
+
+/**
+ * The files of an archive already in memory, each read only when asked. A read is given a limit
+ * because the archive may be hostile: past it, the read throws with code ERR_BUFFER_TOO_LARGE
+ * rather than inflating whatever the entry claims to hold.
+ */
+export const zipEntries = buffer =>
+	centralDirectory(buffer)
+		.filter(entry => !entry.name.endsWith('/'))
+		.map(entry => ({ name: entry.name, read: limit => contentOf(buffer, entry, limit) }));
 
 /** Every file path inside the archive, directories omitted. */
 export const listEntries = async path => {
