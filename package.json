@@ -8,7 +8,7 @@
 	"exports": {
 		"./package.json": "./package.json",
 		".": "./index.js",
-		"./archive": "./src/archive.js",
+		"./metadata": "./src/mods/metadata.js",
 		"./scan": "./src/mods/capabilities.js"
 	},
 	"description": "Minecraft instances, mods and servers from the command line",

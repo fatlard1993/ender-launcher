@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 
-import { reportSync, syncMods } from '../src/mods';
+import { duplicateMods, reportSync, syncMods } from '../src/mods';
 import { classFile, jar as jarIn } from './jars';
 
 let root;
@@ -156,5 +156,61 @@ describe('replacing a download', () => {
 			warned.mockRestore();
 			logged.mockRestore();
 		}
+	});
+});
+
+describe('one mod from two sources', () => {
+	const resolution = (key, modIds, requested = true) => ({ key, modIds, requested });
+
+	test('a declared mod is kept over a dependency that is the same mod, whichever came first', () => {
+		const dependency = resolution('github:FabricMC/fabric-api', ['fabric-api'], false);
+		const declared = resolution('modrinth:fabric-api', ['fabric-api']);
+		const { kept, dropped } = duplicateMods([dependency, declared]);
+
+		expect(kept).toEqual([declared]);
+		expect(dropped).toEqual([{ resolution: dependency, id: 'fabric-api', keptAs: declared }]);
+	});
+
+	test('between equals, the first is kept', () => {
+		const first = resolution('modrinth:sodium', ['sodium']);
+		const second = resolution('github:CaffeineMC/sodium', ['sodium']);
+
+		expect(duplicateMods([first, second]).kept).toEqual([first]);
+	});
+
+	test('jars with no readable ids, or different ones, never clash', () => {
+		const all = [resolution('a', []), resolution('b', []), resolution('c', ['x']), resolution('d', ['y'])];
+
+		expect(duplicateMods(all)).toEqual({ kept: all, dropped: [] });
+	});
+
+	test('a sync installs the mod once, leaves the other out of the lock, and says why', async () => {
+		const fabricJar = async (name, id) => {
+			const built = await jarIn(root, { 'fabric.mod.json': JSON.stringify({ id, version: '1' }) });
+			const path = join(root, name);
+
+			await writeFile(path, await Bun.file(built).bytes());
+
+			return { source: 'local', path };
+		};
+		const result = await sync([await fabricJar('sodium-a.jar', 'sodium'), await fabricJar('sodium-b.jar', 'sodium')], {
+			mods: [],
+		});
+		const warned = spyOn(console, 'warn').mockImplementation(() => {});
+		const logged = spyOn(console, 'log').mockImplementation(() => {});
+
+		try {
+			reportSync(result);
+
+			expect(warned.mock.calls.map(([line]) => line)).toContain(
+				`!! local:${join(root, 'sodium-b.jar')} is mod "sodium", already here from local:${join(root, 'sodium-a.jar')}; not installed. It is declared twice; drop one.`,
+			);
+		} finally {
+			warned.mockRestore();
+			logged.mockRestore();
+		}
+
+		expect(await readdir(modsDir)).toEqual(['sodium-a.jar']);
+		expect(result.lock.mods.map(mod => mod.filename)).toEqual(['sodium-a.jar']);
 	});
 });

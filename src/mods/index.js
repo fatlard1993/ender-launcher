@@ -7,6 +7,7 @@ import { gainedSince, scanJar } from './capabilities';
 import * as curseforge from './curseforge';
 import * as github from './github';
 import * as gradle from './gradle';
+import { readMods } from './metadata';
 import * as modrinth from './modrinth';
 
 /** Sources that can be searched. A gradle project is found on disk, not looked up. */
@@ -116,6 +117,37 @@ const install = async (resolution, modsDir) => {
 	});
 
 	return path;
+};
+
+/**
+ * Installed jars that declare a mod id an earlier one already declared. The loader refuses two
+ * jars with one id, which is what the same mod arriving from two sources produces: Fabric API
+ * declared from Modrinth and required again through the index. A declared mod is kept over an
+ * inferred dependency, and otherwise the first in resolve order is.
+ */
+export const duplicateMods = resolutions => {
+	const ordered = [...resolutions].sort((a, b) => Number(b.requested) - Number(a.requested));
+	const owners = new Map();
+	const kept = [];
+	const dropped = [];
+
+	for (const resolution of ordered) {
+		const clash = resolution.modIds.find(id => owners.has(id));
+
+		if (clash === undefined) {
+			for (const id of resolution.modIds) owners.set(id, resolution);
+
+			kept.push(resolution);
+		} else dropped.push({ resolution, id: clash, keptAs: owners.get(clash) });
+	}
+
+	return { kept: resolutions.filter(resolution => kept.includes(resolution)), dropped };
+};
+
+const withModIds = async (resolution, modsDir) => {
+	const mods = await readMods(join(modsDir, resolution.file.filename)).catch(() => []);
+
+	return { ...resolution, modIds: [...new Set(mods.map(mod => mod.id).filter(Boolean))] };
 };
 
 /** A download takes the place of what the lock recorded under its key when any of these moved. */
@@ -241,6 +273,14 @@ export const syncMods = async ({ entries, modsDir, lock, context, withDependenci
 		installed = outcomes.filter(Boolean);
 	}
 
+	const { kept, dropped: duplicates } = duplicateMods(
+		await Promise.all(installed.map(resolution => withModIds(resolution, modsDir))),
+	);
+
+	for (const { resolution } of duplicates) await unlink(join(modsDir, resolution.file.filename)).catch(() => {});
+
+	installed = kept;
+
 	const { gained, notCompared } = await compareReplacements(installed, baselines, modsDir);
 	const wanted = new Set(installed.map(resolution => resolution.file.filename));
 	const removed = [];
@@ -265,6 +305,7 @@ export const syncMods = async ({ entries, modsDir, lock, context, withDependenci
 		failures,
 		gained,
 		notCompared,
+		duplicates,
 		removed,
 		unmanaged,
 		lock: {
@@ -289,7 +330,15 @@ const evidence = classes => {
 	return `${where} (${via.join(', ')})${rest.length > 0 ? ` and ${plural(rest.length, 'more class', 'es')}` : ''}`;
 };
 
-export const reportSync = ({ resolved, failures = [], gained = [], notCompared = [], removed, unmanaged }) => {
+export const reportSync = ({
+	resolved,
+	failures = [],
+	gained = [],
+	notCompared = [],
+	duplicates = [],
+	removed,
+	unmanaged,
+}) => {
 	for (const resolution of resolved) {
 		detail(resolution.requested ? '  ' : '  +', resolution.name, resolution.version);
 	}
@@ -311,6 +360,13 @@ export const reportSync = ({ resolved, failures = [], gained = [], notCompared =
 
 		if (found.unreadable.length > 0)
 			warn(`${mod} has unreadable classes since ${from}: ${found.unreadable.join(', ')}`);
+	}
+
+	for (const { resolution, id, keptAs } of duplicates) {
+		const line = `${resolution.source}:${resolution.id} is mod "${id}", already here from ${keptAs.source}:${keptAs.id}; not installed`;
+
+		if (resolution.requested) warn(`${line}. It is declared twice; drop one.`);
+		else detail(line);
 	}
 
 	for (const { resolution, from, error } of notCompared) {
