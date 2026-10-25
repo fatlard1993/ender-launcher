@@ -220,6 +220,20 @@ describe('resolving from an index record', () => {
 			warned.mockRestore();
 		}
 	});
+
+	test('still resolves a repository its host no longer has, so an installed copy keeps working, and says so', async () => {
+		const record = { gone: '2026-10-25', releases: [release('1.0', [asset('m.jar', [mod('m')])])] };
+		const warned = spyOn(console, 'warn').mockImplementation(() => {});
+
+		try {
+			expect((await resolveFromRecord(record, { source: 'github', id: 'a/m' }, context())).version).toBe('1.0');
+			expect(warned.mock.calls.map(([line]) => line)).toContain(
+				'!! github:a/m was deleted or made private on GitHub (seen 2026-10-25); a copy already installed keeps working, but it cannot be downloaded again or updated',
+			);
+		} finally {
+			warned.mockRestore();
+		}
+	});
 });
 
 describe('searching the index', () => {

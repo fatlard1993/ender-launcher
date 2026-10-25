@@ -76,6 +76,12 @@ export const resolveFromRecord = async (record, entry, context) => {
 			`${entry.source}:${entry.id} ${release.tag} ${asset.name} is listed as known bad: ${asset.knownBad}`,
 		);
 
+	if (record.gone) {
+		warn(
+			`${entry.source}:${entry.id} was deleted or made private on ${HOSTS[entry.source] ?? entry.source} (seen ${record.gone}); a copy already installed keeps working, but it cannot be downloaded again or updated`,
+		);
+	}
+
 	for (const replaced of asset.replaced ?? []) {
 		warn(
 			`${entry.source}:${entry.id} ${release.tag} ${asset.name} was replaced after it was published; the earlier jar was seen until ${replaced.until}`,
