@@ -111,11 +111,20 @@ export const resolveFromRecord = async (record, entry, context) => {
 
 const words = text => (text ?? '').toLowerCase();
 
-/** How well an index entry answers a query: every word must appear somewhere, and an id or name outranks a description. */
+/**
+ * How well an index entry answers a query: every word must appear somewhere, and an id or name outranks
+ * a description. The whole query naming the mod, as its id, its repository or its name, outranks any
+ * word of it doing so, so "fabric api" is Fabric API before a repository called fabric. Whole matches
+ * are not scored against each other, since a copy of a name matches as well as the name: stars decide.
+ */
 const relevance = (entry, terms) => {
 	const ids = [entry.repo, ...(entry.latest?.mods ?? []).map(mod => mod.id)].map(words);
 	const names = (entry.latest?.mods ?? []).map(mod => words(mod.name));
 	const description = words(entry.description);
+	const slugs = new Set([terms.join('-'), terms.join('_'), terms.join('')]);
+	const whole = ids.some(candidate => slugs.has(candidate.split('/').at(-1))) || names.includes(terms.join(' '));
+	if (whole) return 1000;
+
 	let score = 0;
 
 	for (const term of terms) {
@@ -126,6 +135,28 @@ const relevance = (entry, terms) => {
 	}
 
 	return score;
+};
+
+/**
+ * The established repository, with more stars, whose mod has an id or name this entry's mod also has.
+ * A port does this as well as a disguise, so it is said as the fact it is.
+ */
+const sharing = (entry, entries) => {
+	for (const other of entries) {
+		if (other === entry || (other.stars ?? 0) < catalog.ESTABLISHED || (other.stars ?? 0) <= (entry.stars ?? 0))
+			continue;
+
+		for (const ours of entry.latest?.mods ?? []) {
+			const theirs = other.latest?.mods.find(
+				mod => mod.id === ours.id || (mod.name !== undefined && words(mod.name) === words(ours.name)),
+			);
+
+			if (theirs)
+				return `declares ${theirs.id === ours.id ? `"${ours.id}"` : `the name "${ours.name}"`}, as ${other.repo}${other.host && other.host !== 'github' ? ` on ${HOSTS[other.host]}` : ''} does`;
+		}
+	}
+
+	return '';
 };
 
 /** Search the index: repositories whose own jars declare a loader and game version the instance can use. */
@@ -151,6 +182,7 @@ export const search = async (query, { minecraft, loader, limit = 10, index } = {
 				[...new Set(entry.latest.mods.map(mod => mod.loader))].join('/'),
 				entry.latest.capabilities.length > 0 ? `reaches ${entry.latest.capabilities.join(', ')}` : '',
 				entry.replaced ? 'a release was changed after publishing' : '',
+				sharing(entry, entries),
 			]
 				.filter(Boolean)
 				.join(' · '),

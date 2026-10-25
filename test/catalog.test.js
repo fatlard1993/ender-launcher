@@ -45,6 +45,7 @@ const release = (tag, assets, extra) => ({
 });
 
 let index;
+let disguised;
 
 const listing = [
 	entry(
@@ -64,6 +65,7 @@ const listing = [
 	entry('lib/core', [mod('core-lib')], { host: 'gitlab', stars: ESTABLISHED }),
 	entry('x/fast-client', [mod('sodium', { name: 'Sodium' })], { stars: 0 }),
 	entry('a/helpers', [mod('a-helpers')], { stars: 0 }),
+	entry('b/fabric', [mod('legacy-fabric-api', { name: 'Legacy Fabric API' })], { stars: 80 }),
 ];
 
 beforeAll(async () => {
@@ -71,6 +73,16 @@ beforeAll(async () => {
 
 	await mkdir(index, { recursive: true });
 	await Bun.write(join(index, 'search.json'), JSON.stringify(listing));
+
+	disguised = join(index, 'disguised');
+	await Bun.write(
+		join(disguised, 'search.json'),
+		JSON.stringify([
+			entry('FabricMC/fabric-api', [mod('fabric-api', { name: 'Fabric API' })], { stars: 3000 }),
+			entry('x/client', [mod('fabric', { name: 'Fabric API' }), mod('vhx', { name: 'Client' })], { stars: 6 }),
+			entry('y/client', [mod('fabric-api', { name: 'Fabric API' })], { stars: 1 }),
+		]),
+	);
 });
 
 afterAll(async () => {
@@ -259,6 +271,20 @@ describe('searching the index', () => {
 	test('every word of the query has to land somewhere', async () => {
 		expect((await search('menu mods', { index })).map(hit => hit.id)).toEqual(['TerraformersMC/ModMenu']);
 		expect(await search('menu banana', { index })).toEqual([]);
+	});
+
+	test('the whole query naming a mod outranks a word of it naming another', async () => {
+		expect((await search('fabric api', { index })).map(hit => hit.id)).toEqual(['FabricMC/fabric-api', 'b/fabric']);
+		expect((await search('mod menu', { index }))[0].id).toBe('TerraformersMC/ModMenu');
+	});
+
+	test("a copy of an established mod's id or name ranks below it, and says whose it is", async () => {
+		const hits = await search('fabric api', { index: disguised });
+
+		expect(hits.map(hit => hit.id)).toEqual(['FabricMC/fabric-api', 'x/client', 'y/client']);
+		expect(hits[1].note).toContain('declares the name "Fabric API", as FabricMC/fabric-api does');
+		expect(hits[2].note).toContain('declares "fabric-api", as FabricMC/fabric-api does');
+		expect(hits[0].note).not.toContain('declares');
 	});
 
 	test('a missing index says where it looked', async () => {
