@@ -23,9 +23,16 @@ const centralDirectory = buffer => {
 
 	if (end < 0) throw new Error('Not a zip archive (no end-of-central-directory record)');
 
+	// Offsets count from where the archive starts; Java finds that start from the end record, so bytes
+	// ahead of the archive load in the game, and are skipped here too.
+	const directorySize = buffer.readUInt32LE(end + 12);
+	const shift = end - directorySize - buffer.readUInt32LE(end + 16);
+
+	if (shift < 0) throw new Error('Corrupt zip end record (the central directory would start before the file)');
+
 	const count = buffer.readUInt16LE(end + 10);
 	const entries = [];
-	let offset = buffer.readUInt32LE(end + 16);
+	let offset = end - directorySize;
 
 	for (let index = 0; index < count; ++index) {
 		if (buffer.readUInt32LE(offset) !== CENTRAL_ENTRY) throw new Error('Corrupt zip central directory');
@@ -35,7 +42,7 @@ const centralDirectory = buffer => {
 		const nameLength = buffer.readUInt16LE(offset + 28);
 		const extraLength = buffer.readUInt16LE(offset + 30);
 		const commentLength = buffer.readUInt16LE(offset + 32);
-		const localOffset = buffer.readUInt32LE(offset + 42);
+		const localOffset = shift + buffer.readUInt32LE(offset + 42);
 		const name = buffer.toString('utf8', offset + 46, offset + 46 + nameLength);
 
 		entries.push({ name, method, compressedSize, localOffset });

@@ -142,4 +142,18 @@ describe('metadata as published', () => {
 	test('what is broken otherwise still fails, with the original complaint', () => {
 		expect(() => parseLeniently('{ "id": ')).toThrow();
 	});
+
+	// owo-lib 0.3.2+1.17 was uploaded inside its form body; Java reads it, so the game loads it.
+	test('a jar with bytes before and after the archive is read where the archive sits', async () => {
+		const plain = await jar({ 'fabric.mod.json': JSON.stringify({ id: 'owo', version: '0.3.2' }) });
+		const wrapped = join(directory, 'wrapped.jar');
+
+		await Bun.write(wrapped, [
+			'--boundary\r\ncontent-type: application/java-archive\r\n\r\n',
+			await Bun.file(plain).arrayBuffer(),
+			'\r\n--boundary--\r\n',
+		]);
+
+		expect((await readMods(wrapped)).map(mod => mod.id)).toEqual(['owo']);
+	});
 });
