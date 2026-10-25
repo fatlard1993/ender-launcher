@@ -22,10 +22,15 @@ const dependenciesOf = async (entry, mods, context) => {
 	const found = new Map();
 
 	for (const modId of required) {
-		const provider = catalog.providerOf(modId, entries);
+		const provider = catalog.providerOf(modId, entries, { host: entry.source, repo: entry.id });
+		const claimants = catalog.claimantsOf(modId, entries).length;
 
-		if (provider === undefined) {
+		if (provider === undefined && claimants === 0) {
 			warn(`${entry.source}:${entry.id} requires "${modId}", which the index does not know; declare it yourself`);
+		} else if (provider === undefined) {
+			warn(
+				`${entry.source}:${entry.id} requires "${modId}"; ${claimants} ${claimants === 1 ? 'repository' : 'repositories'} in the index ${claimants === 1 ? 'claims' : 'claim'} that id, but any jar can, and none is established enough to install unasked. Declare the one you trust.`,
+			);
 		} else {
 			const host = provider.host ?? 'github';
 

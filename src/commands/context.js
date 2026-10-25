@@ -1,6 +1,6 @@
 import { readConfig } from '../config';
 import * as instances from '../instance';
-import { listing, providerOf } from '../mods/catalog';
+import { claimantsOf, listing, providerOf } from '../mods/catalog';
 import { isProject } from '../mods/gradle';
 import { info, paint } from '../out';
 
@@ -51,7 +51,14 @@ export const refineModSpec = async (entry, context) => {
 
 /** A bare name is a mod id, found in the index as the repository whose jars declare it. */
 const fromIndex = async (entry, context) => {
-	const provider = providerOf(entry.id, await listing(context));
+	const entries = await listing(context);
+	const provider = providerOf(entry.id, entries);
+
+	if (provider === undefined && claimantsOf(entry.id, entries).length > 0) {
+		throw new Error(
+			`"${entry.id}" is claimed in the index only by repositories too new or unknown to take on a name alone, and any jar can claim any mod id. "ender search ${entry.id}" lists them; name the one you trust as gh:owner/repo, or write mr:${entry.id} for Modrinth.`,
+		);
+	}
 
 	if (provider === undefined) {
 		throw new Error(

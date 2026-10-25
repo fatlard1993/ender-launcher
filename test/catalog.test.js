@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 
 import { parseModSpec, refineModSpec } from '../src/commands/context';
-import { fit, forgetLoaded, providerOf, requiredIds } from '../src/mods/catalog';
+import { ESTABLISHED, fit, forgetLoaded, providerOf, requiredIds } from '../src/mods/catalog';
 import { hosted, resolveFromRecord, search } from '../src/mods/indexed';
 
 const mod = (id, extra) => ({
@@ -61,7 +61,9 @@ const listing = [
 		description: 'Carry more',
 	}),
 	entry('b/old', [mod('old-backpacks')], { archived: true }),
-	entry('lib/core', [mod('core-lib')], { host: 'gitlab' }),
+	entry('lib/core', [mod('core-lib')], { host: 'gitlab', stars: ESTABLISHED }),
+	entry('x/fast-client', [mod('sodium', { name: 'Sodium' })], { stars: 0 }),
+	entry('a/helpers', [mod('a-helpers')], { stars: 0 }),
 ];
 
 beforeAll(async () => {
@@ -96,6 +98,16 @@ describe('the index catalog', () => {
 	test('a bundled module is credited to the release that provides the most', () => {
 		expect(providerOf('fabric-api-base', listing).repo).toBe('FabricMC/fabric-api');
 		expect(providerOf('nobody-has-this', listing)).toBeUndefined();
+	});
+
+	test('a mod id claimed only by a repository nobody has vouched for names nothing', () => {
+		expect(providerOf('sodium', listing)).toBeUndefined();
+		expect(providerOf('sodium', listing, { repo: 'IrisShaders/Iris' })).toBeUndefined();
+	});
+
+	test("an author's own library is trusted by their other mods, however new", () => {
+		expect(providerOf('a-helpers', listing, { repo: 'a/m' }).repo).toBe('a/helpers');
+		expect(providerOf('a-helpers', listing, { host: 'gitlab', repo: 'a/m' })).toBeUndefined();
 	});
 
 	test('what a jar needs is neither the platform nor what it carries', () => {
@@ -281,6 +293,12 @@ describe('a bare name', () => {
 			'"jei" is not a mod the index knows. For Modrinth write mr:jei, for CurseForge cf:jei.',
 		);
 	});
+
+	test('claimed only by repositories nobody has vouched for is refused, and says how to choose one', async () => {
+		await expect(refineModSpec(parseModSpec('sodium'), { index })).rejects.toThrow(
+			'"sodium" is claimed in the index only by repositories too new or unknown to take on a name alone',
+		);
+	});
 });
 
 describe('a published index', () => {
@@ -374,6 +392,22 @@ describe('mods on Codeberg and GitLab', () => {
 		await expect(hosted('gitlab').resolve({ source: 'gitlab', id: 'g/missing' }, context())).rejects.toThrow(
 			`gitlab:g/missing is not in the index; add "gitlab:g/missing" to ender-index's repos.txt`,
 		);
+	});
+
+	test('a dependency claimed only by an unvouched repository is said, not installed', async () => {
+		const record = { releases: [release('1.0', [asset('m.jar', [mod('m', { depends: ['sodium'] })])])] };
+		const warned = spyOn(console, 'warn').mockImplementation(() => {});
+
+		try {
+			const resolved = await resolveFromRecord(record, { source: 'github', id: 'IrisShaders/Iris' }, context());
+
+			expect(resolved.dependencies).toEqual([]);
+			expect(warned.mock.calls.map(([line]) => line)).toContain(
+				'!! github:IrisShaders/Iris requires "sodium"; 1 repository in the index claims that id, but any jar can, and none is established enough to install unasked. Declare the one you trust.',
+			);
+		} finally {
+			warned.mockRestore();
+		}
 	});
 
 	test('a dependency on a mod hosted elsewhere is declared from that host', async () => {
