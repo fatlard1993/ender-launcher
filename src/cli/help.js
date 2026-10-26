@@ -4,7 +4,7 @@ import { commands } from './commands';
 const GROUPS = [
 	['Instances', ['ls', 'new', 'use', 'info', 'set', 'bump', 'clone', 'delete', 'import']],
 	['Running', ['install', 'launch', 'explain']],
-	['Mods', ['search', 'add', 'drop', 'sync', 'update']],
+	['Mods', ['search', 'add', 'drop', 'sync', 'update', 'support']],
 	['Servers', ['server']],
 	['Accounts', ['account']],
 	['Settings', ['config', 'java']],

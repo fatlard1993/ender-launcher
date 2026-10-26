@@ -4,6 +4,8 @@ import { basename, join, resolve } from 'node:path';
 import { readConfig } from '../config';
 import * as instances from '../instance';
 import { scanJar } from '../mods/capabilities';
+import { listing } from '../mods/catalog';
+import { ownerName, supportOf } from '../mods/support';
 import { entryKey, evidence, reportSync, resolveAll, sources, syncMods } from '../mods';
 import { done, fail, info, paint, plural, step, warn } from '../out';
 import { paths } from '../paths';
@@ -332,3 +334,90 @@ export const scan = async ({ positionals, flags }) => {
 };
 
 export { parseModSpec, refineModSpec } from './context';
+
+const REPOSITORY_SOURCES = new Set(['github', 'codeberg', 'gitlab']);
+
+/**
+ * Who made the mods an instance holds and how each takes support, author by author, from the index; and which mods
+ * the index knows no way to support. Mods from Modrinth or CurseForge are counted apart: those sites pay their authors
+ * themselves, and their pages say how else to.
+ */
+export const authorsOf = (mods, entries) => {
+	const byRepository = new Map(entries.map(entry => [`${entry.host ?? 'github'}:${entry.repo}`, entry]));
+	const authors = new Map();
+	const unsupported = [];
+	const elsewhere = [];
+	const seen = new Set();
+
+	for (const mod of mods) {
+		const key = `${mod.source}:${mod.id}`;
+
+		if (seen.has(key)) continue;
+		seen.add(key);
+
+		if (!REPOSITORY_SOURCES.has(mod.source)) {
+			if (mod.source === 'modrinth' || mod.source === 'curseforge') elsewhere.push(key);
+
+			continue;
+		}
+
+		const entry = byRepository.get(key);
+		const links = entry ? supportOf(entry) : [];
+
+		if (links.length === 0) {
+			unsupported.push(mod.id);
+
+			continue;
+		}
+
+		const owner = `${mod.source}:${ownerName(entry)}`;
+		const author = authors.get(owner) ?? { owner: ownerName(entry), host: mod.source, links: [], mods: [] };
+
+		for (const link of links) if (!author.links.some(known => known.url === link.url)) author.links.push(link);
+		author.mods.push(entry.repo);
+		authors.set(owner, author);
+	}
+
+	return { authors: [...authors.values()].sort((a, b) => b.mods.length - a.mods.length), unsupported, elsewhere };
+};
+
+export const support = async ({ flags }) => {
+	const { manifest, config } = await targetInstance(flags.instance);
+	const lock = await instances.readLock(manifest.name);
+	const found = authorsOf([...manifest.mods, ...lock.mods], await listing({ index: config.index }));
+
+	if (flags.json) {
+		info(JSON.stringify(found));
+
+		return 0;
+	}
+
+	if (found.authors.length === 0)
+		info(`No author of a mod in ${manifest.name} lists a way to support them that the index knows of.`);
+	else info(paint.bold(`Support the authors of ${manifest.name}'s mods`));
+
+	for (const author of found.authors) {
+		const mods = author.mods.map(repo => repo.split('/')[1]);
+		const named = mods.length > 3 ? `${mods.slice(0, 3).join(', ')} +${mods.length - 3}` : mods.join(', ');
+
+		info(`  ${paint.cyan(author.owner)} ${paint.dim(`(${named})`)}`);
+
+		for (const link of author.links) info(`    ${link.label.padEnd(16)} ${link.url}`);
+	}
+
+	if (found.unsupported.length > 0) {
+		info(
+			paint.dim(`  ${plural(found.unsupported.length, 'mod')} list no way to support their author the index knows of`),
+		);
+	}
+
+	if (found.elsewhere.length > 0) {
+		info(
+			paint.dim(
+				`  ${plural(found.elsewhere.length, 'mod')} from Modrinth or CurseForge, which pay their authors themselves`,
+			),
+		);
+	}
+
+	return 0;
+};

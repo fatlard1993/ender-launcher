@@ -7,6 +7,7 @@ import { parseModSpec, refineModSpec } from '../src/commands/context';
 import { ESTABLISHED, fit, forgetLoaded, providerOf, requiredIds } from '../src/mods/catalog';
 import { hosted, resolveFromRecord, search } from '../src/mods/indexed';
 import { rank } from '../src/mods/rank';
+import { authorsOf } from '../src/commands/mods';
 
 const mod = (id, extra) => ({
 	loader: 'fabric',
@@ -376,6 +377,7 @@ describe('searching the index', () => {
 		expect(await imports('src/mods/rank.js')).toEqual(['./range']);
 		expect(await imports('src/mods/range.js')).toEqual([]);
 		expect(await imports('src/mods/spec.js')).toEqual([]);
+		expect(await imports('src/mods/support.js')).toEqual([]);
 	});
 
 	test('a missing index says where it looked', async () => {
@@ -532,5 +534,47 @@ describe('mods on Codeberg and GitLab', () => {
 		const resolved = await resolveFromRecord(record, { source: 'github', id: 'a/m' }, context());
 
 		expect(resolved.dependencies).toEqual([{ source: 'gitlab', id: 'lib/core' }]);
+	});
+});
+
+describe("the support an instance's authors take", () => {
+	test('is grouped by author, each link once, with mods from elsewhere and without a link counted apart', () => {
+		const entries = [
+			entry('maker/one', [mod('one')], { funding: [{ platform: 'ko_fi', url: 'https://ko-fi.com/maker' }] }),
+			entry('maker/two', [mod('two')], {
+				funding: [
+					{ platform: 'ko_fi', url: 'https://ko-fi.com/maker' },
+					{ platform: 'custom', url: 'https://www.maker.example/tip' },
+				],
+			}),
+			entry('quiet/three', [mod('three')]),
+		];
+		const found = authorsOf(
+			[
+				{ source: 'github', id: 'maker/one' },
+				{ source: 'github', id: 'maker/two' },
+				{ source: 'github', id: 'maker/two' },
+				{ source: 'github', id: 'quiet/three' },
+				{ source: 'modrinth', id: 'sodium' },
+				{ source: 'local', path: './x.jar' },
+			],
+			entries,
+		);
+
+		expect(found).toEqual({
+			authors: [
+				{
+					owner: 'maker',
+					host: 'github',
+					links: [
+						{ url: 'https://ko-fi.com/maker', label: 'Ko-fi' },
+						{ url: 'https://www.maker.example/tip', label: 'maker.example' },
+					],
+					mods: ['maker/one', 'maker/two'],
+				},
+			],
+			unsupported: ['quiet/three'],
+			elsewhere: ['modrinth:sodium'],
+		});
 	});
 });

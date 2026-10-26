@@ -171,6 +171,12 @@ export const commands = {
 		flags: { ...instanceFlag, ...depsFlag },
 		run: modCommands.sync,
 	},
+	support: {
+		summary: "Who made an instance's mods, and how to support them",
+		usage: 'ender support [--instance name]',
+		flags: { ...instanceFlag, json: { type: 'boolean', description: 'Print the authors and links as JSON' } },
+		run: modCommands.support,
+	},
 	update: {
 		summary: 'Move mods to the newest compatible build',
 		usage: 'ender update [mod...]',
