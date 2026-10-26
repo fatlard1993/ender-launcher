@@ -59,6 +59,17 @@ export const identifyMods = async modsDirectory => {
 	return { entries, unmatched };
 };
 
+/** Prism uses `.minecraft` when it exists and `minecraft` otherwise, so an instance can hold either. */
+const prismGameDir = async directory => {
+	for (const candidate of ['.minecraft', 'minecraft']) {
+		const found = await realpath(join(directory, candidate)).catch(() => undefined);
+
+		if (found !== undefined) return found;
+	}
+
+	return join(directory, '.minecraft');
+};
+
 /**
  * Read a Prism instance into our own shape.
  *
@@ -87,7 +98,7 @@ export const fromPrism = async (directory, { name } = {}) => {
 
 	assertKnownLoader(loader);
 
-	const gameDir = await realpath(join(directory, '.minecraft')).catch(() => join(directory, '.minecraft'));
+	const gameDir = await prismGameDir(directory);
 
 	const { entries, unmatched } = await identifyMods(join(gameDir, 'mods'));
 
