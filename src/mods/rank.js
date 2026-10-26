@@ -70,12 +70,27 @@ const sharing = (entry, entries) => {
 	return '';
 };
 
+/** This entry's mod that the whole query names, by its id or its name. */
+const named = (entry, terms) => {
+	const slugs = new Set([terms.join('-'), terms.join('_'), terms.join('')]);
+
+	return (entry.latest?.mods ?? []).find(mod => slugs.has(words(mod.id)) || words(mod.name) === terms.join(' '));
+};
+
 /**
  * Index entries that answer a query and fit the loader and game version, best first, each with what it
- * shares with an established mod. An empty query answers with everything that fits, by stars.
+ * shares with an established mod, and, when the query names its mod and no established repository
+ * declares that mod, that nothing vouches for the name. An empty query answers with everything that
+ * fits, by stars.
  */
 export const rank = (entries, query, { minecraft, loader } = {}) => {
 	const terms = words(query).split(/\s+/).filter(Boolean);
+	const vouched = terms.length > 0 && entries.some(entry => (entry.stars ?? 0) >= ESTABLISHED && named(entry, terms));
+	const unproven = entry => {
+		const mod = !vouched && terms.length > 0 && (entry.stars ?? 0) < ESTABLISHED && named(entry, terms);
+
+		return mod ? `no repository with ${ESTABLISHED} stars or more declares "${mod.name ?? mod.id}"` : '';
+	};
 
 	return entries
 		.filter(entry => !entry.archived)
@@ -83,5 +98,5 @@ export const rank = (entries, query, { minecraft, loader } = {}) => {
 		.map(entry => ({ entry, score: terms.length === 0 ? 1 : relevance(entry, terms) }))
 		.filter(({ score }) => score > 0)
 		.sort((a, b) => b.score - a.score || (b.entry.stars ?? 0) - (a.entry.stars ?? 0))
-		.map(({ entry }) => ({ entry, sharing: sharing(entry, entries) }));
+		.map(({ entry }) => ({ entry, sharing: sharing(entry, entries), unproven: unproven(entry) }));
 };

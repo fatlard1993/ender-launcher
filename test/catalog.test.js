@@ -288,6 +288,15 @@ describe('searching the index', () => {
 		expect(hits[0].note).not.toContain('declares');
 	});
 
+	test('a mod no established repository declares says so when the query names it', async () => {
+		const [hit] = await search('sodium', { index });
+
+		expect(hit.id).toBe('x/fast-client');
+		expect(hit.note).toContain(`no repository with ${ESTABLISHED} stars or more declares "Sodium"`);
+		expect((await search('fabric api', { index }))[0].note).not.toContain('declares');
+		expect((await search('fast', { index }))[0].note).not.toContain('declares');
+	});
+
 	test('with no query, everything that fits answers, by stars', () => {
 		expect(rank(listing, '', { minecraft: '26.1' }).map(({ entry }) => entry.repo)).toEqual(['a/backpacks']);
 		expect(
