@@ -65,7 +65,7 @@ const listing = [
 	entry('b/old', [mod('old-backpacks')], { archived: true }),
 	entry('lib/core', [mod('core-lib')], { host: 'gitlab', stars: ESTABLISHED }),
 	entry('x/fast-client', [mod('sodium', { name: 'Sodium' })], { stars: 0 }),
-	entry('a/helpers', [mod('a-helpers')], { stars: 0 }),
+	entry('h/helpers', [mod('h-helpers')], { stars: 0 }),
 	entry('b/fabric', [mod('legacy-fabric-api', { name: 'Legacy Fabric API' })], { stars: 80 }),
 ];
 
@@ -138,8 +138,21 @@ describe('the index catalog', () => {
 	});
 
 	test("an author's own library is trusted by their other mods, however new", () => {
-		expect(providerOf('a-helpers', listing, { repo: 'a/m' }).repo).toBe('a/helpers');
-		expect(providerOf('a-helpers', listing, { host: 'gitlab', repo: 'a/m' })).toBeUndefined();
+		expect(providerOf('h-helpers', listing, { repo: 'h/m' }).repo).toBe('h/helpers');
+		expect(providerOf('h-helpers', listing, { host: 'gitlab', repo: 'h/m' })).toBeUndefined();
+	});
+
+	test('a new repository is trusted when its owner has an established one', () => {
+		const fresh = entry('a/new-library', [mod('new-library')], { stars: 0 });
+		const stranger = entry('nobody/new-library', [mod('other-library')], { stars: 0 });
+		const both = [...listing, fresh, stranger];
+
+		expect(providerOf('new-library', both, { repo: 'x/mod' }).repo).toBe('a/new-library');
+		expect(providerOf('other-library', both, { repo: 'x/mod' })).toBeUndefined();
+		expect(rank(both, 'new library')[0]).toMatchObject({ unproven: '', author: 'a/backpacks' });
+		expect(rank(both, 'other library')[0].unproven).toContain('no repository with');
+		expect(rank(both, 'backpacks', { minecraft: '26.1' })[0].author).toBe('');
+		expect(rank(listing, 'backpacks', { minecraft: '26.1' })[0].author).toBe('');
 	});
 
 	test('what a jar needs is neither the platform nor what it carries', () => {

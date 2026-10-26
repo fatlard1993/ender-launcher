@@ -6,6 +6,44 @@ export const HOSTS = { github: 'GitHub', codeberg: 'Codeberg', gitlab: 'GitLab' 
 /** Stars a repository needs before a mod id it claims is taken to name it unasked. */
 export const ESTABLISHED = 50;
 
+const ownerOf = ({ host, repo }) => `${host ?? 'github'}:${repo.split('/')[0].toLowerCase()}`;
+
+const authorsOf = new WeakMap();
+
+/** Each owner of an established repository, to the one of theirs with the most stars, kept once per listing. */
+const establishedAuthors = entries => {
+	let authors = authorsOf.get(entries);
+
+	if (authors !== undefined) return authors;
+
+	authors = new Map();
+
+	for (const entry of entries) {
+		const best = authors.get(ownerOf(entry));
+
+		if ((entry.stars ?? 0) >= ESTABLISHED && (entry.stars ?? 0) > (best?.stars ?? 0))
+			authors.set(ownerOf(entry), entry);
+	}
+
+	authorsOf.set(entries, authors);
+
+	return authors;
+};
+
+/**
+ * The established repository of the same owner that vouches for a repository too new to have the stars itself, by its
+ * name: an author with a mod people use is not a stranger. The index lists it as `author`; it is worked out here for a
+ * listing without it.
+ */
+export const authorOf = (entry, entries) => {
+	if (entry.author !== undefined) return entry.author;
+	if ((entry.stars ?? 0) >= ESTABLISHED) return '';
+
+	const vouching = establishedAuthors(entries).get(ownerOf(entry));
+
+	return vouching && vouching !== entry ? vouching.repo : '';
+};
+
 /** What every mod runs on rather than a mod anyone installs. */
 const PLATFORM = new Set([
 	'minecraft',
@@ -138,7 +176,12 @@ export const rank = (entries, query, { minecraft, loader } = {}) => {
 	const terms = words(query).split(/\s+/).filter(Boolean);
 	const vouched = terms.length > 0 && entries.some(entry => (entry.stars ?? 0) >= ESTABLISHED && named(entry, terms));
 	const unproven = entry => {
-		const mod = !vouched && terms.length > 0 && (entry.stars ?? 0) < ESTABLISHED && named(entry, terms);
+		const mod =
+			!vouched &&
+			terms.length > 0 &&
+			(entry.stars ?? 0) < ESTABLISHED &&
+			!authorOf(entry, entries) &&
+			named(entry, terms);
 
 		return mod ? `no repository with ${ESTABLISHED} stars or more declares "${mod.name ?? mod.id}"` : '';
 	};
@@ -149,7 +192,12 @@ export const rank = (entries, query, { minecraft, loader } = {}) => {
 		.map(entry => ({ entry, score: terms.length === 0 ? 1 : relevance(entry, terms) }))
 		.filter(({ score }) => score > 0)
 		.sort((a, b) => b.score - a.score || (b.entry.stars ?? 0) - (a.entry.stars ?? 0))
-		.map(({ entry }) => ({ entry, sharing: entry.shares ?? sharing(entry, entries), unproven: unproven(entry) }));
+		.map(({ entry }) => ({
+			entry,
+			sharing: entry.shares ?? sharing(entry, entries),
+			unproven: unproven(entry),
+			author: authorOf(entry, entries),
+		}));
 };
 
 /** The part of a mod id before its first separator, which a library's modules share with it. */
@@ -178,17 +226,18 @@ export const claimantsOf = (id, entries, fits = {}) => {
 	return [...own, ...providers];
 };
 
-const ownerOf = ({ host, repo }) => `${host ?? 'github'}:${repo.split('/')[0].toLowerCase()}`;
-
 /**
- * The entry a mod id can be trusted to name: the likeliest claimant that is established, or that shares
- * an owner with the repository requiring it. Any jar can declare any mod id, so a claim alone would
+ * The entry a mod id can be trusted to name: the likeliest claimant that is established, whose author is, or that
+ * shares an owner with the repository requiring it. Any jar can declare any mod id, so a claim alone would
  * let a new repository answer for a mod the index does not have. Given the instance's loader and game
  * version, only a repository with a release for them can answer.
  */
 export const providerOf = (id, entries, requiring, fits) =>
 	claimantsOf(id, entries, fits).find(
-		entry => (entry.stars ?? 0) >= ESTABLISHED || (requiring !== undefined && ownerOf(entry) === ownerOf(requiring)),
+		entry =>
+			(entry.stars ?? 0) >= ESTABLISHED ||
+			(requiring !== undefined && ownerOf(entry) === ownerOf(requiring)) ||
+			authorOf(entry, entries) !== '',
 	);
 
 /** The ids a jar's mods require from elsewhere: not the platform, and not what the jar already carries. */

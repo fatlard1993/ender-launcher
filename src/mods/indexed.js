@@ -114,7 +114,7 @@ export const resolveFromRecord = async (record, entry, context) => {
 export const search = async (query, { minecraft, loader, limit = 10, index } = {}) =>
 	rank(await catalog.listing({ index }), query, { minecraft, loader })
 		.slice(0, limit)
-		.map(({ entry, sharing, unproven }) => ({
+		.map(({ entry, sharing, unproven, author }) => ({
 			source: entry.host ?? 'github',
 			id: entry.repo,
 			name: [...new Set(entry.latest.mods.map(mod => mod.name ?? mod.id))].join(', ') || entry.repo,
@@ -125,6 +125,7 @@ export const search = async (query, { minecraft, loader, limit = 10, index } = {
 				[...new Set(entry.latest.mods.map(mod => mod.loader))].join('/'),
 				entry.latest.capabilities.length > 0 ? `reaches ${entry.latest.capabilities.join(', ')}` : '',
 				entry.replaced ? 'a release was changed after publishing' : '',
+				author ? `by the author of ${author}` : '',
 				sharing,
 				unproven,
 			]
