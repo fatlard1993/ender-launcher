@@ -63,9 +63,10 @@ const relevance = (entry, terms) => {
 
 /**
  * The established repository, with more stars, whose mod has an id or name this entry's mod also has.
- * A port does this as well as a disguise, so it is said as the fact it is.
+ * A port does this as well as a disguise, so it is said as the fact it is. The index lists it as
+ * `shares`, worked out once for every repository; it is worked out here for a listing without it.
  */
-const sharing = (entry, entries) => {
+export const sharing = (entry, entries) => {
 	for (const other of entries) {
 		if (other === entry || (other.stars ?? 0) < ESTABLISHED || (other.stars ?? 0) <= (entry.stars ?? 0)) continue;
 
@@ -110,7 +111,7 @@ export const rank = (entries, query, { minecraft, loader } = {}) => {
 		.map(entry => ({ entry, score: terms.length === 0 ? 1 : relevance(entry, terms) }))
 		.filter(({ score }) => score > 0)
 		.sort((a, b) => b.score - a.score || (b.entry.stars ?? 0) - (a.entry.stars ?? 0))
-		.map(({ entry }) => ({ entry, sharing: sharing(entry, entries), unproven: unproven(entry) }));
+		.map(({ entry }) => ({ entry, sharing: entry.shares ?? sharing(entry, entries), unproven: unproven(entry) }));
 };
 
 /** The part of a mod id before its first separator, which a library's modules share with it. */

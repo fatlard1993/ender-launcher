@@ -307,6 +307,15 @@ describe('searching the index', () => {
 		expect(hits[0].note).not.toContain('declares');
 	});
 
+	test('what a listing says an entry shares is taken as it is', () => {
+		const listed = listing.map(item =>
+			item.repo === 'b/fabric' ? { ...item, shares: 'declares "x", as y/x does' } : item,
+		);
+
+		expect(rank(listed, 'legacy fabric api')[0].sharing).toBe('declares "x", as y/x does');
+		expect(rank(listing, 'legacy fabric api')[0].sharing).toBe('');
+	});
+
 	test('a mod no established repository declares says so when the query names it', async () => {
 		const [hit] = await search('sodium', { index });
 
