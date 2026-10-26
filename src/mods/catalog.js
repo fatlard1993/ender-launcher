@@ -4,7 +4,9 @@ import { fetchWithRetry } from '../download';
 import { readJson, writeJson } from '../json';
 import { warn } from '../out';
 import { paths } from '../paths';
-import { satisfies } from './range';
+import { ESTABLISHED } from './rank';
+
+export { ESTABLISHED, fit, loaderFits } from './rank';
 
 /** The published ender-index. `ender config index` points elsewhere: another URL, or a local checkout's data directory. */
 export const DEFAULT_INDEX = 'https://raw.githubusercontent.com/fatlard1993/ender-index/main/data';
@@ -92,21 +94,6 @@ export const record = (fullName, context, host = 'github') =>
 	load(indexBase(context), `mods/${DIRECTORIES[host]}${fullName}.json`);
 
 /** Quilt loads Fabric mods as its own. */
-export const loaderFits = (declared, loader) =>
-	!loader || declared === loader || (loader === 'quilt' && declared === 'fabric');
-
-/** 2 when a mod declares the instance's loader and game version, 1 when its range cannot be read, 0 when it does not fit. */
-export const fit = (mods, { minecraft, loader } = {}) =>
-	Math.max(
-		0,
-		...(mods ?? []).map(mod => {
-			if (!loaderFits(mod.loader, loader)) return 0;
-			if (minecraft === undefined) return 2;
-
-			return { true: 2, undefined: 1, false: 0 }[satisfies(minecraft, mod.minecraft)];
-		}),
-	);
-
 /**
  * Every index entry claiming a mod id, most likely first: those whose own mod has the id, by stars,
  * then those that provide it, by how much they provide. A library is often bundled inside the mods
@@ -121,9 +108,6 @@ export const claimantsOf = (id, entries) => {
 
 	return [...own, ...providers];
 };
-
-/** Stars a repository needs before a mod id it claims is taken to name it unasked. */
-export const ESTABLISHED = 50;
 
 const ownerOf = ({ host, repo }) => `${host ?? 'github'}:${repo.split('/')[0].toLowerCase()}`;
 

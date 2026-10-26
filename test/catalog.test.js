@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { parseModSpec, refineModSpec } from '../src/commands/context';
 import { ESTABLISHED, fit, forgetLoaded, providerOf, requiredIds } from '../src/mods/catalog';
 import { hosted, resolveFromRecord, search } from '../src/mods/indexed';
+import { rank } from '../src/mods/rank';
 
 const mod = (id, extra) => ({
 	loader: 'fabric',
@@ -285,6 +286,24 @@ describe('searching the index', () => {
 		expect(hits[1].note).toContain('declares the name "Fabric API", as FabricMC/fabric-api does');
 		expect(hits[2].note).toContain('declares "fabric-api", as FabricMC/fabric-api does');
 		expect(hits[0].note).not.toContain('declares');
+	});
+
+	test('with no query, everything that fits answers, by stars', () => {
+		expect(rank(listing, '', { minecraft: '26.1' }).map(({ entry }) => entry.repo)).toEqual(['a/backpacks']);
+		expect(
+			rank(listing, ' ')
+				.map(({ entry }) => entry.repo)
+				.slice(0, 3),
+		).toEqual(['FabricMC/fabric-api', 'TerraformersMC/ModMenu', 'b/fabric']);
+	});
+
+	// ender-index's web page bundles the ranking for a browser, where the client's disk and network are not
+	test('the ranking reaches nothing but the range parser, so a browser can run it', async () => {
+		const imports = async file =>
+			[...(await Bun.file(file).text()).matchAll(/^import .* from '(.+)';$/gm)].map(m => m[1]);
+
+		expect(await imports('src/mods/rank.js')).toEqual(['./range']);
+		expect(await imports('src/mods/range.js')).toEqual([]);
 	});
 
 	test('a missing index says where it looked', async () => {
