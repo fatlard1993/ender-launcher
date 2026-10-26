@@ -301,6 +301,16 @@ describe('searching the index', () => {
 		expect(await search('backpacks', { index, minecraft: '26.3', loader: 'fabric' })).toEqual([]);
 	});
 
+	test("a repository's summary is searched where it has no description", () => {
+		const summarized = entry('s/summarized', [mod('quiet')], {
+			summary: { text: 'Ships you can walk on', from: 'readme' },
+		});
+
+		expect(rank([...listing, summarized], 'walk ships').map(({ entry: found }) => found.repo)).toEqual([
+			's/summarized',
+		]);
+	});
+
 	test('every word of the query has to land somewhere', async () => {
 		expect((await search('menu mods', { index })).map(hit => hit.id)).toEqual(['TerraformersMC/ModMenu']);
 		expect(await search('menu banana', { index })).toEqual([]);

@@ -82,7 +82,7 @@ const words = text => (text ?? '').toLowerCase();
 const relevance = (entry, terms) => {
 	const ids = [entry.repo, ...(entry.latest?.mods ?? []).map(mod => mod.id)].map(words);
 	const names = (entry.latest?.mods ?? []).map(mod => words(mod.name));
-	const description = words(entry.description);
+	const description = words(entry.description || entry.summary?.text);
 	const slugs = new Set([terms.join('-'), terms.join('_'), terms.join('')]);
 	const whole = ids.some(candidate => slugs.has(candidate.split('/').at(-1))) || names.includes(terms.join(' '));
 	if (whole) return 1000;
