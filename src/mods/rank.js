@@ -61,23 +61,61 @@ const relevance = (entry, terms) => {
 	return score;
 };
 
+const claimKeys = mod => [`id:${mod.id}`, ...(mod.name === undefined ? [] : [`name:${words(mod.name)}`])];
+
+const claimsOf = new WeakMap();
+
+/** Each id and name an established repository's mod has, to the repositories claiming it, kept once per listing. */
+const establishedClaims = entries => {
+	let claims = claimsOf.get(entries);
+
+	if (claims !== undefined) return claims;
+
+	claims = new Map();
+
+	for (const [at, entry] of entries.entries()) {
+		if ((entry.stars ?? 0) < ESTABLISHED) continue;
+
+		for (const mod of entry.latest?.mods ?? []) {
+			for (const key of claimKeys(mod)) claims.set(key, [...(claims.get(key) ?? []), { entry, at }]);
+		}
+	}
+
+	claimsOf.set(entries, claims);
+
+	return claims;
+};
+
 /**
  * The established repository, with more stars, whose mod has an id or name this entry's mod also has.
  * A port does this as well as a disguise, so it is said as the fact it is. The index lists it as
  * `shares`, worked out once for every repository; it is worked out here for a listing without it.
  */
 export const sharing = (entry, entries) => {
-	for (const other of entries) {
-		if (other === entry || (other.stars ?? 0) < ESTABLISHED || (other.stars ?? 0) <= (entry.stars ?? 0)) continue;
+	const claims = establishedClaims(entries);
+	const stars = entry.stars ?? 0;
+	let first;
 
-		for (const ours of entry.latest?.mods ?? []) {
-			const theirs = other.latest?.mods.find(
-				mod => mod.id === ours.id || (mod.name !== undefined && words(mod.name) === words(ours.name)),
-			);
-
-			if (theirs)
-				return `declares ${theirs.id === ours.id ? `"${ours.id}"` : `the name "${ours.name}"`}, as ${other.repo}${other.host && other.host !== 'github' ? ` on ${HOSTS[other.host]}` : ''} does`;
+	for (const ours of entry.latest?.mods ?? []) {
+		for (const key of claimKeys(ours)) {
+			for (const claim of claims.get(key) ?? []) {
+				if (claim.entry !== entry && (claim.entry.stars ?? 0) > stars && (first === undefined || claim.at < first.at))
+					first = claim;
+			}
 		}
+	}
+
+	if (first === undefined) return '';
+
+	const other = first.entry;
+
+	for (const ours of entry.latest?.mods ?? []) {
+		const theirs = other.latest?.mods.find(
+			mod => mod.id === ours.id || (mod.name !== undefined && words(mod.name) === words(ours.name)),
+		);
+
+		if (theirs)
+			return `declares ${theirs.id === ours.id ? `"${ours.id}"` : `the name "${ours.name}"`}, as ${other.repo}${other.host && other.host !== 'github' ? ` on ${HOSTS[other.host]}` : ''} does`;
 	}
 
 	return '';
@@ -125,14 +163,15 @@ const namespaceOf = id => id.split(/[-_]/)[0];
  */
 export const claimantsOf = (id, entries, fits = {}) => {
 	const byStars = (a, b) => (b.stars ?? 0) - (a.stars ?? 0);
-	const fitting = fits.minecraft || fits.loader ? entries.filter(entry => fit(entry.targets, fits) > 0) : entries;
-	const own = fitting.filter(entry => entry.latest?.mods.some(mod => mod.id === id)).sort(byStars);
-	const providers = fitting
+	const fitting = entry => (!fits.minecraft && !fits.loader) || fit(entry.targets, fits) > 0;
+	const own = entries.filter(entry => entry.latest?.mods.some(mod => mod.id === id) && fitting(entry)).sort(byStars);
+	const providers = entries
 		.filter(
 			entry =>
 				!own.includes(entry) &&
 				entry.latest?.provides?.includes(id) &&
-				entry.latest.mods.some(mod => namespaceOf(mod.id) === namespaceOf(id)),
+				entry.latest.mods.some(mod => namespaceOf(mod.id) === namespaceOf(id)) &&
+				fitting(entry),
 		)
 		.sort((a, b) => b.latest.provides.length - a.latest.provides.length || byStars(a, b));
 
