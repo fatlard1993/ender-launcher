@@ -298,12 +298,13 @@ describe('searching the index', () => {
 	});
 
 	// ender-index's web page bundles the ranking for a browser, where the client's disk and network are not
-	test('the ranking reaches nothing but the range parser, so a browser can run it', async () => {
+	test('the ranking and the spelling of a spec reach nothing but the range parser, so a browser can run them', async () => {
 		const imports = async file =>
 			[...(await Bun.file(file).text()).matchAll(/^import .* from '(.+)';$/gm)].map(m => m[1]);
 
 		expect(await imports('src/mods/rank.js')).toEqual(['./range']);
 		expect(await imports('src/mods/range.js')).toEqual([]);
+		expect(await imports('src/mods/spec.js')).toEqual([]);
 	});
 
 	test('a missing index says where it looked', async () => {

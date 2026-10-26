@@ -10,7 +10,8 @@
 		".": "./index.js",
 		"./metadata": "./src/mods/metadata.js",
 		"./scan": "./src/mods/capabilities.js",
-		"./rank": "./src/mods/rank.js"
+		"./rank": "./src/mods/rank.js",
+		"./spec": "./src/mods/spec.js"
 	},
 	"description": "Minecraft instances, mods and servers from the command line",
 	"author": "fatlard1993",
