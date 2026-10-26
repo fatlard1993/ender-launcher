@@ -6,6 +6,18 @@ export const HOSTS = { github: 'GitHub', codeberg: 'Codeberg', gitlab: 'GitLab' 
 /** Stars a repository needs before a mod id it claims is taken to name it unasked. */
 export const ESTABLISHED = 50;
 
+/** What every mod runs on rather than a mod anyone installs. */
+const PLATFORM = new Set([
+	'minecraft',
+	'java',
+	'fabricloader',
+	'fabric-loader',
+	'quilt_loader',
+	'forge',
+	'neoforge',
+	'javafml',
+]);
+
 export const loaderFits = (declared, loader) =>
 	!loader || declared === loader || (loader === 'quilt' && declared === 'fabric');
 
@@ -99,4 +111,38 @@ export const rank = (entries, query, { minecraft, loader } = {}) => {
 		.filter(({ score }) => score > 0)
 		.sort((a, b) => b.score - a.score || (b.entry.stars ?? 0) - (a.entry.stars ?? 0))
 		.map(({ entry }) => ({ entry, sharing: sharing(entry, entries), unproven: unproven(entry) }));
+};
+
+/**
+ * Every index entry claiming a mod id, most likely first: those whose own mod has the id, by stars,
+ * then those that provide it, by how much they provide. A library is often bundled inside the mods
+ * that use it, so the release providing the most is the library's own rather than a partial copy.
+ */
+export const claimantsOf = (id, entries) => {
+	const byStars = (a, b) => (b.stars ?? 0) - (a.stars ?? 0);
+	const own = entries.filter(entry => entry.latest?.mods.some(mod => mod.id === id)).sort(byStars);
+	const providers = entries
+		.filter(entry => !own.includes(entry) && entry.latest?.provides?.includes(id))
+		.sort((a, b) => b.latest.provides.length - a.latest.provides.length || byStars(a, b));
+
+	return [...own, ...providers];
+};
+
+const ownerOf = ({ host, repo }) => `${host ?? 'github'}:${repo.split('/')[0].toLowerCase()}`;
+
+/**
+ * The entry a mod id can be trusted to name: the likeliest claimant that is established, or that shares
+ * an owner with the repository requiring it. Any jar can declare any mod id, so a claim alone would
+ * let a new repository answer for a mod the index does not have.
+ */
+export const providerOf = (id, entries, requiring) =>
+	claimantsOf(id, entries).find(
+		entry => (entry.stars ?? 0) >= ESTABLISHED || (requiring !== undefined && ownerOf(entry) === ownerOf(requiring)),
+	);
+
+/** The ids a jar's mods require from elsewhere: not the platform, and not what the jar already carries. */
+export const requiredIds = mods => {
+	const carried = new Set(mods.flatMap(mod => [mod.id, ...(mod.provides ?? [])]));
+
+	return [...new Set(mods.flatMap(mod => mod.depends ?? []))].filter(id => !PLATFORM.has(id) && !carried.has(id));
 };
