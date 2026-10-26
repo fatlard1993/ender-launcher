@@ -118,10 +118,11 @@ export const rank = (entries, query, { minecraft, loader } = {}) => {
  * then those that provide it, by how much they provide. A library is often bundled inside the mods
  * that use it, so the release providing the most is the library's own rather than a partial copy.
  */
-export const claimantsOf = (id, entries) => {
+export const claimantsOf = (id, entries, fits = {}) => {
 	const byStars = (a, b) => (b.stars ?? 0) - (a.stars ?? 0);
-	const own = entries.filter(entry => entry.latest?.mods.some(mod => mod.id === id)).sort(byStars);
-	const providers = entries
+	const fitting = fits.minecraft || fits.loader ? entries.filter(entry => fit(entry.targets, fits) > 0) : entries;
+	const own = fitting.filter(entry => entry.latest?.mods.some(mod => mod.id === id)).sort(byStars);
+	const providers = fitting
 		.filter(entry => !own.includes(entry) && entry.latest?.provides?.includes(id))
 		.sort((a, b) => b.latest.provides.length - a.latest.provides.length || byStars(a, b));
 
@@ -133,10 +134,11 @@ const ownerOf = ({ host, repo }) => `${host ?? 'github'}:${repo.split('/')[0].to
 /**
  * The entry a mod id can be trusted to name: the likeliest claimant that is established, or that shares
  * an owner with the repository requiring it. Any jar can declare any mod id, so a claim alone would
- * let a new repository answer for a mod the index does not have.
+ * let a new repository answer for a mod the index does not have. Given the instance's loader and game
+ * version, only a repository with a release for them can answer.
  */
-export const providerOf = (id, entries, requiring) =>
-	claimantsOf(id, entries).find(
+export const providerOf = (id, entries, requiring, fits) =>
+	claimantsOf(id, entries, fits).find(
 		entry => (entry.stars ?? 0) >= ESTABLISHED || (requiring !== undefined && ownerOf(entry) === ownerOf(requiring)),
 	);
 

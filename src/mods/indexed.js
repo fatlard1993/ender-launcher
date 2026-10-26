@@ -22,8 +22,9 @@ const dependenciesOf = async (entry, mods, context) => {
 	const found = new Map();
 
 	for (const modId of required) {
-		const provider = catalog.providerOf(modId, entries, { host: entry.source, repo: entry.id });
-		const claimants = catalog.claimantsOf(modId, entries).length;
+		const fits = { minecraft: context.minecraft, loader: context.loader };
+		const provider = catalog.providerOf(modId, entries, { host: entry.source, repo: entry.id }, fits);
+		const claimants = catalog.claimantsOf(modId, entries, fits).length;
 
 		if (provider === undefined && claimants === 0) {
 			warn(`${entry.source}:${entry.id} requires "${modId}", which the index does not know; declare it yourself`);

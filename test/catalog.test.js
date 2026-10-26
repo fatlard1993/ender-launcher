@@ -113,6 +113,23 @@ describe('the index catalog', () => {
 		expect(providerOf('nobody-has-this', listing)).toBeUndefined();
 	});
 
+	// Quilted Fabric API provides Fabric API's ids and more of them, for Quilt alone
+	test('only a repository with a release for the instance answers for what it requires', () => {
+		const quilted = entry(
+			'q/quilted',
+			[mod('quilted', { loader: 'quilt', provides: ['fabric-api-base', 'a', 'b', 'c'] })],
+			{
+				stars: 100,
+			},
+		);
+		const both = [...listing, quilted];
+
+		expect(providerOf('fabric-api-base', both).repo).toBe('q/quilted');
+		expect(providerOf('fabric-api-base', both, undefined, { loader: 'fabric' }).repo).toBe('FabricMC/fabric-api');
+		expect(providerOf('fabric-api-base', both, undefined, { loader: 'quilt' }).repo).toBe('q/quilted');
+		expect(providerOf('backpacks', listing, undefined, { minecraft: '26.3' })).toBeUndefined();
+	});
+
 	test('a mod id claimed only by a repository nobody has vouched for names nothing', () => {
 		expect(providerOf('sodium', listing)).toBeUndefined();
 		expect(providerOf('sodium', listing, { repo: 'IrisShaders/Iris' })).toBeUndefined();
