@@ -161,7 +161,8 @@ const IMAGE_TYPES = {
 	png: bytes => bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
 	jpg: bytes => bytes.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff])),
 	gif: bytes => bytes.subarray(0, 4).toString('latin1') === 'GIF8',
-	webp: bytes => bytes.subarray(0, 4).toString('latin1') === 'RIFF' && bytes.subarray(8, 12).toString('latin1') === 'WEBP',
+	webp: bytes =>
+		bytes.subarray(0, 4).toString('latin1') === 'RIFF' && bytes.subarray(8, 12).toString('latin1') === 'WEBP',
 };
 
 /** Fabric and Quilt give one icon or several by width; the smallest at least 64 wide reads well in a list. */
@@ -181,7 +182,8 @@ const iconBySize = icon => {
 const declaredIcons = async (jar, entries) => {
 	const paths = [];
 
-	if (entries.has('fabric.mod.json')) paths.push(...iconBySize(parseLeniently(await text(jar, 'fabric.mod.json')).icon));
+	if (entries.has('fabric.mod.json'))
+		paths.push(...iconBySize(parseLeniently(await text(jar, 'fabric.mod.json')).icon));
 	if (entries.has('quilt.mod.json'))
 		paths.push(...iconBySize(parseLeniently(await text(jar, 'quilt.mod.json')).quilt_loader?.metadata?.icon));
 
@@ -215,4 +217,46 @@ export const readIcon = async jar => {
 
 		if (type) return { type, bytes };
 	}
+};
+
+const webLink = value => {
+	try {
+		const url = new URL(value);
+
+		return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : undefined;
+	} catch {
+		return undefined;
+	}
+};
+
+/** A metadata object's string values that are web addresses, each with the key it was given under. */
+const linksIn = object =>
+	Object.entries(object ?? {})
+		.map(([name, value]) => ({ name, url: typeof value === 'string' ? webLink(value) : undefined }))
+		.filter(({ url }) => url !== undefined);
+
+/**
+ * The web links a jar's mods give: Fabric's and Quilt's contact entries, and the links Mod Menu shows on a mod's page,
+ * which mods declare under custom.modmenu.links (Quilt's at the top as modmenu.links). Each keeps its key, which says
+ * what it is for: sources, discord, modmenu.kofi.
+ */
+export const readLinks = async jar => {
+	const entries = new Set(await listEntries(jar));
+	const links = [];
+
+	if (entries.has('fabric.mod.json')) {
+		const json = parseLeniently(await text(jar, 'fabric.mod.json'));
+
+		links.push(...linksIn(json.contact), ...linksIn(json.custom?.modmenu?.links));
+	}
+
+	if (entries.has('quilt.mod.json')) {
+		const json = parseLeniently(await text(jar, 'quilt.mod.json'));
+
+		links.push(...linksIn(json.quilt_loader?.metadata?.contact), ...linksIn(json.modmenu?.links));
+	}
+
+	const seen = new Set();
+
+	return links.filter(({ url }) => !seen.has(url) && seen.add(url));
 };

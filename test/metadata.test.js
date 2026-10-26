@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 
-import { ICON_LIMIT, parseLeniently, readIcon, readMods } from '../src/mods/metadata';
+import { ICON_LIMIT, parseLeniently, readIcon, readLinks, readMods } from '../src/mods/metadata';
 import { jar as jarIn } from './jars';
 
 let directory;
@@ -200,7 +200,10 @@ describe('the icon a jar declares', () => {
 		);
 		expect(
 			await readIcon(
-				await jar({ 'fabric.mod.json': JSON.stringify({ id: 'e', icon: 'icon.svg' }), 'icon.svg': '<svg onload="x()"/>' }),
+				await jar({
+					'fabric.mod.json': JSON.stringify({ id: 'e', icon: 'icon.svg' }),
+					'icon.svg': '<svg onload="x()"/>',
+				}),
 			),
 		).toBe(undefined);
 		expect(
@@ -212,5 +215,35 @@ describe('the icon a jar declares', () => {
 			),
 		).toBe(undefined);
 		expect(await readIcon(await jar({ 'a/A.class': 'x' }))).toBe(undefined);
+	});
+});
+
+describe('the links a jar gives', () => {
+	test("are its contact entries and Mod Menu's, each by its key, web addresses only and each once", async () => {
+		const path = await jar({
+			'fabric.mod.json': JSON.stringify({
+				id: 'm',
+				contact: { sources: 'https://github.com/a/m', email: 'a@example.com', homepage: 'javascript:alert(1)' },
+				custom: {
+					modmenu: { links: { 'modmenu.kofi': 'https://ko-fi.com/a', 'modmenu.source': 'https://github.com/a/m' } },
+				},
+			}),
+		});
+
+		expect(await readLinks(path)).toEqual([
+			{ name: 'sources', url: 'https://github.com/a/m' },
+			{ name: 'modmenu.kofi', url: 'https://ko-fi.com/a' },
+		]);
+	});
+
+	test("are Quilt's contact entries and its top-level Mod Menu links", async () => {
+		const path = await jar({
+			'quilt.mod.json': JSON.stringify({
+				quilt_loader: { id: 'q', metadata: { contact: { issues: 'https://example.com/issues' } } },
+				modmenu: { links: { donate: 'https://example.com/donate' } },
+			}),
+		});
+
+		expect((await readLinks(path)).map(link => link.name)).toEqual(['issues', 'donate']);
 	});
 });
