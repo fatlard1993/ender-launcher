@@ -12,6 +12,15 @@ import { done, info, paint, plural, step, warn } from '../out';
 import { parseModSpec, refineModSpec, syncInstance } from './mods';
 import { targetInstance, targetName } from './context';
 
+const instanceSummary = (manifest, config) => ({
+	name: manifest.name,
+	type: manifest.type,
+	minecraft: manifest.minecraft,
+	loader: manifest.loader,
+	gameDir: manifest.gameDir,
+	active: manifest.name === config.activeInstance,
+});
+
 export const ls = async ({ flags = {} } = {}) => {
 	const [found, config] = await Promise.all([instances.list(), readConfig()]);
 
@@ -20,6 +29,12 @@ export const ls = async ({ flags = {} } = {}) => {
 	// layout a contract nothing declared.
 	if (flags.names) {
 		for (const manifest of found) info(manifest.name);
+
+		return 0;
+	}
+
+	if (flags.json) {
+		info(JSON.stringify(found.map(manifest => instanceSummary(manifest, config))));
 
 		return 0;
 	}
@@ -118,6 +133,14 @@ export const use = async ({ positionals }) => {
 export const info_ = async ({ positionals, flags }) => {
 	const { manifest } = await targetInstance(flags.instance ?? positionals[0]);
 	const lock = await instances.readLock(manifest.name);
+
+	if (flags.json) {
+		info(
+			JSON.stringify({ ...instanceSummary(manifest, await readConfig()), mods: manifest.mods, installed: lock.mods }),
+		);
+
+		return 0;
+	}
 
 	info(`${paint.bold(manifest.name)} ${paint.dim(`(${manifest.type})`)}`);
 	info(`  minecraft  ${manifest.minecraft}`);

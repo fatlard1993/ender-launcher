@@ -21,7 +21,10 @@ const depsFlag = {
 export const commands = {
 	ls: {
 		summary: 'List instances',
-		flags: { names: { type: 'boolean', description: 'List just the instance names, one per line' } },
+		flags: {
+			names: { type: 'boolean', description: 'List just the instance names, one per line' },
+			json: { type: 'boolean', description: 'List the instances as JSON, for a program to read' },
+		},
 		run: instanceCommands.ls,
 	},
 	new: {
@@ -45,7 +48,7 @@ export const commands = {
 	info: {
 		summary: 'Show an instance and its mods',
 		usage: 'ender info [name]',
-		flags: instanceFlag,
+		flags: { ...instanceFlag, json: { type: 'boolean', description: 'Show it as JSON, for a program to read' } },
 		run: instanceCommands.info_,
 	},
 	set: {
