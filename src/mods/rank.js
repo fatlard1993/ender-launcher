@@ -113,17 +113,26 @@ export const rank = (entries, query, { minecraft, loader } = {}) => {
 		.map(({ entry }) => ({ entry, sharing: sharing(entry, entries), unproven: unproven(entry) }));
 };
 
+/** The part of a mod id before its first separator, which a library's modules share with it. */
+const namespaceOf = id => id.split(/[-_]/)[0];
+
 /**
  * Every index entry claiming a mod id, most likely first: those whose own mod has the id, by stars,
- * then those that provide it, by how much they provide. A library is often bundled inside the mods
- * that use it, so the release providing the most is the library's own rather than a partial copy.
+ * then those that provide it as a module of their own, named under their own id, by how much they
+ * provide. A library is often bundled inside the mods that use it, so a jar carrying a mod it is not
+ * named for is not where that mod comes from.
  */
 export const claimantsOf = (id, entries, fits = {}) => {
 	const byStars = (a, b) => (b.stars ?? 0) - (a.stars ?? 0);
 	const fitting = fits.minecraft || fits.loader ? entries.filter(entry => fit(entry.targets, fits) > 0) : entries;
 	const own = fitting.filter(entry => entry.latest?.mods.some(mod => mod.id === id)).sort(byStars);
 	const providers = fitting
-		.filter(entry => !own.includes(entry) && entry.latest?.provides?.includes(id))
+		.filter(
+			entry =>
+				!own.includes(entry) &&
+				entry.latest?.provides?.includes(id) &&
+				entry.latest.mods.some(mod => namespaceOf(mod.id) === namespaceOf(id)),
+		)
 		.sort((a, b) => b.latest.provides.length - a.latest.provides.length || byStars(a, b));
 
 	return [...own, ...providers];

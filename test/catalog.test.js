@@ -113,21 +113,23 @@ describe('the index catalog', () => {
 		expect(providerOf('nobody-has-this', listing)).toBeUndefined();
 	});
 
-	// Quilted Fabric API provides Fabric API's ids and more of them, for Quilt alone
 	test('only a repository with a release for the instance answers for what it requires', () => {
-		const quilted = entry(
-			'q/quilted',
-			[mod('quilted', { loader: 'quilt', provides: ['fabric-api-base', 'a', 'b', 'c'] })],
-			{
-				stars: 100,
-			},
-		);
-		const both = [...listing, quilted];
+		const port = entry('q/fabric-api', [mod('fabric-api', { loader: 'quilt' })], { stars: 5000 });
+		const both = [...listing, port];
 
-		expect(providerOf('fabric-api-base', both).repo).toBe('q/quilted');
-		expect(providerOf('fabric-api-base', both, undefined, { loader: 'fabric' }).repo).toBe('FabricMC/fabric-api');
-		expect(providerOf('fabric-api-base', both, undefined, { loader: 'quilt' }).repo).toBe('q/quilted');
+		expect(providerOf('fabric-api', both).repo).toBe('q/fabric-api');
+		expect(providerOf('fabric-api', both, undefined, { loader: 'fabric' }).repo).toBe('FabricMC/fabric-api');
 		expect(providerOf('backpacks', listing, undefined, { minecraft: '26.3' })).toBeUndefined();
+	});
+
+	// minecraft-access carries Cloth Config and Fabric API in its jar, and has the stars to be trusted
+	test('a jar carrying a mod it is not named for does not answer for that mod', () => {
+		const carrier = entry('m/access', [mod('minecraft_access', { provides: ['cloth-config', 'fabric-api-base'] })], {
+			stars: 95,
+		});
+
+		expect(providerOf('cloth-config', [...listing, carrier])).toBeUndefined();
+		expect(providerOf('fabric-api-base', [...listing, carrier]).repo).toBe('FabricMC/fabric-api');
 	});
 
 	test('a mod id claimed only by a repository nobody has vouched for names nothing', () => {
