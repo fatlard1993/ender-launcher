@@ -301,6 +301,17 @@ describe('searching the index', () => {
 		expect(await search('backpacks', { index, minecraft: '26.3', loader: 'fabric' })).toEqual([]);
 	});
 
+	test('a repository without a description is listed by its summary', async () => {
+		const summarized = join(index, 'summarized');
+
+		await Bun.write(
+			join(summarized, 'search.json'),
+			JSON.stringify([entry('s/quiet', [mod('quiet')], { summary: { text: 'Ships you can walk on', from: 'jar' } })]),
+		);
+
+		expect((await search('quiet', { index: summarized }))[0].description).toBe('Ships you can walk on');
+	});
+
 	test("a repository's summary is searched where it has no description", () => {
 		const summarized = entry('s/summarized', [mod('quiet')], {
 			summary: { text: 'Ships you can walk on', from: 'readme' },

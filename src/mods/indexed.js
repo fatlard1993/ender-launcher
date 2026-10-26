@@ -118,7 +118,7 @@ export const search = async (query, { minecraft, loader, limit = 10, index } = {
 			source: entry.host ?? 'github',
 			id: entry.repo,
 			name: [...new Set(entry.latest.mods.map(mod => mod.name ?? mod.id))].join(', ') || entry.repo,
-			description: entry.description,
+			description: entry.description || entry.summary?.text,
 			downloads: entry.stars ?? 0,
 			stars: true,
 			note: [
