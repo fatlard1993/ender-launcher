@@ -106,6 +106,16 @@ export const add = async ({ positionals, flags }) => {
 
 	await syncInstance(manifest, config, { withDependencies: flags.deps !== false, flags });
 
+	const { authors } = authorsOf(added, await listing({ index: config.index }).catch(() => []));
+
+	if (authors.length > 0) {
+		info(
+			paint.dim(
+				`  ${plural(authors.length, 'author')} of what you added ${authors.length === 1 ? 'takes' : 'take'} support: ender support says how`,
+			),
+		);
+	}
+
 	return 0;
 };
 
