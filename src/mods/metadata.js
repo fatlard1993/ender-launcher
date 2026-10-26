@@ -152,3 +152,67 @@ export const readMods = async jar => {
 
 	return mods;
 };
+
+/** Larger than an icon has reason to be; a jar declaring one past it is shown without. */
+export const ICON_LIMIT = 256 * 1024;
+
+/** The image formats a page shows, by their first bytes. SVG is left out: it is a document, and can carry script. */
+const IMAGE_TYPES = {
+	png: bytes => bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+	jpg: bytes => bytes.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff])),
+	gif: bytes => bytes.subarray(0, 4).toString('latin1') === 'GIF8',
+	webp: bytes => bytes.subarray(0, 4).toString('latin1') === 'RIFF' && bytes.subarray(8, 12).toString('latin1') === 'WEBP',
+};
+
+/** Fabric and Quilt give one icon or several by width; the smallest at least 64 wide reads well in a list. */
+const iconBySize = icon => {
+	if (typeof icon === 'string') return [icon];
+	if (icon === null || typeof icon !== 'object') return [];
+
+	const sizes = Object.keys(icon)
+		.map(Number)
+		.filter(Number.isFinite)
+		.sort((a, b) => a - b);
+	const chosen = sizes.find(size => size >= 64) ?? sizes.at(-1);
+
+	return chosen === undefined ? [] : [icon[chosen]];
+};
+
+const declaredIcons = async (jar, entries) => {
+	const paths = [];
+
+	if (entries.has('fabric.mod.json')) paths.push(...iconBySize(parseLeniently(await text(jar, 'fabric.mod.json')).icon));
+	if (entries.has('quilt.mod.json'))
+		paths.push(...iconBySize(parseLeniently(await text(jar, 'quilt.mod.json')).quilt_loader?.metadata?.icon));
+
+	for (const name of ['META-INF/neoforge.mods.toml', 'META-INF/mods.toml']) {
+		if (!entries.has(name)) continue;
+
+		const parsed = Bun.TOML.parse(await text(jar, name));
+
+		paths.push(...(parsed.mods ?? []).map(mod => mod.logoFile), parsed.logoFile);
+	}
+
+	return paths.filter(path => typeof path === 'string').map(path => path.replace(/^\.?\/+/, ''));
+};
+
+/** The picture a jar declares for its mod, when it is an image a page can show: its format and bytes. */
+export const readIcon = async jar => {
+	const entries = new Set(await listEntries(jar));
+
+	for (const path of await declaredIcons(jar, entries)) {
+		if (!entries.has(path)) continue;
+
+		let bytes;
+
+		try {
+			bytes = await readEntry(jar, path, ICON_LIMIT);
+		} catch {
+			continue;
+		}
+
+		const type = Object.keys(IMAGE_TYPES).find(name => IMAGE_TYPES[name](bytes));
+
+		if (type) return { type, bytes };
+	}
+};

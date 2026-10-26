@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 
-import { parseLeniently, readMods } from '../src/mods/metadata';
+import { ICON_LIMIT, parseLeniently, readIcon, readMods } from '../src/mods/metadata';
 import { jar as jarIn } from './jars';
 
 let directory;
@@ -155,5 +155,62 @@ describe('metadata as published', () => {
 		]);
 
 		expect((await readMods(wrapped)).map(mod => mod.id)).toEqual(['owo']);
+	});
+});
+
+const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+
+describe('the icon a jar declares', () => {
+	test('a fabric icon, the smallest of its sizes at least 64 wide', async () => {
+		const path = await jar({
+			'fabric.mod.json': JSON.stringify({
+				id: 'a',
+				icon: { 16: 'assets/a/16.png', 128: 'assets/a/128.png', 64: 'assets/a/64.png' },
+			}),
+			'assets/a/16.png': Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 16]),
+			'assets/a/64.png': PNG,
+			'assets/a/128.png': Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 128]),
+		});
+
+		expect(await readIcon(path)).toEqual({ type: 'png', bytes: PNG });
+	});
+
+	test('a forge logo file, named from the root', async () => {
+		const path = await jar({
+			'META-INF/mods.toml': 'logoFile="/logo.png"\n[[mods]]\nmodId="b"\n',
+			'logo.png': PNG,
+		});
+
+		expect(await readIcon(path)).toEqual({ type: 'png', bytes: PNG });
+	});
+
+	test('a quilt icon', async () => {
+		const path = await jar({
+			'quilt.mod.json': JSON.stringify({ quilt_loader: { id: 'c', metadata: { icon: 'icon.png' } } }),
+			'icon.png': PNG,
+		});
+
+		expect((await readIcon(path)).type).toBe('png');
+	});
+
+	// An SVG can carry script; a page shows only the formats it can hold as a picture.
+	test('none when the declared file is missing, too large, or not a picture', async () => {
+		expect(await readIcon(await jar({ 'fabric.mod.json': JSON.stringify({ id: 'd', icon: 'gone.png' }) }))).toBe(
+			undefined,
+		);
+		expect(
+			await readIcon(
+				await jar({ 'fabric.mod.json': JSON.stringify({ id: 'e', icon: 'icon.svg' }), 'icon.svg': '<svg onload="x()"/>' }),
+			),
+		).toBe(undefined);
+		expect(
+			await readIcon(
+				await jar({
+					'fabric.mod.json': JSON.stringify({ id: 'f', icon: 'big.png' }),
+					'big.png': Buffer.concat([PNG, Buffer.alloc(ICON_LIMIT)]),
+				}),
+			),
+		).toBe(undefined);
+		expect(await readIcon(await jar({ 'a/A.class': 'x' }))).toBe(undefined);
 	});
 });

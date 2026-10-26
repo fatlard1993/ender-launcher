@@ -113,12 +113,12 @@ export const listEntries = async path => {
 	return entries.filter(entry => !entry.name.endsWith('/')).map(entry => entry.name);
 };
 
-/** One entry's bytes, or undefined when the archive has no such entry. */
-export const readEntry = async (path, name) => {
+/** One entry's bytes, or undefined when the archive has no such entry. Past a limit given, the read throws. */
+export const readEntry = async (path, name, limit) => {
 	const { buffer, entries } = await openArchive(path);
 	const entry = entries.find(candidate => candidate.name === name);
 
-	return entry && contentOf(buffer, entry);
+	return entry && contentOf(buffer, entry, limit);
 };
 
 export const readEntryJson = async (path, name) => {
