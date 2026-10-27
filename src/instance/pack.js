@@ -4,6 +4,7 @@ import { basename, extname, join } from 'node:path';
 import { extractArchive, listEntries, readEntry, readEntryJson } from '../archive';
 import { detail, plural, step } from '../out';
 import { ENDER_PACK, GAME_FILES, parseEnderPack } from './enderPack';
+import { packwizMetafiles, packwizMod, packwizPack } from './packwiz';
 
 const MRPACK_INDEX = 'modrinth.index.json';
 
@@ -23,9 +24,11 @@ const CURSEFORGE_LOADERS = { fabric: 'fabric', quilt: 'quilt', forge: 'forge', n
 const nameFrom = path => basename(path, extname(path));
 
 /** What kind of thing was handed to `import`, decided by looking inside rather than by extension. */
-/** Where an archive keeps its ender pack file: at its root, or in the one folder a repository's zip unpacks to. */
-const enderPackIn = entries =>
-	entries.find(entry => entry === ENDER_PACK || (entry.split('/').length === 2 && entry.endsWith(`/${ENDER_PACK}`)));
+/** Where an archive keeps a file named this: at its root, or in the one folder a repository's zip unpacks to. */
+const atTop = (entries, name) =>
+	entries.find(entry => entry === name || (entry.split('/').length === 2 && entry.endsWith(`/${name}`)));
+
+const enderPackIn = entries => atTop(entries, ENDER_PACK);
 
 export const detectPack = async path => {
 	if (path.endsWith('.json')) return 'ender';
@@ -33,6 +36,7 @@ export const detectPack = async path => {
 	const entries = await listEntries(path);
 
 	if (enderPackIn(entries)) return 'ender';
+	if (atTop(entries, 'pack.toml')) return 'packwiz';
 
 	if (entries.includes(MRPACK_INDEX)) return 'mrpack';
 	if (entries.includes(CURSEFORGE_MANIFEST)) return 'curseforge';
@@ -166,7 +170,60 @@ const fromEnder = async (path, { name }) => {
 	};
 };
 
-const READERS = { mrpack: fromMrpack, curseforge: fromCurseForge, mods: fromModsZip, ender: fromEnder };
+/**
+ * A packwiz pack keeps a file per mod beside its pack.toml, listed by its index: each becomes an entry, a Modrinth or
+ * CurseForge one where it names one. As for an ender pack, the game's own files beside it are its overrides.
+ */
+const fromPackwiz = async (path, { name, side = 'client' }) => {
+	const file = atTop(await listEntries(path), 'pack.toml');
+	const folder = file.slice(0, -'pack.toml'.length);
+	const text = async inside => (await readEntry(path, `${folder}${inside}`))?.toString('utf8');
+	const pack = packwizPack(await text('pack.toml'), { file: `${basename(path)}!${file}` });
+	const index = await text(pack.index);
+
+	if (index === undefined) throw new Error(`${basename(path)} has no ${pack.index}, which its pack.toml names`);
+
+	const entries = await listEntries(path);
+	const listed = packwizMetafiles(index);
+	const metafiles =
+		listed.length > 0
+			? listed
+			: entries
+					.filter(entry => entry.startsWith(folder) && entry.endsWith('.pw.toml'))
+					.map(entry => entry.slice(folder.length));
+
+	if (listed.length === 0 && metafiles.length > 0)
+		detail(
+			'index',
+			`${pack.index} lists no mods, so every .pw.toml beside it is read, as packwiz refresh would list them`,
+		);
+
+	const mods = [];
+
+	for (const metafile of metafiles) {
+		const source = await text(metafile);
+
+		if (source === undefined) throw new Error(`${basename(path)} has no ${metafile}, which its index lists`);
+
+		const entry = packwizMod(source, { side });
+
+		if (entry) mods.push(entry);
+	}
+
+	return {
+		manifest: { name: name ?? pack.name ?? nameFrom(path), minecraft: pack.minecraft, loader: pack.loader, mods },
+		overridePrefixes: [folder],
+		keepOverride: isGameFile,
+	};
+};
+
+const READERS = {
+	mrpack: fromMrpack,
+	curseforge: fromCurseForge,
+	mods: fromModsZip,
+	ender: fromEnder,
+	packwiz: fromPackwiz,
+};
 
 export const readPack = async (path, options = {}) => {
 	const kind = await detectPack(path);

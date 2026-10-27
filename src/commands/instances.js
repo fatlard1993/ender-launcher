@@ -439,7 +439,7 @@ const fetchPack = async target => {
 };
 
 /** What import takes, as its usage names it. */
-export const IMPORTABLE = 'prism-instance-dir | pack.mrpack | pack.zip | ender.pack.json | link | gh:owner/repo';
+export const IMPORTABLE = 'prism-instance-dir | pack.mrpack | pack.zip | ender.pack.json | packwiz | link | gh:owner/repo';
 
 export const importAny = async ({ positionals, flags }) => {
 	const [target] = positionals;

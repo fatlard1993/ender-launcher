@@ -234,3 +234,105 @@ describe('an ender pack', () => {
 	});
 });
 
+describe('a packwiz pack', () => {
+	const toml = lines => lines.join('\n');
+
+	test('becomes its mods, Modrinth and CurseForge ones kept updatable, and the game files beside it', async () => {
+		const path = await zip('packwiz', async staging => {
+			const root = join(staging, 'my-pack-HEAD');
+
+			await mkdir(join(root, 'mods'), { recursive: true });
+			await mkdir(join(root, 'config'), { recursive: true });
+			await writeFile(
+				join(root, 'pack.toml'),
+				toml([
+					'name = "My Pack"',
+					'pack-format = "packwiz:1.1.0"',
+					'[index]',
+					'file = "index.toml"',
+					'[versions]',
+					'minecraft = "1.21.1"',
+					'fabric = "0.16.5"',
+				]),
+			);
+			await writeFile(
+				join(root, 'index.toml'),
+				toml([
+					'hash-format = "sha256"',
+					...['sodium', 'jei', 'lonely', 'server-only'].flatMap(mod => [
+						'[[files]]',
+						`file = "mods/${mod}.pw.toml"`,
+						'metafile = true',
+					]),
+					'[[files]]',
+					'file = "config/sodium.json"',
+				]),
+			);
+			await writeFile(
+				join(root, 'mods', 'sodium.pw.toml'),
+				toml(['name = "Sodium"', 'side = "client"', '[update.modrinth]', 'mod-id = "AANobbMI"', 'version = "abc123"']),
+			);
+			await writeFile(
+				join(root, 'mods', 'jei.pw.toml'),
+				toml([
+					'name = "JEI"',
+					'[download]',
+					'mode = "metadata:curseforge"',
+					'[update.curseforge]',
+					'project-id = 238222',
+					'file-id = 5101365',
+				]),
+			);
+			await writeFile(
+				join(root, 'mods', 'lonely.pw.toml'),
+				toml([
+					'name = "Lonely"',
+					'filename = "lonely-1.0.jar"',
+					'[download]',
+					'url = "https://example.invalid/lonely-1.0.jar"',
+					'hash-format = "sha1"',
+					'hash = "ABC"',
+				]),
+			);
+			await writeFile(
+				join(root, 'mods', 'server-only.pw.toml'),
+				toml(['name = "Server"', 'side = "server"', '[update.modrinth]', 'mod-id = "srv"', 'version = "1"']),
+			);
+			await writeFile(join(root, 'config', 'sodium.json'), '{}');
+			await writeFile(join(root, 'README.md'), '# My Pack');
+		});
+
+		expect(await detectPack(path)).toBe('packwiz');
+
+		const read = await readPack(path, {});
+
+		expect(read.manifest).toEqual({
+			name: 'My Pack',
+			minecraft: '1.21.1',
+			loader: { type: 'fabric', version: '0.16.5' },
+			mods: [
+				{ source: 'modrinth', id: 'AANobbMI', version: 'abc123' },
+				{ source: 'curseforge', id: '238222', version: '5101365' },
+				{ source: 'url', url: 'https://example.invalid/lonely-1.0.jar', file: 'lonely-1.0.jar', checksum: 'sha1:ABC' },
+			],
+		});
+		expect(await unpackInto(path, read, join(directory, 'packwiz-game'))).toEqual(['config/sodium.json']);
+	});
+
+	test('whose index lists no mods, as packwiz leaves it until refreshed, has the mod files beside it read', async () => {
+		const path = await zip('packwiz-stale', async staging => {
+			await mkdir(join(staging, 'mods'), { recursive: true });
+			await writeFile(
+				join(staging, 'pack.toml'),
+				toml(['name = "Stale"', '[versions]', 'minecraft = "1.18.2"', 'fabric = "0.18.4"']),
+			);
+			await writeFile(join(staging, 'index.toml'), 'hash-format = "sha256"\n');
+			await writeFile(
+				join(staging, 'mods', 'create.pw.toml'),
+				toml(['name = "Create"', '[update.curseforge]', 'project-id = 328085', 'file-id = 1']),
+			);
+		});
+
+		expect((await readPack(path, {})).manifest.mods).toEqual([{ source: 'curseforge', id: '328085', version: '1' }]);
+	});
+});
