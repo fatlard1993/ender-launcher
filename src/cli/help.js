@@ -2,7 +2,7 @@ import { info, paint } from '../out';
 import { commands } from './commands';
 
 const GROUPS = [
-	['Instances', ['ls', 'new', 'use', 'info', 'set', 'bump', 'clone', 'delete', 'import']],
+	['Instances', ['ls', 'new', 'use', 'info', 'set', 'bump', 'clone', 'delete', 'import', 'export']],
 	['Running', ['install', 'launch', 'explain']],
 	['Mods', ['search', 'add', 'drop', 'sync', 'update', 'support']],
 	['Servers', ['server']],

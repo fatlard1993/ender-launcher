@@ -1,9 +1,12 @@
-import { stat } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { mkdir, stat } from 'node:fs/promises';
+import { basename, join, resolve } from 'node:path';
 
 import { readConfig, updateConfig } from '../config';
+import { fetchWithRetry } from '../download';
+import { paths } from '../paths';
 import * as instances from '../instance';
 import { fromPrism, identifyMods } from '../instance/import';
+import { packFrom } from '../instance/enderPack';
 import { readPack, unpackInto } from '../instance/pack';
 import { entryKey, resolveAll } from '../mods';
 import { resolveVersionId } from '../meta/mojang';
@@ -313,6 +316,27 @@ const activateIfFirst = async name => {
 	if ((await readConfig()).activeInstance === undefined) await updateConfig({ activeInstance: name });
 };
 
+/**
+ * An ender pack's specs as the entries `ender add` would make of them, every one or none: a pack whose mods cannot
+ * all be placed is refused with each that could not, rather than made into an instance missing them.
+ */
+const resolveSpecs = async (specs, config) => {
+	const entries = [];
+	const failed = [];
+
+	for (const { spec, version } of specs) {
+		try {
+			entries.push(await refineModSpec(parseModSpec(version ? `${spec}@${version}` : spec), { index: config.index }));
+		} catch (error) {
+			failed.push(`  ${spec}: ${error.message}`);
+		}
+	}
+
+	if (failed.length > 0) throw new Error(`The pack names mods that cannot be placed:\n${failed.join('\n')}`);
+
+	return entries;
+};
+
 const importPack = async (path, flags) => {
 	const pack = await readPack(path, {
 		name: flags.name,
@@ -331,6 +355,8 @@ const importPack = async (path, flags) => {
 			pack.manifest.minecraft,
 		);
 	}
+
+	if (pack.specs) pack.manifest.mods = await resolveSpecs(pack.specs, await readConfig());
 
 	const manifest = await instances.create(pack.manifest.name, {
 		...pack.manifest,
@@ -392,10 +418,35 @@ const importPrismInstance = async (directory, flags) => {
 };
 
 /** A Prism instance directory, or a modpack in any of the shapes people actually hand around. */
+/** A repository named as `gh:owner/repo`, whose zip GitHub serves at its default branch. */
+const REPOSITORY = /^(?:gh:|github:)([\w.-]+\/[\w.-]+)$/;
+
+/** A pack named by a link or a GitHub repository, downloaded where import reads files from. */
+const fetchPack = async target => {
+	const repository = target.match(REPOSITORY)?.[1];
+	const url = repository ? `https://github.com/${repository}/archive/HEAD.zip` : target;
+	const name = repository ? `${repository.replace('/', '-')}.zip` : basename(new URL(url).pathname) || 'pack.zip';
+	const path = join(paths.cache, 'packs', name);
+
+	step(`Downloading ${url}`);
+
+	const response = await fetchWithRetry(url);
+
+	await mkdir(join(paths.cache, 'packs'), { recursive: true });
+	await Bun.write(path, response);
+
+	return path;
+};
+
+/** What import takes, as its usage names it. */
+export const IMPORTABLE = 'prism-instance-dir | pack.mrpack | pack.zip | ender.pack.json | link | gh:owner/repo';
+
 export const importAny = async ({ positionals, flags }) => {
 	const [target] = positionals;
 
-	if (target === undefined) throw new Error('ender import <prism-instance-directory | pack.mrpack | pack.zip>');
+	if (target === undefined) throw new Error(`ender import <${IMPORTABLE}>`);
+
+	if (/^https?:\/\//.test(target) || REPOSITORY.test(target)) return importPack(await fetchPack(target), flags);
 
 	const path = resolve(target);
 	const info_ = await stat(path).catch(() => undefined);
@@ -403,4 +454,33 @@ export const importAny = async ({ positionals, flags }) => {
 	if (info_ === undefined) throw new Error(`No such file or directory: ${target}`);
 
 	return info_.isDirectory() ? importPrismInstance(path, flags) : importPack(path, flags);
+};
+
+const UNSHAREABLE = { local: 'a jar on this disk', url: 'a link', gradle: 'a build from source on this disk' };
+
+/**
+ * An instance's chosen mods as an ender pack, to stdout or a file. What they need is left for install to resolve, and
+ * a mod only this machine can reach is named as left out.
+ */
+export const exportPack = async ({ positionals, flags }) => {
+	const { manifest } = await targetInstance(flags.instance ?? positionals[0]);
+	const { pack, left } = packFrom(manifest);
+	const text = `${JSON.stringify(pack, null, '\t')}\n`;
+
+	for (const entry of left) {
+		warn(
+			`${entry.path ?? entry.url ?? entry.id} is ${UNSHAREABLE[entry.source] ?? entry.source}, so it is not in the pack`,
+		);
+	}
+
+	if (!flags.out) {
+		process.stdout.write(text);
+
+		return 0;
+	}
+
+	await Bun.write(resolve(flags.out), text);
+	done(`Wrote ${manifest.name} as a pack of ${plural(pack.mods.length, 'mod')} to ${flags.out}`);
+
+	return 0;
 };

@@ -1,8 +1,9 @@
 import { mkdir } from 'node:fs/promises';
 import { basename, extname, join } from 'node:path';
 
-import { extractArchive, listEntries, readEntryJson } from '../archive';
+import { extractArchive, listEntries, readEntry, readEntryJson } from '../archive';
 import { detail, plural, step } from '../out';
+import { ENDER_PACK, GAME_FILES, parseEnderPack } from './enderPack';
 
 const MRPACK_INDEX = 'modrinth.index.json';
 
@@ -22,8 +23,16 @@ const CURSEFORGE_LOADERS = { fabric: 'fabric', quilt: 'quilt', forge: 'forge', n
 const nameFrom = path => basename(path, extname(path));
 
 /** What kind of thing was handed to `import`, decided by looking inside rather than by extension. */
+/** Where an archive keeps its ender pack file: at its root, or in the one folder a repository's zip unpacks to. */
+const enderPackIn = entries =>
+	entries.find(entry => entry === ENDER_PACK || (entry.split('/').length === 2 && entry.endsWith(`/${ENDER_PACK}`)));
+
 export const detectPack = async path => {
+	if (path.endsWith('.json')) return 'ender';
+
 	const entries = await listEntries(path);
+
+	if (enderPackIn(entries)) return 'ender';
 
 	if (entries.includes(MRPACK_INDEX)) return 'mrpack';
 	if (entries.includes(CURSEFORGE_MANIFEST)) return 'curseforge';
@@ -32,8 +41,8 @@ export const detectPack = async path => {
 	throw new Error(`Not a modpack: ${path}`);
 };
 
-const unpackOverrides = async (path, gameDir, prefix) => {
-	const written = await extractArchive(path, gameDir, { prefix });
+const unpackOverrides = async (path, gameDir, prefix, keep) => {
+	const written = await extractArchive(path, gameDir, { prefix, keep });
 
 	if (written.length > 0) detail('overrides', `${plural(written.length, 'file')} from ${prefix}`);
 
@@ -130,7 +139,34 @@ const fromModsZip = async (path, { name, minecraft, loader }) => {
 	};
 };
 
-const READERS = { mrpack: fromMrpack, curseforge: fromCurseForge, mods: fromModsZip };
+const isGameFile = relative =>
+	GAME_FILES.some(file => (file.endsWith('/') ? relative.startsWith(file) : relative === file));
+
+/**
+ * An ender pack lists the mods it chose by spec, which the caller resolves against the index; what they need is
+ * resolved on sync. In a zip, the game's own files beside the pack file are its overrides, and nothing else there.
+ */
+const fromEnder = async (path, { name }) => {
+	const alone = path.endsWith('.json');
+	const file = alone ? undefined : enderPackIn(await listEntries(path));
+	const source = alone ? await Bun.file(path).text() : (await readEntry(path, file)).toString('utf8');
+	const pack = parseEnderPack(source, { file: alone ? basename(path) : `${basename(path)}!${file}` });
+
+	return {
+		manifest: {
+			name: name ?? pack.name ?? nameFrom(path),
+			minecraft: pack.minecraft,
+			loader: { type: pack.loader },
+			mods: [],
+		},
+		specs: pack.mods,
+		summary: pack.summary,
+		overridePrefixes: alone ? [] : [file.slice(0, -ENDER_PACK.length)],
+		keepOverride: isGameFile,
+	};
+};
+
+const READERS = { mrpack: fromMrpack, curseforge: fromCurseForge, mods: fromModsZip, ender: fromEnder };
 
 export const readPack = async (path, options = {}) => {
 	const kind = await detectPack(path);
@@ -158,8 +194,8 @@ export const unpackInto = async (path, pack, gameDir) => {
 
 	const written = [];
 
-	for (const prefix of pack.overridePrefixes ?? []) written.push(...(await unpackOverrides(path, gameDir, prefix)));
+	for (const prefix of pack.overridePrefixes ?? [])
+		written.push(...(await unpackOverrides(path, gameDir, prefix, pack.keepOverride)));
 
 	return written;
 };
-

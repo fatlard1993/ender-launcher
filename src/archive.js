@@ -128,11 +128,15 @@ export const readEntryJson = async (path, name) => {
 };
 
 /**
- * Unpack an archive into a directory, dropping entries the caller excludes and stripping a leading
- * path when one is given. Entry names come from a downloaded archive, so each one is checked to
- * land inside the target.
+ * Unpack an archive into a directory, dropping entries the caller excludes, stripping a leading
+ * path when one is given, and keeping only what `keep` says of the path left. Entry names come
+ * from a downloaded archive, so each one is checked to land inside the target.
  */
-export const extractArchive = async (archivePath, targetDirectory, { exclude = [], prefix } = {}) => {
+export const extractArchive = async (
+	archivePath,
+	targetDirectory,
+	{ exclude = [], prefix, keep = () => true } = {},
+) => {
 	const { buffer, entries } = await openArchive(archivePath);
 	const written = [];
 
@@ -142,7 +146,7 @@ export const extractArchive = async (archivePath, targetDirectory, { exclude = [
 
 		const relative = prefix === undefined ? entry.name : entry.name.slice(prefix.length);
 
-		if (relative === '') continue;
+		if (relative === '' || !keep(relative)) continue;
 
 		const destination = join(targetDirectory, normalize(relative));
 

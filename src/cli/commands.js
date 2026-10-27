@@ -81,7 +81,7 @@ export const commands = {
 	},
 	import: {
 		summary: 'Adopt a Prism instance or a modpack',
-		usage: 'ender import <prism-instance-dir | pack.mrpack | pack.zip>',
+		usage: `ender import <${instanceCommands.IMPORTABLE}>`,
 		flags: {
 			name: { description: 'Name it something other than the pack did' },
 			gameDir: { description: 'Use an existing directory as the game directory' },
@@ -89,6 +89,15 @@ export const commands = {
 			loader: { alias: 'l', description: 'Loader, for an archive that names none' },
 		},
 		run: instanceCommands.importAny,
+	},
+	export: {
+		summary: 'Write an instance as an ender pack of the mods it chose',
+		usage: 'ender export [name] [--out ender.pack.json]',
+		flags: {
+			...instanceFlag,
+			out: { alias: 'o', description: 'Write it to this file instead of printing it' },
+		},
+		run: instanceCommands.exportPack,
 	},
 
 	install: {

@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 
 import { listEntries, readEntryJson } from '../src/archive';
-import { detectPack, readPack } from '../src/instance/pack';
+import { packFrom, parseEnderPack } from '../src/instance/enderPack';
+import { detectPack, readPack, unpackInto } from '../src/instance/pack';
 
 let directory;
 
@@ -161,3 +162,75 @@ describe('archive reading', () => {
 		expect(await readEntryJson(path, 'missing.json')).toBeUndefined();
 	});
 });
+
+describe('an ender pack', () => {
+	const pack = {
+		name: 'Ship Life',
+		minecraft: '26.3',
+		loader: 'fabric',
+		mods: ['gh:fatlard1993/big-boats', { spec: 'gh:fatlard1993/fence-posts', version: '3.0.1' }],
+	};
+
+	test('lists the mods it chose by spec, a version only where one is pinned, and says all that is wrong with it', () => {
+		expect(parseEnderPack(JSON.stringify(pack)).mods).toEqual([
+			{ spec: 'gh:fatlard1993/big-boats' },
+			{ spec: 'gh:fatlard1993/fence-posts', version: '3.0.1' },
+		]);
+		expect(() => parseEnderPack({ loader: 'bukkit', mods: [{}] }, { file: 'x.json' })).toThrow(
+			'x.json names no "minecraft" version; names no "loader" of fabric, quilt, forge, neoforge, vanilla; mods[0] is neither a spec nor { "spec": ... }',
+		);
+	});
+
+	test("is an instance's chosen mods, and leaves out what only this machine can reach", () => {
+		const { pack: written, left } = packFrom({
+			name: 'Ship Life',
+			minecraft: '26.3',
+			loader: { type: 'fabric', version: '0.19.5' },
+			mods: [
+				{ source: 'github', id: 'fatlard1993/big-boats' },
+				{ source: 'github', id: 'fatlard1993/fence-posts', version: '3.0.1' },
+				{ source: 'modrinth', id: 'sodium' },
+				{ source: 'local', path: '/home/me/mine.jar' },
+			],
+		});
+
+		expect(written).toEqual({
+			name: 'Ship Life',
+			minecraft: '26.3',
+			loader: 'fabric',
+			mods: ['gh:fatlard1993/big-boats', { spec: 'gh:fatlard1993/fence-posts', version: '3.0.1' }, 'mr:sodium'],
+		});
+		expect(left).toEqual([{ source: 'local', path: '/home/me/mine.jar' }]);
+	});
+
+	test('is read from its file alone, its mods left as specs for the index to place', async () => {
+		const path = join(directory, 'ender.pack.json');
+
+		await writeFile(path, JSON.stringify(pack));
+
+		expect(await detectPack(path)).toBe('ender');
+
+		const read = await readPack(path, {});
+
+		expect(read.manifest).toEqual({ name: 'Ship Life', minecraft: '26.3', loader: { type: 'fabric' }, mods: [] });
+		expect(read.specs).toHaveLength(2);
+	});
+
+	test("in a repository's zip, carries the game's own files beside it, and not the repository's", async () => {
+		const path = await zip('repo', async staging => {
+			await mkdir(join(staging, 'ship-life-HEAD', 'config'), { recursive: true });
+			await writeFile(join(staging, 'ship-life-HEAD', 'ender.pack.json'), JSON.stringify(pack));
+			await writeFile(join(staging, 'ship-life-HEAD', 'config', 'boats.json'), '{}');
+			await writeFile(join(staging, 'ship-life-HEAD', 'options.txt'), 'fov:0.5');
+			await writeFile(join(staging, 'ship-life-HEAD', 'README.md'), '# Ship Life');
+		});
+
+		expect(await detectPack(path)).toBe('ender');
+
+		const read = await readPack(path, {});
+		const gameDir = join(directory, 'ship-life-game');
+
+		expect((await unpackInto(path, read, gameDir)).sort()).toEqual(['config/boats.json', 'options.txt']);
+	});
+});
+
