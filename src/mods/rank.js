@@ -75,8 +75,8 @@ export const fit = (mods, { minecraft, loader } = {}) =>
 const words = text => (text ?? '').toLowerCase();
 
 /**
- * How well an index entry answers a query: every word must appear somewhere, and an id or name outranks
- * a description. The whole query naming the mod, as its id, its repository or its name, outranks any
+ * How well an index entry answers a query: every word must appear somewhere, and an id or name outranks one
+ * of the themes the index gave it, which outranks a description. The whole query naming the mod, as its id, its repository or its name, outranks any
  * word of it doing so, so "fabric api" is Fabric API before a repository called fabric. Whole matches
  * are not scored against each other, since a copy of a name matches as well as the name: stars decide.
  */
@@ -84,6 +84,7 @@ const relevance = (entry, terms) => {
 	const ids = [entry.repo, ...(entry.latest?.mods ?? []).map(mod => mod.id)].map(words);
 	const names = (entry.latest?.mods ?? []).map(mod => words(mod.name));
 	const description = words(entry.description || entry.summary?.text);
+	const themes = new Set(entry.tags ?? []);
 	const slugs = new Set([terms.join('-'), terms.join('_'), terms.join('')]);
 	const whole = ids.some(candidate => slugs.has(candidate.split('/').at(-1))) || names.includes(terms.join(' '));
 	if (whole) return 1000;
@@ -93,6 +94,7 @@ const relevance = (entry, terms) => {
 	for (const term of terms) {
 		if (ids.some(candidate => candidate === term || candidate.endsWith(`/${term}`))) score += 100;
 		else if (ids.some(candidate => candidate.includes(term)) || names.some(name => name.includes(term))) score += 10;
+		else if (themes.has(term) || themes.has(term.replace(/s$/, ''))) score += 5;
 		else if (description.includes(term)) score += 1;
 		else return 0;
 	}

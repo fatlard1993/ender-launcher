@@ -323,6 +323,13 @@ describe('searching the index', () => {
 		]);
 	});
 
+	test("a theme the index gave a repository finds it, above a word in another's description", () => {
+		const themed = entry('t/boats', [mod('boats')], { tags: ['ship', 'sail'] });
+		const described = entry('d/other', [mod('other')], { description: 'Not ships, but trains' });
+
+		expect(rank([described, themed], 'ships').map(({ entry: found }) => found.repo)).toEqual(['t/boats', 'd/other']);
+	});
+
 	test('every word of the query has to land somewhere', async () => {
 		expect((await search('menu mods', { index })).map(hit => hit.id)).toEqual(['TerraformersMC/ModMenu']);
 		expect(await search('menu banana', { index })).toEqual([]);
