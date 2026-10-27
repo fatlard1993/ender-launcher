@@ -12,7 +12,11 @@ This reads Mojang's manifest and Fabric's meta directly. There is no mirror to w
 
 ## Getting started
 
+ender runs on [Bun](https://bun.sh):
+
 ```
+git clone https://github.com/fatlard1993/ender-launcher
+cd ender-launcher
 bun install
 bun link            # puts `ender` on your PATH
 ```
