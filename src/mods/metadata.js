@@ -292,3 +292,92 @@ export const readLinks = async jar => {
 
 	return links.filter(({ url }) => !seen.has(url) && seen.add(url));
 };
+
+/** The kinds of thing a language file names, by the first part of its keys; the old `.lang` files said `tile`. */
+const NAMED = {
+	block: 'block',
+	tile: 'block',
+	item: 'item',
+	entity: 'entity',
+	enchantment: 'enchantment',
+	biome: 'biome',
+	effect: 'effect',
+	itemGroup: 'group',
+};
+
+/** The data a jar can ship, by the folder under `data/<namespace>/` it is kept in, singular or plural. */
+const SHIPPED = {
+	worldgen: 'worldgen',
+	structure: 'structure',
+	structures: 'structure',
+	recipe: 'recipe',
+	recipes: 'recipe',
+	loot_table: 'loot_table',
+	loot_tables: 'loot_table',
+	advancement: 'advancement',
+	advancements: 'advancement',
+	dimension: 'dimension',
+	dimension_type: 'dimension',
+	enchantment: 'enchantment',
+};
+
+const NAMES_KEPT = 100;
+
+const LANG = /^assets\/([^/]+)\/lang\/en_us\.(json|lang)$/i;
+
+const langPairs = (source, format) => {
+	if (format.toLowerCase() === 'json') return Object.entries(parseLeniently(source));
+
+	return source
+		.split(/\r?\n/)
+		.map(line => line.match(/^([^#=][^=]*)=(.*)$/))
+		.filter(Boolean)
+		.map(([, key, value]) => [key.trim(), value.trim()]);
+};
+
+/**
+ * What a jar adds to the game, as its own English language file and data folders tell it: the names of its blocks,
+ * items, entities, enchantments, biomes, effects and creative tabs, the kinds of data it ships, and whether it
+ * carries shaders. Vanilla's namespace is left out, which a jar uses only to change the game's own.
+ */
+export const readContent = async jar => {
+	const entries = await listEntries(jar);
+	const names = {};
+	const data = new Set();
+	let shaders = false;
+
+	for (const entry of entries) {
+		const [top, namespace, folder] = entry.split('/');
+
+		if (namespace === 'minecraft') continue;
+		if (top === 'data' && SHIPPED[folder]) data.add(SHIPPED[folder]);
+		if (top === 'assets' && folder === 'shaders') shaders = true;
+
+		const lang = entry.match(LANG);
+
+		if (!lang || lang[1] === 'minecraft') continue;
+
+		let pairs;
+
+		try {
+			pairs = langPairs(await text(jar, entry), lang[2]);
+		} catch {
+			continue;
+		}
+
+		for (const [key, value] of pairs) {
+			const kind = NAMED[key.split('.')[0]];
+
+			if (kind === undefined || typeof value !== 'string' || value.trim() === '') continue;
+			if (kind !== 'group' && key.split('.').length !== 3 && !key.endsWith('.name')) continue;
+
+			const kept = (names[kind] ??= []);
+
+			if (kept.length < NAMES_KEPT && !kept.includes(value.trim())) kept.push(value.trim());
+		}
+	}
+
+	for (const kind of Object.keys(names)) names[kind].sort();
+
+	return { names, data: [...data].sort(), shaders };
+};

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 
-import { ICON_LIMIT, parseLeniently, readIcon, readLinks, readMods } from '../src/mods/metadata';
+import { ICON_LIMIT, parseLeniently, readContent, readIcon, readLinks, readMods } from '../src/mods/metadata';
 import { jar as jarIn } from './jars';
 
 let directory;
@@ -305,5 +305,41 @@ describe('the links a jar gives', () => {
 		});
 
 		expect((await readLinks(path)).map(link => link.name)).toEqual(['issues', 'donate']);
+	});
+});
+
+describe('what a jar adds', () => {
+	test("its own names for what it adds, the data it ships and its shaders, and none of vanilla's", async () => {
+		const path = await jar({
+			'assets/boats/lang/en_us.json': JSON.stringify({
+				'block.boats.helm': 'Ship Helm',
+				'block.boats.helm.tooltip': 'Steers a ship',
+				'item.boats.paddle': 'Paddle',
+				'entity.boats.ship': 'Ship',
+				'itemGroup.boats': 'Big Boats',
+				'gui.boats.title': 'Christen your ship',
+			}),
+			'assets/minecraft/lang/en_us.json': JSON.stringify({ 'block.minecraft.stone': 'Smooth Stone' }),
+			'assets/old/lang/en_us.lang': '# old style\ntile.old.rope.name=Rope\nitem.old.hook.name=Grappling Hook\n',
+			'assets/boats/shaders/core/water.json': '{}',
+			'data/boats/worldgen/structure/harbor.json': '{}',
+			'data/boats/recipes/helm.json': '{}',
+			'data/minecraft/tags/blocks/logs.json': '{}',
+		});
+
+		expect(await readContent(path)).toEqual({
+			names: {
+				block: ['Rope', 'Ship Helm'],
+				item: ['Grappling Hook', 'Paddle'],
+				entity: ['Ship'],
+				group: ['Big Boats'],
+			},
+			data: ['recipe', 'worldgen'],
+			shaders: true,
+		});
+	});
+
+	test('a jar with no language file or data adds nothing it names', async () => {
+		expect(await readContent(await jar({ 'a/A.class': 'x' }))).toEqual({ names: {}, data: [], shaders: false });
 	});
 });
