@@ -6,7 +6,8 @@ export const HOSTS = { github: 'GitHub', codeberg: 'Codeberg', gitlab: 'GitLab' 
 /** Stars a repository needs before a mod id it claims is taken to name it unasked. */
 export const ESTABLISHED = 50;
 
-const ownerOf = ({ host, repo }) => `${host ?? 'github'}:${repo.split('/')[0].toLowerCase()}`;
+/** Who a repository belongs to, as one key across hosts: two hosts can each have an owner of one name. */
+export const ownerOf = ({ host, repo }) => `${host ?? 'github'}:${repo.split('/')[0].toLowerCase()}`;
 
 const authorsOf = new WeakMap();
 
