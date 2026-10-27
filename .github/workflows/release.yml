@@ -1,0 +1,52 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-download-url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.0/bun-linux-x64.zip
+      - run: bun install
+      - name: the tag is the package's version
+        run: |
+          version="$(jq -r .version package.json)"
+          [ "v$version" = "$GITHUB_REF_NAME" ] || { echo "Tag $GITHUB_REF_NAME, but package.json says $version"; exit 1; }
+      - run: bun test
+      # Bun compiles for every platform from this one; each binary carries Bun itself, so needs nothing installed
+      - name: build
+        run: |
+          mkdir dist
+          for target in linux-x64 linux-arm64 darwin-x64 darwin-arm64 windows-x64; do
+            suffix=''; [ "${target%%-*}" = windows ] && suffix='.exe'
+            bun build --compile --minify --target="bun-$target" index.js --outfile "dist/ender-$target$suffix"
+          done
+          (cd dist && sha256sum ender-* > SHA256SUMS)
+          cat dist/SHA256SUMS
+      - name: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --title "ender $GITHUB_REF_NAME" --generate-notes
+      - name: homebrew
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then echo 'No TAP_TOKEN secret, so the Homebrew formula is left as it was'; exit 0; fi
+          git clone -q "https://x-access-token:$TAP_TOKEN@github.com/fatlard1993/homebrew-tap.git" tap
+          mkdir -p tap/Formula
+          bun scripts/formula.js "${GITHUB_REF_NAME#v}" dist/SHA256SUMS > tap/Formula/ender.rb
+          cd tap
+          git config user.name 'ender-launcher'
+          git config user.email 'ender-launcher@users.noreply.github.com'
+          git add Formula/ender.rb
+          git commit -qm "ender ${GITHUB_REF_NAME#v}"
+          git push -q
