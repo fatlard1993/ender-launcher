@@ -175,6 +175,21 @@ const named = (entry, terms) => {
  * declares that mod, that nothing vouches for the name. An empty query answers with everything that
  * fits, by stars.
  */
+const YEAR = 365 * 24 * 60 * 60 * 1000;
+
+/**
+ * How far a repository is relied on, which orders matches that answer a query as well as each other: its stars, the
+ * indexed mods that need it, counted double since each is a mod built on it, and a release within two years, more
+ * within one.
+ * Download counts are left out: they count only the releases on its own host, and most players download elsewhere.
+ */
+export const standing = (entry, now = Date.now()) => {
+	const age = (now - Date.parse(entry.latest?.published)) / YEAR;
+	const recent = Number(age < 1) + Number(age < 2) / 2;
+
+	return Math.log1p(entry.stars ?? 0) + 2 * Math.log1p(entry.usedBy ?? 0) + recent;
+};
+
 export const rank = (entries, query, { minecraft, loader } = {}) => {
 	const terms = words(query).split(/\s+/).filter(Boolean);
 	const vouched = terms.length > 0 && entries.some(entry => (entry.stars ?? 0) >= ESTABLISHED && named(entry, terms));
@@ -194,7 +209,8 @@ export const rank = (entries, query, { minecraft, loader } = {}) => {
 		.filter(entry => fit(entry.targets, { minecraft, loader }) > 0)
 		.map(entry => ({ entry, score: terms.length === 0 ? 1 : relevance(entry, terms) }))
 		.filter(({ score }) => score > 0)
-		.sort((a, b) => b.score - a.score || (b.entry.stars ?? 0) - (a.entry.stars ?? 0))
+		.map(found => ({ ...found, standing: standing(found.entry) }))
+		.sort((a, b) => b.score - a.score || b.standing - a.standing)
 		.map(({ entry }) => ({
 			entry,
 			sharing: entry.shares ?? sharing(entry, entries),

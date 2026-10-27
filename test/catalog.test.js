@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 
 import { parseModSpec, refineModSpec } from '../src/commands/context';
 import { ESTABLISHED, fit, forgetLoaded, providerOf, requiredIds } from '../src/mods/catalog';
+import { standing } from '../src/mods/rank';
 import { hosted, resolveFromRecord, search } from '../src/mods/indexed';
 import { rank } from '../src/mods/rank';
 import { authorsOf } from '../src/commands/mods';
@@ -339,6 +340,16 @@ describe('searching the index', () => {
 		const described = entry('d/other', [mod('other')], { description: 'Not ships, but trains' });
 
 		expect(rank([described, themed], 'ships').map(({ entry: found }) => found.repo)).toEqual(['t/boats', 'd/other']);
+	});
+
+	test('equal matches are ordered by how far they are relied on, not by stars alone', () => {
+		const now = Date.parse('2026-10-27T00:00:00Z');
+		const released = when => ({ tag: '1', published: when, mods: [mod('x')], provides: [], capabilities: [] });
+		const starred = entry('a/starred', [mod('x')], { stars: 40, latest: released('2023-01-01T00:00:00Z') });
+		const relied = entry('b/relied', [mod('x')], { stars: 10, usedBy: 12, latest: released('2026-09-01T00:00:00Z') });
+
+		expect(standing(relied, now)).toBeGreaterThan(standing(starred, now));
+		expect(standing(entry('c/none', [mod('x')], { stars: 0, latest: { mods: [] } }), now)).toBe(0);
 	});
 
 	test('every word of the query has to land somewhere', async () => {
