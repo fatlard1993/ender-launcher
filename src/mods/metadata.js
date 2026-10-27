@@ -44,6 +44,16 @@ const manifestValue = (manifest, key) => {
 	return unwrapped.match(new RegExp(`^${key}: *(.*)$`, 'm'))?.[1]?.trim();
 };
 
+/**
+ * The mods a mod names besides those it needs: ones it works with (suggests), ones the loader refuses to run beside
+ * it (breaks), and ones it warns about (conflicts). Each is listed only when it names any.
+ */
+const relations = ({ suggests = [], breaks = [], conflicts = [] }) => ({
+	...(suggests.length > 0 ? { suggests: [...new Set(suggests)] } : {}),
+	...(breaks.length > 0 ? { breaks: [...new Set(breaks)] } : {}),
+	...(conflicts.length > 0 ? { conflicts: [...new Set(conflicts)] } : {}),
+});
+
 const fabric = (json, loader = 'fabric', bundled = []) => ({
 	loader,
 	id: json.id,
@@ -54,13 +64,18 @@ const fabric = (json, loader = 'fabric', bundled = []) => ({
 	environment: json.environment ?? '*',
 	depends: Object.keys(json.depends ?? {}),
 	provides: [...(json.provides ?? []), ...bundled],
+	...relations({
+		suggests: [...Object.keys(json.recommends ?? {}), ...Object.keys(json.suggests ?? {})],
+		breaks: Object.keys(json.breaks ?? {}),
+		conflicts: Object.keys(json.conflicts ?? {}),
+	}),
 });
 
 const quilt = (json, bundled = []) => {
 	const loader = json.quilt_loader ?? {};
-	const depends = (loader.depends ?? []).map(dependency =>
-		typeof dependency === 'string' ? { id: dependency } : dependency,
-	);
+	const listed = dependencies =>
+		(dependencies ?? []).map(dependency => (typeof dependency === 'string' ? { id: dependency } : dependency));
+	const depends = listed(loader.depends);
 
 	return {
 		loader: 'quilt',
@@ -72,8 +87,12 @@ const quilt = (json, bundled = []) => {
 			[depends.find(dependency => dependency.id === 'minecraft')?.versions].flat().filter(Boolean).join(' || ') ||
 			undefined,
 		environment: json.minecraft?.environment ?? '*',
-		depends: depends.map(dependency => dependency.id),
+		depends: depends.filter(dependency => !dependency.optional).map(dependency => dependency.id),
 		provides: [...(loader.provides ?? []).map(provided => provided.id ?? provided), ...bundled],
+		...relations({
+			suggests: depends.filter(dependency => dependency.optional).map(dependency => dependency.id),
+			breaks: listed(loader.breaks).map(dependency => dependency.id),
+		}),
 	};
 };
 
@@ -103,6 +122,10 @@ const bundledIds = async (jar, entries) => {
 	return ids.filter(Boolean);
 };
 
+/** NeoForge names a dependency's kind; Forge before it said only whether one was mandatory. */
+const kindOf = dependency =>
+	dependency.type?.toLowerCase() ?? (dependency.mandatory === false ? 'optional' : 'required');
+
 /**
  * Forge and NeoForge describe their mods in TOML, one jar sometimes carrying several. A version of
  * `${file.jarVersion}` is filled from the jar manifest at load time, so it is filled from there here.
@@ -126,9 +149,18 @@ const toml = (source, loader, manifest) => {
 			description: mod.description?.trim(),
 			minecraft: minecraft?.versionRange,
 			environment: minecraft?.side?.toLowerCase() === 'client' ? 'client' : '*',
-			depends: dependencies
-				.filter(dependency => dependency.mandatory !== false && dependency.type !== 'optional')
-				.map(dependency => dependency.modId),
+			depends: dependencies.filter(dependency => kindOf(dependency) === 'required').map(dependency => dependency.modId),
+			...relations({
+				suggests: dependencies
+					.filter(dependency => kindOf(dependency) === 'optional')
+					.map(dependency => dependency.modId),
+				breaks: dependencies
+					.filter(dependency => kindOf(dependency) === 'incompatible')
+					.map(dependency => dependency.modId),
+				conflicts: dependencies
+					.filter(dependency => kindOf(dependency) === 'discouraged')
+					.map(dependency => dependency.modId),
+			}),
 		};
 	});
 };

@@ -112,8 +112,68 @@ describe('mods declared in a built jar', () => {
 				minecraft: '[1.21.1,1.21.2)',
 				environment: '*',
 				depends: ['minecraft'],
+				suggests: ['jei'],
 			},
 		]);
+	});
+
+	test('what a mod works with, breaks and conflicts with, apart from what it needs, on every loader', async () => {
+		const fabric = await jar({
+			'fabric.mod.json': JSON.stringify({
+				id: 'f',
+				version: '1',
+				depends: { 'fabric-api': '*' },
+				recommends: { modmenu: '*' },
+				suggests: { jei: '*' },
+				breaks: { optifabric: '*' },
+				conflicts: { sodium: '<0.6' },
+			}),
+		});
+		const quilt = await jar({
+			'quilt.mod.json': JSON.stringify({
+				quilt_loader: {
+					id: 'q',
+					version: '1',
+					depends: ['qsl', { id: 'emi', optional: true }],
+					breaks: [{ id: 'optifabric' }],
+				},
+			}),
+		});
+		const forge = await jar({
+			'META-INF/mods.toml': [
+				'modLoader = "javafml"',
+				'[[mods]]',
+				'modId = "g"',
+				'version = "1"',
+				'[[dependencies.g]]',
+				'modId = "curios"',
+				'mandatory = false',
+				'[[dependencies.g]]',
+				'modId = "architectury"',
+				'mandatory = true',
+				'[[dependencies.g]]',
+				'modId = "optifine"',
+				'type = "incompatible"',
+				'[[dependencies.g]]',
+				'modId = "rubidium"',
+				'type = "discouraged"',
+			].join('\n'),
+		});
+
+		expect((await readMods(fabric))[0]).toMatchObject({
+			depends: ['fabric-api'],
+			suggests: ['modmenu', 'jei'],
+			breaks: ['optifabric'],
+			conflicts: ['sodium'],
+		});
+		expect((await readMods(quilt))[0]).toMatchObject({ depends: ['qsl'], suggests: ['emi'], breaks: ['optifabric'] });
+		expect((await readMods(forge))[0]).toMatchObject({
+			depends: ['architectury'],
+			suggests: ['curios'],
+			breaks: ['optifine'],
+			conflicts: ['rubidium'],
+		});
+		expect((await readMods(forge))[0]).not.toHaveProperty('depends', expect.arrayContaining(['optifine']));
 	});
 
 	test('a jar built for two loaders declares both', async () => {
