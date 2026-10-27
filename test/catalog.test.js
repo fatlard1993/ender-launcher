@@ -123,6 +123,17 @@ describe('the index catalog', () => {
 		expect(providerOf('backpacks', listing, undefined, { minecraft: '26.3' })).toBeUndefined();
 	});
 
+	test("a fork keeping another mod's id does not answer for it, and an id shortening its own name does", () => {
+		const fork = entry('s/gitmatica', [mod('litematica', { name: 'Gitmatica' })], { stars: 98 });
+		const shortened = entry('t/In-Game-Account-Switcher', [mod('ias', { name: 'In-Game Account Switcher' })], {
+			stars: 131,
+		});
+		const both = [...listing, fork, shortened];
+
+		expect(providerOf('litematica', both)).toBeUndefined();
+		expect(providerOf('ias', both).repo).toBe('t/In-Game-Account-Switcher');
+	});
+
 	// minecraft-access carries Cloth Config and Fabric API in its jar, and has the stars to be trusted
 	test('a jar carrying a mod it is not named for does not answer for that mod', () => {
 		const carrier = entry('m/access', [mod('minecraft_access', { provides: ['cloth-config', 'fabric-api-base'] })], {

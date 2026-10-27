@@ -206,16 +206,42 @@ export const rank = (entries, query, { minecraft, loader } = {}) => {
 /** The part of a mod id before its first separator, which a library's modules share with it. */
 const namespaceOf = id => id.split(/[-_]/)[0];
 
+const flat = text => (text ?? '').toLowerCase().replaceAll(/[^a-z\d]/g, '');
+
+/** Every letter of `short` in `long`, in order: `ias` in in-game account switcher, `minelp` in mine little pony. */
+const spelledIn = (short, long) => {
+	let at = 0;
+
+	for (const letter of long) if (letter === short[at]) ++at;
+
+	return short.length > 0 && at === short.length;
+};
+
 /**
- * Every index entry claiming a mod id, most likely first: those whose own mod has the id, by stars,
- * then those that provide it as a module of their own, named under their own id, by how much they
- * provide. A library is often bundled inside the mods that use it, so a jar carrying a mod it is not
- * named for is not where that mod comes from.
+ * Whether a mod's id names the repository or mod declaring it, whole or shortened: a fork keeping the id of the mod it
+ * replaces, or a template's id left in place, is not where that mod comes from.
+ */
+const namesItself = (entry, mod) => {
+	const ids = [flat(mod.id), flat(namespaceOf(mod.id))];
+
+	return [entry.repo.split('/').at(-1), mod.name]
+		.map(flat)
+		.filter(Boolean)
+		.some(name => ids.some(id => spelledIn(id, name) || spelledIn(name, id)));
+};
+
+/**
+ * Every index entry claiming a mod id, most likely first: those whose own mod has the id and is named by it, by stars,
+ * then those that provide it as a module of their own, named under their own id, by how much they provide. A library
+ * is often bundled inside the mods that use it, so a jar carrying a mod it is not named for is not where that mod
+ * comes from, and a mod keeping another's id is not that mod.
  */
 export const claimantsOf = (id, entries, fits = {}) => {
 	const byStars = (a, b) => (b.stars ?? 0) - (a.stars ?? 0);
 	const fitting = entry => (!fits.minecraft && !fits.loader) || fit(entry.targets, fits) > 0;
-	const own = entries.filter(entry => entry.latest?.mods.some(mod => mod.id === id) && fitting(entry)).sort(byStars);
+	const own = entries
+		.filter(entry => entry.latest?.mods.some(mod => mod.id === id && namesItself(entry, mod)) && fitting(entry))
+		.sort(byStars);
 	const providers = entries
 		.filter(
 			entry =>
