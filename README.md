@@ -12,7 +12,29 @@ This reads Mojang's manifest and Fabric's meta directly. There is no mirror to w
 
 ## Getting started
 
-ender runs on [Bun](https://bun.sh):
+ender is one file, with nothing else to install: it fetches the Java each game version needs itself.
+
+On Linux or macOS:
+
+```
+curl -fsSL https://raw.githubusercontent.com/fatlard1993/ender-launcher/main/install.sh | sh
+```
+
+On Windows, in PowerShell:
+
+```
+irm https://raw.githubusercontent.com/fatlard1993/ender-launcher/main/install.ps1 | iex
+```
+
+With Homebrew:
+
+```
+brew install fatlard1993/tap/ender
+```
+
+Each checks the download against the release's sha256 before installing it. `ender upgrade` brings an installed ender up to the newest release.
+
+To work on ender itself, run it from a checkout with [Bun](https://bun.sh):
 
 ```
 git clone https://github.com/fatlard1993/ender-launcher
@@ -21,7 +43,7 @@ bun install
 bun link            # puts `ender` on your PATH
 ```
 
-`bun run compile` instead builds `ender` as a single binary that runs without bun.
+`bun run compile` builds the single binary the releases carry.
 
 If you have a modpack, start from it:
 
