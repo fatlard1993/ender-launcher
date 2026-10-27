@@ -7,7 +7,7 @@ const GROUPS = [
 	['Mods', ['search', 'add', 'drop', 'sync', 'update', 'support']],
 	['Servers', ['server']],
 	['Accounts', ['account']],
-	['Settings', ['config', 'java']],
+	['Settings', ['config', 'java', 'upgrade']],
 ];
 
 export const usage = () => {

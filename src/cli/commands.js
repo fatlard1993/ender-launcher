@@ -4,6 +4,7 @@ import * as modCommands from '../commands/mods';
 import * as playCommands from '../commands/play';
 import * as serveCommands from '../commands/serve';
 import * as settingsCommands from '../commands/settings';
+import * as upgradeCommands from '../commands/upgrade';
 
 const instanceFlag = { instance: { alias: 'i', description: 'Instance to act on' } };
 
@@ -229,6 +230,13 @@ export const commands = {
 		},
 		run: accountCommands.ls,
 	},
+	upgrade: {
+		summary: 'Replace this ender with the newest release',
+		usage: 'ender upgrade',
+		flags: { force: { type: 'boolean', description: 'Download it even when this is already the newest' } },
+		run: upgradeCommands.upgrade,
+	},
+
 	config: {
 		summary: 'Read or write global settings',
 		usage: 'ender config [key] [value]',
