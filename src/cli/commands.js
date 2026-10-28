@@ -6,6 +6,7 @@ import * as serveCommands from '../commands/serve';
 import * as settingsCommands from '../commands/settings';
 import * as shareCommands from '../commands/share';
 import * as upgradeCommands from '../commands/upgrade';
+import * as webCommands from '../commands/web';
 
 const instanceFlag = { instance: { alias: 'i', description: 'Instance to act on' } };
 
@@ -191,6 +192,20 @@ export const commands = {
 		usage: 'ender support [--instance name]',
 		flags: { ...instanceFlag, json: { type: 'boolean', description: 'Print the authors and links as JSON' } },
 		run: modCommands.support,
+	},
+	web: {
+		summary: 'Browse the index in your browser, adding and dropping mods in your instances',
+		usage: 'ender web [--port number]',
+		flags: {
+			port: { type: 'number', description: 'Serve on this port rather than 7460' },
+			open: {
+				type: 'boolean',
+				default: true,
+				description: 'Open it in the browser',
+				off: 'Print the address without opening a browser',
+			},
+		},
+		run: webCommands.web,
 	},
 	share: {
 		summary: 'Share a screenshot and its story on the index, for the mods it shows',

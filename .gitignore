@@ -1,3 +1,4 @@
 node_modules
 ender
 *.log
+src/commands/site.generated.js

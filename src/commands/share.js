@@ -1,6 +1,7 @@
 import { readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { openInBrowser } from '../browser';
 import { done, info, paint, warn } from '../out';
 import { parseModSpec, targetInstance } from './context';
 
@@ -28,21 +29,6 @@ const newestScreenshot = async manifest => {
 	const [newest] = dated.toSorted((a, b) => b.at - a.at);
 
 	return newest && join(folder, newest.file);
-};
-
-const OPENERS = { darwin: ['open'], win32: ['cmd', '/c', 'start', ''] };
-
-const openInBrowser = async url => {
-	try {
-		const opened = Bun.spawn([...(OPENERS[process.platform] ?? ['xdg-open']), url], {
-			stdout: 'ignore',
-			stderr: 'ignore',
-		});
-
-		return (await opened.exited) === 0;
-	} catch {
-		return false;
-	}
 };
 
 /** Open the index's form for sharing a shot of this instance, with the mods named filled in. */

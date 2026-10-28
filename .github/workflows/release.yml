@@ -22,6 +22,19 @@ jobs:
           version="$(jq -r .version package.json)"
           [ "v$version" = "$GITHUB_REF_NAME" ] || { echo "Tag $GITHUB_REF_NAME, but package.json says $version"; exit 1; }
       - run: bun test
+      # The index's pages for ender web, built from its newest code against this ender: ender-index finds ender at
+      # ../ender-launcher, so this release is checked out again beside it
+      - uses: actions/checkout@v4
+        with:
+          path: site/ender-launcher
+      - uses: actions/checkout@v4
+        with:
+          repository: fatlard1993/ender-index
+          path: site/ender-index
+      - name: the index's pages
+        run: |
+          (cd site/ender-index && bun install && bun run build:site)
+          bun scripts/embedSite.js site/ender-index/client/build
       # Bun compiles for every platform from this one; each binary carries Bun itself, so needs nothing installed
       - name: build
         run: |

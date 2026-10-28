@@ -63,6 +63,8 @@ ender launch
 
 Import reads the version and loader out of `mmc-pack.json`, follows `.minecraft` to wherever it really points, and asks Modrinth to identify the jars already in `mods/`. What it recognizes becomes a declared mod. What it does not recognize is listed and then left exactly where it is.
 
+To browse mods rather than name them, `ender web` opens the [index](https://fatlard1993.github.io/ender-index/) in your browser with your instances beside it: pick one, and each mod says whether it is installed, with a button to add or drop it. A release carries the index's pages inside it; the mods themselves load live. It serves `http://localhost:7460` (`--port` for another), answers only pages it served itself, and adds nothing but the `gh:`, `cb:`, `gl:`, `mr:` and `cf:` specs search writes. From a checkout, build the index's site and point `ENDER_SITE` at its `client/build`.
+
 ## Packs
 
 `ender import` takes a pack as readily as an instance, and decides which kind it is by looking inside rather than at the extension:
