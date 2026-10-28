@@ -4,6 +4,7 @@ import * as modCommands from '../commands/mods';
 import * as playCommands from '../commands/play';
 import * as serveCommands from '../commands/serve';
 import * as settingsCommands from '../commands/settings';
+import * as shareCommands from '../commands/share';
 import * as upgradeCommands from '../commands/upgrade';
 
 const instanceFlag = { instance: { alias: 'i', description: 'Instance to act on' } };
@@ -186,6 +187,15 @@ export const commands = {
 		usage: 'ender support [--instance name]',
 		flags: { ...instanceFlag, json: { type: 'boolean', description: 'Print the authors and links as JSON' } },
 		run: modCommands.support,
+	},
+	share: {
+		summary: 'Share a screenshot and its story on the index, for the mods it shows',
+		usage: 'ender share [mod...] [--instance name]',
+		flags: {
+			...instanceFlag,
+			print: { type: 'boolean', description: 'Print the share page address instead of opening a browser' },
+		},
+		run: shareCommands.share,
 	},
 	update: {
 		summary: 'Move mods to the newest compatible build',

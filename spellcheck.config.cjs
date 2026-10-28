@@ -33,6 +33,7 @@ module.exports = {
 		'classloading',
 		'classpath',
 		'clientid',
+		'cmd',
 		'codeberg',
 		'cpw',
 		'curseforge',
