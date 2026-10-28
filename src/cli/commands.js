@@ -244,6 +244,16 @@ export const commands = {
 		flags: { ...instanceFlag, ...depsFlag },
 		run: modCommands.update,
 	},
+	follow: {
+		summary: 'Have an instance follow a pack, which every update then reads first',
+		usage: 'ender follow <gist | gh:owner/repo | https link> [--instance name] [--keep]',
+		flags: {
+			...instanceFlag,
+			...depsFlag,
+			keep: { type: 'boolean', description: "Keep the instance's own mods beside the pack's" },
+		},
+		run: modCommands.follow,
+	},
 
 	server: {
 		summary: 'Server instance management',

@@ -10,7 +10,7 @@ import { entryKey, evidence, reportSync, resolveAll, sources, syncMods } from '.
 import { done, fail, info, paint, plural, step, warn } from '../out';
 import { paths } from '../paths';
 import { parseModSpec, refineModSpec, specFor, targetInstance } from './context';
-import { refreshFromPack } from './packSource';
+import { isRemote, refreshFromPack, sourceOf } from './packSource';
 
 const contextFor = (manifest, config, flags = {}) => ({
 	minecraft: manifest.minecraft,
@@ -230,6 +230,50 @@ export const update = async ({ positionals, flags }) => {
 				)
 			: undefined;
 	const result = await updateInstance(manifest, config, { targeted, flags });
+
+	done(updatedLine(result));
+
+	return result.failures.length > 0 ? 1 : 0;
+};
+
+const FOLLOW_USAGE =
+	'ender follow <pack> [--instance name] [--keep]: a gist link or gist:id, gh:owner/repo, an https link, or an ender pack file';
+
+/**
+ * An instance set to follow a pack: its own choices give way to the pack's unless kept. Following the pack it already
+ * follows changes nothing, so following again is only an update. Answers the choices that gave way.
+ */
+export const startFollowing = (manifest, source, { keep = false } = {}) => {
+	if (manifest.pack?.source === source) return [];
+
+	const given = keep ? [] : manifest.mods.map(entryKey);
+
+	manifest.pack = { source, mods: [] };
+	if (!keep) manifest.mods = [];
+
+	return given;
+};
+
+/** Have an instance follow a pack, keeping its game directory and worlds: from here every update reads the pack first. */
+export const follow = async ({ positionals, flags }) => {
+	const [wanted] = positionals;
+
+	if (wanted === undefined) throw new Error(FOLLOW_USAGE);
+	if (!isRemote(wanted) && !(await Bun.file(resolve(wanted)).exists())) throw new Error(`No such pack: ${wanted}`);
+
+	const { manifest, config } = await targetInstance(flags.instance);
+	const source = sourceOf(wanted);
+	const following = manifest.pack?.source === source;
+	const given = startFollowing(manifest, source, { keep: flags.keep });
+
+	if (!following) step(`${manifest.name} follows ${source} now`);
+
+	const result = await updateInstance(manifest, config, { flags });
+	const followed = new Set(manifest.pack.mods);
+
+	for (const key of given.filter(each => !followed.has(each))) {
+		info(`  ${paint.red('-')} ${key} ${paint.dim('(chosen here, and not in the pack)')}`);
+	}
 
 	done(updatedLine(result));
 

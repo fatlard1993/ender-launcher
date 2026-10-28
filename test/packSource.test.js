@@ -85,6 +85,31 @@ describe('updating from a pack', () => {
 		expect(manifest.minecraft).toBe('1.21.4');
 	});
 
+	test("following a pack gives an instance's own choices way to the pack's, unless kept, and following it again changes nothing", async () => {
+		const { startFollowing } = await import('../src/commands/mods');
+		const own = () => ({
+			mods: [
+				{ source: 'gradle', path: '/src/pandorical' },
+				{ source: 'modrinth', id: 'sodium' },
+			],
+		});
+		const manifest = own();
+
+		expect(startFollowing(manifest, 'gist:abc')).toEqual(['gradle:/src/pandorical', 'modrinth:sodium']);
+		expect(manifest).toEqual({ mods: [], pack: { source: 'gist:abc', mods: [] } });
+
+		manifest.mods = [{ source: 'github', id: 'fatlard1993/pandorical' }];
+		manifest.pack.mods = ['github:fatlard1993/pandorical'];
+
+		expect(startFollowing(manifest, 'gist:abc')).toEqual([]);
+		expect(manifest.mods).toHaveLength(1);
+
+		const kept = own();
+
+		expect(startFollowing(kept, 'gist:abc', { keep: true })).toEqual([]);
+		expect(kept.mods).toHaveLength(2);
+	});
+
 	test("releases the pins set beside a pack on update, never the pack's own", async () => {
 		const { releasePins } = await import('../src/commands/mods');
 		const { mods, unpinned } = releasePins({
