@@ -75,6 +75,17 @@ Import reads the version and loader out of `mmc-pack.json`, follows `.minecraft`
 
 Whatever a pack carries as loose files is unpacked into the game directory, then offered to Modrinth by hash. A bundled jar that turns out to be a published mod becomes a declared, updatable entry; one that does not is listed and left alone, the same as any jar you dropped in yourself. A pack's `client`/`server` markings are honored, so importing a pack into a server instance leaves out what it says is client-only.
 
+### Keeping clients on a pack
+
+An ender pack is one small file, `ender.pack.json`, naming the game version, the loader and the mods chosen; what they need is resolved where it is installed. `ender export` writes one from an instance. Kept in a gist, it is a pack anyone can follow:
+
+```
+ender import gist:aa5e1f0c9b2d4e6f8a1b3c5d7e9f0a2b
+ender launch family --update
+```
+
+An instance imported from an ender pack remembers where it came from. `ender update` reads the pack again first: mods it added come in, mods it dropped go, its pins hold, and mods added beside it stay. `ender launch --update` does that before every launch, and when the update cannot run, says why and launches what is installed. A gist is read through GitHub's API, so an edit reaches the next update at once, whichever of the gist's links was imported.
+
 Otherwise, start fresh. `new` takes mods, so an instance and its contents are one command:
 
 ```

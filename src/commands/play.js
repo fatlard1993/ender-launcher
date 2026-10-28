@@ -6,9 +6,10 @@ import * as instances from '../instance';
 import { installPlan } from '../install';
 import { launch } from '../launch';
 import { resolvePlan } from '../meta/resolve';
-import { done, info, paint, step, warn } from '../out';
+import { done, info, paint, plural, step, warn } from '../out';
 import * as server from '../server';
 import { settingsFor, targetInstance } from './context';
+import { updatedLine, updateInstance } from './mods';
 
 const planFor = async (manifest, side, features) =>
 	resolvePlan({
@@ -83,6 +84,24 @@ export const install = async ({ positionals, flags }) => {
 	return 0;
 };
 
+/**
+ * Update an instance, and its pack, on the way to launching it. An update that fails says what failed and launches the
+ * mods already installed: a client that will not start because a host is down is worse than one a day behind.
+ */
+const updateBeforeLaunch = async (manifest, config, flags) => {
+	try {
+		const result = await updateInstance(manifest, config, { flags });
+
+		if (result.failures.length > 0) {
+			warn(`${plural(result.failures.length, 'mod')} did not update; launching with what is installed`);
+		} else {
+			done(updatedLine(result));
+		}
+	} catch (error) {
+		warn(`The update did not run (${error.message}); launching with what is installed`);
+	}
+};
+
 export const play = async ({ positionals, flags }) => {
 	const { manifest, config } = await targetInstance(flags.instance ?? positionals[0]);
 
@@ -99,6 +118,8 @@ export const play = async ({ positionals, flags }) => {
 			);
 		}
 	}
+
+	if (flags.update) await updateBeforeLaunch(manifest, config, flags);
 
 	const intent = intentOf(manifest, flags);
 	const plan = await planFor(manifest, 'client', intent.features);

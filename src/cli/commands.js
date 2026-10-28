@@ -128,6 +128,10 @@ export const commands = {
 				description: 'Include game assets',
 				off: 'Launch without fetching missing assets',
 			},
+			update: {
+				type: 'boolean',
+				description: "Update its mods first, and its pack's list; if that fails, launch what is installed",
+			},
 			server: { alias: 's', description: 'Join this address as soon as the game is up' },
 			world: { alias: 'w', description: 'Open this save as soon as the game is up' },
 			width: { type: 'number', description: 'Window width' },
