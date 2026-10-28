@@ -193,7 +193,7 @@ export const commands = {
 		usage: 'ender share [mod...] [--instance name]',
 		flags: {
 			...instanceFlag,
-			print: { type: 'boolean', description: 'Print the share page address instead of opening a browser' },
+			print: { type: 'boolean', description: 'Print the share form address instead of opening a browser' },
 		},
 		run: shareCommands.share,
 	},

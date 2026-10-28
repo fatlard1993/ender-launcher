@@ -1,45 +1,23 @@
 import { readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { modsDir } from '../instance';
-import { readMods } from '../mods/metadata';
 import { done, info, paint, warn } from '../out';
 import { parseModSpec, targetInstance } from './context';
 
-export const SHARE_PAGE = 'https://fatlard1993.github.io/ender-index/';
+/** The index's issue form for a shot, which a player shares with their GitHub account. */
+export const SHARE_FORM = 'https://github.com/fatlard1993/ender-index/issues/new';
 
 const REPOSITORY_SOURCES = new Set(['github', 'codeberg', 'gitlab']);
 
-/** A mod as the share page takes it: a repository by the index's key for it, anything else by its id. */
+/** A mod as the share form takes it: a repository by the index's key for it, anything else by its id. */
 export const shareKey = spec => {
 	const { source, id } = parseModSpec(spec);
 
 	return REPOSITORY_SOURCES.has(source) ? `${source}:${id}` : id;
 };
 
-/** The share page, with the mods a shot shows already chosen and the rest of the instance's offered. */
-export const shareUrl = (chosen, offered) => {
-	const params = new URLSearchParams();
-
-	for (const mod of chosen) params.append('mod', mod);
-	for (const mod of offered.filter(mod => !chosen.includes(mod))) params.append('from', mod);
-
-	return `${SHARE_PAGE}?${params}#/share`;
-};
-
-/** The ids of the mods in a mods folder's jars, and the repositories the manifest installs from by key. */
-const instanceMods = async manifest => {
-	const folder = modsDir(manifest);
-	const jars = (await readdir(folder).catch(() => [])).filter(file => file.endsWith('.jar'));
-	const ids = (await Promise.all(jars.map(jar => readMods(join(folder, jar)).catch(() => []))))
-		.flat()
-		.map(mod => mod.id);
-	const repositories = (manifest.mods ?? [])
-		.filter(mod => REPOSITORY_SOURCES.has(mod.source))
-		.map(mod => `${mod.source}:${mod.id}`);
-
-	return [...new Set([...repositories, ...ids.filter(Boolean)])];
-};
+/** The share form, with the mods a shot shows filled in. */
+export const shareUrl = mods => `${SHARE_FORM}?${new URLSearchParams({ template: 'shot.yml', mods: mods.join('\n') })}`;
 
 /** The newest picture in the instance's screenshots folder, which F2 saves to. */
 const newestScreenshot = async manifest => {
@@ -67,24 +45,23 @@ const openInBrowser = async url => {
 	}
 };
 
-/** Open the index's share page for a shot of this instance: the mods named chosen, the rest offered. */
+/** Open the index's form for sharing a shot of this instance, with the mods named filled in. */
 export const share = async ({ positionals, flags }) => {
 	const { manifest } = await targetInstance(flags.instance);
-	const chosen = positionals.map(shareKey);
-	const url = shareUrl(chosen, await instanceMods(manifest));
+	const url = shareUrl(positionals.map(shareKey));
 	const screenshot = await newestScreenshot(manifest);
 
 	if (screenshot) info(`Newest screenshot  ${screenshot}`);
 	else info(paint.dim(`No screenshots in ${manifest.name} yet: F2 in game saves one`));
 
 	if (flags.print || !(await openInBrowser(url))) {
-		if (!flags.print) warn('No browser opened; the page is at');
+		if (!flags.print) warn('No browser opened; the share form is at');
 		process.stdout.write(`${url}\n`);
 
 		return 0;
 	}
 
-	done(`Opened the share page for ${manifest.name}`);
+	done('Opened the share form: drag the screenshot in, and tell its story');
 
 	return 0;
 };

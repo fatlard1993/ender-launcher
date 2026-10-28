@@ -9,13 +9,12 @@ describe('ender share', () => {
 		expect(shareKey('sodium')).toBe('sodium');
 	});
 
-	test('chooses the mods named and offers the rest of the instance, each once', async () => {
-		const { SHARE_PAGE, shareUrl } = await import('../src/commands/share');
-		const url = new URL(shareUrl(['github:a/boats'], ['github:a/boats', 'sodium', 'lithium']));
+	test("opens the index's shot form with the mods named filled in, one to a line", async () => {
+		const { SHARE_FORM, shareUrl } = await import('../src/commands/share');
+		const url = new URL(shareUrl(['github:a/boats', 'lithium']));
 
-		expect(`${url.origin}${url.pathname}`).toBe(SHARE_PAGE);
-		expect(url.hash).toBe('#/share');
-		expect(url.searchParams.getAll('mod')).toEqual(['github:a/boats']);
-		expect(url.searchParams.getAll('from')).toEqual(['sodium', 'lithium']);
+		expect(`${url.origin}${url.pathname}`).toBe(SHARE_FORM);
+		expect(url.searchParams.get('template')).toBe('shot.yml');
+		expect(url.searchParams.get('mods')).toBe('github:a/boats\nlithium');
 	});
 });
