@@ -23,13 +23,13 @@ const CURSEFORGE_LOADERS = { fabric: 'fabric', quilt: 'quilt', forge: 'forge', n
 
 const nameFrom = path => basename(path, extname(path));
 
-/** What kind of thing was handed to `import`, decided by looking inside rather than by extension. */
 /** Where an archive keeps a file named this: at its root, or in the one folder a repository's zip unpacks to. */
 const atTop = (entries, name) =>
 	entries.find(entry => entry === name || (entry.split('/').length === 2 && entry.endsWith(`/${name}`)));
 
 const enderPackIn = entries => atTop(entries, ENDER_PACK);
 
+/** What kind of thing was handed to `import`, decided by looking inside rather than by extension. */
 export const detectPack = async path => {
 	if (path.endsWith('.json')) return 'ender';
 
