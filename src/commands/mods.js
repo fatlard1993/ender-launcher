@@ -10,6 +10,7 @@ import { entryKey, evidence, reportSync, resolveAll, sources, syncMods } from '.
 import { done, fail, info, paint, plural, step, warn } from '../out';
 import { paths } from '../paths';
 import { parseModSpec, refineModSpec, specFor, targetInstance } from './context';
+import { refreshFromPack } from './packSource';
 
 const contextFor = (manifest, config, flags = {}) => ({
 	minecraft: manifest.minecraft,
@@ -160,9 +161,64 @@ export const drop = async ({ positionals, flags }) => {
 };
 
 /** Unpin everything (or the named mods) so the next resolve picks up newer builds. */
+/** The pins an update releases: those set beside a pack, never the pack's own, and of `targeted` alone when given. */
+export const releasePins = (manifest, targeted) => {
+	const packed = new Set(manifest.pack?.mods ?? []);
+	let unpinned = 0;
+	const mods = manifest.mods.map(entry => {
+		if (entry.version === undefined || packed.has(entryKey(entry))) return entry;
+		if (targeted && !targeted.has(entry.id)) return entry;
+
+		++unpinned;
+
+		return { ...entry, version: undefined };
+	});
+
+	return { mods, unpinned };
+};
+
+/**
+ * Bring an instance's mods to the newest builds that fit: a pack-made instance first takes its pack's newest word, and
+ * the pins released are those set beside the pack, never the pack's own, or `targeted` alone when given.
+ */
+export const updateInstance = async (manifest, config, { targeted, flags = {} } = {}) => {
+	let packChanges = 0;
+
+	if (manifest.pack) {
+		const { added, dropped, moved } = await refreshFromPack(manifest, config);
+
+		packChanges = added.length + dropped.length + (moved ? 1 : 0);
+
+		if (moved) info(`  the pack moved to ${paint.green(moved)}`);
+		for (const key of added) info(`  ${paint.green('+')} ${key}`);
+		for (const key of dropped) info(`  ${paint.red('-')} ${key}`);
+	}
+
+	const { mods, unpinned } = releasePins(manifest, targeted);
+
+	manifest.mods = mods;
+	await instances.write(manifest);
+
+	step(`Updating ${manifest.name}${unpinned > 0 ? ` (${plural(unpinned, 'pin')} released)` : ''}`);
+
+	const before = new Map((await instances.readLock(manifest.name)).mods.map(mod => [mod.key, mod.version]));
+	const { lock, failures } = await syncInstance(manifest, config, { withDependencies: flags.deps !== false, flags });
+	const changed = lock.mods.filter(mod => before.get(mod.key) !== undefined && before.get(mod.key) !== mod.version);
+
+	for (const mod of changed) info(`  ${mod.name} ${paint.dim(before.get(mod.key))} -> ${paint.green(mod.version)}`);
+
+	return { changed, failures, current: changed.length === 0 && packChanges === 0 };
+};
+
+/** What an update says it did. */
+export const updatedLine = ({ changed, current }) => {
+	if (current) return 'Everything was already current';
+
+	return changed.length > 0 ? `${plural(changed.length, 'mod')} updated` : "Updated to the pack's newest list";
+};
+
 export const update = async ({ positionals, flags }) => {
 	const { manifest, config } = await targetInstance(flags.instance);
-
 	const targeted =
 		positionals.length > 0
 			? new Set(
@@ -173,31 +229,11 @@ export const update = async ({ positionals, flags }) => {
 					).flat(),
 				)
 			: undefined;
-	let unpinned = 0;
+	const result = await updateInstance(manifest, config, { targeted, flags });
 
-	manifest.mods = manifest.mods.map(entry => {
-		if (entry.version === undefined) return entry;
-		if (targeted && !targeted.has(entry.id)) return entry;
+	done(updatedLine(result));
 
-		++unpinned;
-
-		return { ...entry, version: undefined };
-	});
-
-	await instances.write(manifest);
-
-	step(`Updating ${manifest.name}${unpinned > 0 ? ` (${plural(unpinned, 'pin')} released)` : ''}`);
-
-	const before = new Map((await instances.readLock(manifest.name)).mods.map(mod => [mod.key, mod.version]));
-	const { lock } = await syncInstance(manifest, config, { withDependencies: flags.deps !== false, flags });
-
-	const changed = lock.mods.filter(mod => before.get(mod.key) !== undefined && before.get(mod.key) !== mod.version);
-
-	for (const mod of changed) info(`  ${mod.name} ${paint.dim(before.get(mod.key))} -> ${paint.green(mod.version)}`);
-
-	done(changed.length === 0 ? 'Everything was already current' : `${plural(changed.length, 'mod')} updated`);
-
-	return 0;
+	return result.failures.length > 0 ? 1 : 0;
 };
 
 export const search = async ({ positionals, flags }) => {

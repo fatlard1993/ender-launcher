@@ -1,19 +1,17 @@
-import { mkdir, stat } from 'node:fs/promises';
-import { basename, join, resolve } from 'node:path';
+import { stat } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 
 import { readConfig, updateConfig } from '../config';
-import { fetchWithRetry } from '../download';
-import { paths } from '../paths';
 import * as instances from '../instance';
 import { fromPrism, identifyMods } from '../instance/import';
-import { ENDER_PACK, packFrom } from '../instance/enderPack';
-import { detectPack, readPack, unpackInto } from '../instance/pack';
+import { packFrom } from '../instance/enderPack';
+import { readPack, unpackInto } from '../instance/pack';
 import { entryKey, resolveAll } from '../mods';
-import { newestAsset } from '../mods/github';
 import { resolveVersionId } from '../meta/mojang';
 import { LOADER_SERVICES, assertKnownLoader } from '../meta/resolve';
 import { done, info, paint, plural, step, warn } from '../out';
 import { parseModSpec, refineModSpec, syncInstance } from './mods';
+import { fetchPack, isRemote, resolveSpecs, sourceOf } from './packSource';
 import { targetInstance, targetName } from './context';
 
 const instanceSummary = (manifest, config) => ({
@@ -317,28 +315,7 @@ const activateIfFirst = async name => {
 	if ((await readConfig()).activeInstance === undefined) await updateConfig({ activeInstance: name });
 };
 
-/**
- * An ender pack's specs as the entries `ender add` would make of them, every one or none: a pack whose mods cannot
- * all be placed is refused with each that could not, rather than made into an instance missing them.
- */
-const resolveSpecs = async (specs, config) => {
-	const entries = [];
-	const failed = [];
-
-	for (const { spec, version } of specs) {
-		try {
-			entries.push(await refineModSpec(parseModSpec(version ? `${spec}@${version}` : spec), { index: config.index }));
-		} catch (error) {
-			failed.push(`  ${spec}: ${error.message}`);
-		}
-	}
-
-	if (failed.length > 0) throw new Error(`The pack names mods that cannot be placed:\n${failed.join('\n')}`);
-
-	return entries;
-};
-
-const importPack = async (path, flags) => {
+const importPack = async (path, flags, target = path) => {
 	const pack = await readPack(path, {
 		name: flags.name,
 		minecraft: flags.minecraft,
@@ -361,6 +338,7 @@ const importPack = async (path, flags) => {
 
 	const manifest = await instances.create(pack.manifest.name, {
 		...pack.manifest,
+		...(pack.kind === 'ender' ? { pack: { source: sourceOf(target), mods: pack.manifest.mods.map(entryKey) } } : {}),
 		...(flags.gameDir ? { gameDir: resolve(flags.gameDir) } : {}),
 	});
 
@@ -418,55 +396,9 @@ const importPrismInstance = async (directory, flags) => {
 	return 0;
 };
 
-/** A repository named as `gh:owner/repo`. */
-const REPOSITORY = /^(?:gh:|github:)([\w.-]+\/[\w.-]+)$/;
-
-const download = async (url, name) => {
-	const path = join(paths.cache, 'packs', name);
-
-	step(`Downloading ${url}`);
-
-	const response = await fetchWithRetry(url);
-
-	await mkdir(join(paths.cache, 'packs'), { recursive: true });
-	await Bun.write(path, response);
-
-	return path;
-};
-
-/**
- * A repository's pack: the ender pack or packwiz pack at the head of its default branch, as GitHub zips it, and
- * otherwise the newest release's .mrpack.
- */
-const repositoryPack = async repository => {
-	const head = await download(
-		`https://github.com/${repository}/archive/HEAD.zip`,
-		`${repository.replace('/', '-')}.zip`,
-	);
-
-	if (['ender', 'packwiz'].includes(await detectPack(head).catch(() => undefined))) return head;
-
-	const asset = await newestAsset(repository, '.mrpack', (await readConfig()).githubToken);
-
-	if (asset === undefined) {
-		throw new Error(
-			`${repository} has no ${ENDER_PACK} or pack.toml at its root, and none of its releases carries a .mrpack`,
-		);
-	}
-
-	return download(asset.browser_download_url, asset.name);
-};
-
-/** A pack named by a link or a GitHub repository, downloaded where import reads files from. */
-const fetchPack = target => {
-	const repository = target.match(REPOSITORY)?.[1];
-
-	return repository ? repositoryPack(repository) : download(target, basename(new URL(target).pathname) || 'pack.zip');
-};
-
 /** What import takes, as its usage names it. */
 export const IMPORTABLE =
-	'prism-instance-dir | pack.mrpack | pack.zip | ender.pack.json | packwiz | link | gh:owner/repo';
+	'prism-instance-dir | pack.mrpack | pack.zip | ender.pack.json | packwiz | link | gh:owner/repo | gist';
 
 /** A Prism instance directory, or a modpack in any of the shapes people actually hand around. */
 export const importAny = async ({ positionals, flags }) => {
@@ -474,14 +406,14 @@ export const importAny = async ({ positionals, flags }) => {
 
 	if (target === undefined) throw new Error(`ender import <${IMPORTABLE}>`);
 
-	if (/^https?:\/\//.test(target) || REPOSITORY.test(target)) return importPack(await fetchPack(target), flags);
+	if (isRemote(target)) return importPack(await fetchPack(target), flags, target);
 
 	const path = resolve(target);
 	const info_ = await stat(path).catch(() => undefined);
 
 	if (info_ === undefined) throw new Error(`No such file or directory: ${target}`);
 
-	return info_.isDirectory() ? importPrismInstance(path, flags) : importPack(path, flags);
+	return info_.isDirectory() ? importPrismInstance(path, flags) : importPack(path, flags, path);
 };
 
 const UNSHAREABLE = { local: 'a jar on this disk', url: 'a link', gradle: 'a build from source on this disk' };
