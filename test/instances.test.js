@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 
 import { clone } from '../src/commands/instances';
+import * as kept from '../src/commands/kept';
 import * as instances from '../src/instance';
 import { paths } from '../src/paths';
 
@@ -68,6 +69,11 @@ describe('deleting an instance', () => {
 
 		expect((await instances.remove('gone', { purgeGameDir: true })).kept).toBeUndefined();
 		expect(await readdir(paths.kept)).toHaveLength(1);
+
+		await instances.create('family');
+
+		expect((await instances.remove('family')).kept).not.toBe(kept);
+		expect(await readdir(paths.kept)).toHaveLength(2);
 	});
 
 	test('leaves a game directory outside the instance where it is', async () => {
@@ -85,4 +91,42 @@ test('a clone publishes to a gist of its own, not to the one its original follow
 	await quietly(() => clone({ positionals: ['original', 'copy'], flags: {} }));
 
 	expect((await instances.read('copy')).gist).toBeUndefined();
+});
+
+describe('what deleting kept', () => {
+	const printed = async (run, args) => {
+		const lines = [];
+		const real = console.log;
+
+		console.log = (...parts) => lines.push(parts.join(' '));
+
+		try {
+			await run(args);
+		} finally {
+			console.log = real;
+		}
+
+		return lines;
+	};
+
+	test('is listed by folder, and removed only when asked twice, or every one with --all', async () => {
+		for (const name of ['one', 'two']) {
+			await instances.create(name);
+			await instances.remove(name);
+		}
+
+		const folders = await printed(kept.list, { flags: { names: true } });
+
+		expect(folders).toHaveLength(2);
+		expect(folders[0]).toStartWith('one-');
+		expect(await quietly(() => kept.remove({ positionals: [folders[0]], flags: {} }))).toBe(1);
+		expect(await kept.keptFolders()).toHaveLength(2);
+		await quietly(() => kept.remove({ positionals: [folders[0]], flags: { yes: true } }));
+		expect(await kept.keptFolders()).toEqual([folders[1]]);
+		await expect(kept.remove({ positionals: ['nothing-such'], flags: { yes: true } })).rejects.toThrow(
+			'Nothing kept as',
+		);
+		await quietly(() => kept.remove({ positionals: [], flags: { all: true, yes: true } }));
+		expect(await kept.keptFolders()).toEqual([]);
+	});
 });

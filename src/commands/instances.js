@@ -299,7 +299,7 @@ export const remove = async ({ positionals, flags }) => {
 
 	done(`Removed ${name}`);
 
-	if (kept) info(`  Its game directory, worlds included, is kept at ${kept}`);
+	if (kept) info(`  Its game directory, worlds included, is kept at ${kept}; ender kept lists what is kept`);
 
 	return 0;
 };

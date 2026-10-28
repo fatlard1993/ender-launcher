@@ -126,7 +126,11 @@ export const remove = async (name, { purgeGameDir = false } = {}) => {
 	if (purgeGameDir) {
 		await rm(manifest.gameDir, { recursive: true, force: true });
 	} else if (isWithin(manifest.gameDir, instanceDir(name)) && (await isDirectory(manifest.gameDir))) {
-		kept = join(paths.kept, `${name}-${new Date().toISOString().slice(0, 19).replaceAll(':', '-')}`);
+		const stamp = `${name}-${new Date().toISOString().slice(0, 19).replaceAll(':', '-')}`;
+
+		kept = join(paths.kept, stamp);
+
+		for (let again = 2; await isDirectory(kept); again++) kept = join(paths.kept, `${stamp}-${again}`);
 
 		await mkdir(paths.kept, { recursive: true });
 		await rename(manifest.gameDir, kept);

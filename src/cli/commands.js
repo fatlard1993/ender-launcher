@@ -1,5 +1,6 @@
 import * as accountCommands from '../commands/account';
 import * as instanceCommands from '../commands/instances';
+import * as keptCommands from '../commands/kept';
 import * as modCommands from '../commands/mods';
 import * as playCommands from '../commands/play';
 import * as serveCommands from '../commands/serve';
@@ -81,6 +82,20 @@ export const commands = {
 			yes: { type: 'boolean', alias: 'y', description: 'Skip the confirmation' },
 		},
 		run: instanceCommands.remove,
+	},
+	kept: {
+		summary: 'Game directories deleted instances left behind, worlds included',
+		usage: 'ender kept [remove <folder>... | remove --all] [--yes]',
+		flags: {
+			names: { type: 'boolean', description: 'List just the folders, one per line' },
+			all: { type: 'boolean', description: 'With remove, every kept folder' },
+			yes: { type: 'boolean', alias: 'y', description: 'Skip the confirmation' },
+		},
+		run: keptCommands.list,
+		subcommands: {
+			list: { summary: 'Show each kept folder and its size', run: keptCommands.list },
+			remove: { summary: 'Delete kept folders, worlds and all', run: keptCommands.remove },
+		},
 	},
 	import: {
 		summary: 'Adopt a Prism instance or a modpack',

@@ -65,7 +65,7 @@ Import reads the version and loader out of `mmc-pack.json`, follows `.minecraft`
 
 To browse mods rather than name them, `ender web` opens the [index](https://fatlard1993.github.io/ender-index/) in your browser with your instances beside it: pick one, and each mod says whether it is installed, with a button to add or drop it. Its Instances page makes instances from a list of mods or from a pack, updates, launches and deletes them, and publishes one as a gist; what takes a while shows ender's progress as it goes, and a launch reports how the game ended. A release carries the index's pages inside it; the mods themselves load live. It serves `http://localhost:7460` (`--port` for another), and answers only pages it served itself. From a checkout, it builds the pages of an ender-index checkout beside it each time it starts; `ENDER_SITE` names any other built site.
 
-Deleting an instance keeps its game directory, worlds included: one inside the instance is moved to `kept/` in ender's data directory, and only `ender delete --purge` removes it.
+Deleting an instance keeps its game directory, worlds included: one inside the instance is moved to `kept/` in ender's data directory, and only `ender delete --purge` removes it. `ender kept` lists what is kept and how large, and `ender kept remove <folder>` (or `--all`) clears it.
 
 ## Packs
 
