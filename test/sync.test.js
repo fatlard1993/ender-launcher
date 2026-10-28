@@ -59,6 +59,26 @@ describe('syncMods', () => {
 		expect(result.removed).toEqual([]);
 	});
 
+	test('moves aside a jar it never installed that is another copy of a mod it installs, which would stop the game', async () => {
+		const fabricJar = async (path, id) => {
+			const built = await jarIn(root, { 'fabric.mod.json': JSON.stringify({ id, version: '1' }) });
+
+			await writeFile(path, await Bun.file(built).bytes());
+
+			return { source: 'local', path };
+		};
+
+		await fabricJar(join(modsDir, 'pandorical-copied.jar'), 'pandorical');
+		await fabricJar(join(modsDir, 'mine.jar'), 'mine');
+
+		const result = await sync([await fabricJar(join(root, 'pandorical-released.jar'), 'pandorical')], { mods: [] });
+
+		expect((await readdir(modsDir)).sort()).toEqual(['mine.jar', 'pandorical-released.jar']);
+		expect(await readdir(join(root, 'mods-displaced'))).toEqual(['pandorical-copied.jar']);
+		expect(result.displaced).toEqual([{ file: 'pandorical-copied.jar', id: 'pandorical' }]);
+		expect(result.unmanaged).toEqual(['mine.jar']);
+	});
+
 	test('survives a locked file that someone already deleted', async () => {
 		const first = await sync([await jar('alpha.jar')], { mods: [] });
 

@@ -1,5 +1,5 @@
-import { readdir, unlink } from 'node:fs/promises';
-import { basename, join, resolve as resolvePath } from 'node:path';
+import { mkdir, readdir, rename, unlink } from 'node:fs/promises';
+import { basename, dirname, join, resolve as resolvePath } from 'node:path';
 
 import { checksumOf, checksumText, ensureFile, pool } from '../download';
 import { readJson, writeJson } from '../json';
@@ -235,11 +235,36 @@ const compareReplacements = async (installed, baselines, modsDir) => {
 	return { gained, notCompared };
 };
 
+/** Where a jar goes that would stop the game loading beside one ender manages: beside mods/, where no loader looks. */
+export const displacedDir = modsDir => join(dirname(modsDir), 'mods-displaced');
+
+/**
+ * Jars nobody asked ender for that carry a mod id ender already installs. A loader refuses to start with two jars of
+ * one id, so each is moved aside rather than left to stop the game. Answers what moved, and which id each repeated.
+ */
+const displaceCopies = async (files, installed, modsDir) => {
+	const managed = new Set(installed.flatMap(resolution => resolution.modIds ?? []));
+	const displaced = [];
+
+	for (const file of files) {
+		const ids = (await readMods(join(modsDir, file)).catch(() => [])).map(mod => mod.id);
+		const repeated = ids.find(id => managed.has(id));
+
+		if (repeated === undefined) continue;
+
+		await mkdir(displacedDir(modsDir), { recursive: true });
+		await rename(join(modsDir, file), join(displacedDir(modsDir), file));
+		displaced.push({ file, id: repeated });
+	}
+
+	return displaced;
+};
+
 /**
  * Make the mods directory match the manifest.
  *
  * Only files a previous sync recorded in the lock are ever removed, so a jar dropped in by hand
- * stays where it was put.
+ * stays where it was put, unless it is another copy of a mod this sync installs.
  */
 export const syncMods = async ({ entries, modsDir, lock, context, withDependencies = true, modIdCache }) => {
 	const all = await resolveAll(entries, context, { withDependencies });
@@ -331,7 +356,10 @@ export const syncMods = async ({ entries, modsDir, lock, context, withDependenci
 	}
 
 	const present = await readdir(modsDir).catch(() => []);
-	const unmanaged = present.filter(file => file.endsWith('.jar') && !wanted.has(file));
+	const strays = present.filter(file => file.endsWith('.jar') && !wanted.has(file));
+	const displaced = await displaceCopies(strays, installed, modsDir);
+	const moved = new Set(displaced.map(({ file }) => file));
+	const unmanaged = strays.filter(file => !moved.has(file));
 
 	return {
 		resolved: installed,
@@ -341,6 +369,7 @@ export const syncMods = async ({ entries, modsDir, lock, context, withDependenci
 		duplicates,
 		removed,
 		unmanaged,
+		displaced,
 		lock: {
 			mods: installed.map(resolution => ({
 				key: resolution.key,
@@ -371,6 +400,8 @@ export const reportSync = ({
 	duplicates = [],
 	removed,
 	unmanaged,
+	displaced = [],
+	modsDir,
 }) => {
 	for (const resolution of resolved) {
 		detail(resolution.requested ? '  ' : '  +', resolution.name, resolution.version);
@@ -379,6 +410,10 @@ export const reportSync = ({
 	step(`${plural(resolved.length, 'mod')} in place${removed.length > 0 ? `, ${removed.length} removed` : ''}`);
 
 	if (unmanaged.length > 0) warn(`Left alone (not in the manifest): ${unmanaged.join(', ')}`);
+
+	for (const { file, id } of displaced) {
+		warn(`${file} was another copy of ${id}, which ender installs, so it was moved to ${displacedDir(modsDir)}`);
+	}
 
 	for (const { resolution, from, gained: found } of gained) {
 		const mod = `${resolution.source}:${resolution.id} ${resolution.version}`;

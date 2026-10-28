@@ -53,7 +53,7 @@ export const syncInstance = async (manifest, config, { withDependencies = true, 
 
 	await instances.writeLock(manifest.name, result.lock);
 
-	reportSync(result);
+	reportSync({ ...result, modsDir: directory });
 
 	return result;
 };
