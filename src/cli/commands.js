@@ -95,10 +95,11 @@ export const commands = {
 	},
 	export: {
 		summary: 'Write an instance as an ender pack of the mods it chose',
-		usage: 'ender export [name] [--out ender.pack.json]',
+		usage: 'ender export [name] [--out ender.pack.json] [--gist]',
 		flags: {
 			...instanceFlag,
 			out: { alias: 'o', description: 'Write it to this file instead of printing it' },
+			gist: { type: 'boolean', description: 'Publish it as a secret gist, to install anywhere with ender import' },
 		},
 		run: instanceCommands.exportPack,
 	},

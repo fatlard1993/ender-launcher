@@ -1,7 +1,15 @@
-import { join, normalize, sep } from 'node:path';
+import { spawn } from 'node:child_process';
+import { closeSync, openSync } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
+import { dirname, join, normalize, sep } from 'node:path';
 
 import { openInBrowser } from '../browser';
+import { publishPack } from '../gist';
+import * as instances from '../instance';
+import { packFrom, parseEnderPack } from '../instance/enderPack';
 import { done, info, paint } from '../out';
+import { paths } from '../paths';
+import { REPOSITORY, gistOf } from './packSource';
 import { isCompiled } from './upgrade';
 
 export const PORT = 7460;
@@ -27,10 +35,16 @@ export const allowed = (request, port = PORT) => {
 	return local.map(host => `http://${host}`).includes(request.headers.get('origin'));
 };
 
-/** This ender, run again with these arguments: the binary itself when compiled, else Bun on this checkout. */
+/** How this ender is run again: the binary itself when compiled, else Bun on this checkout. */
+const selfCommand = args => (isCompiled() ? [process.execPath, ...args] : [process.execPath, Bun.main, ...args]);
+
+/** This ender, run again with these arguments, waited for: what it printed, and how it ended. */
 export const runSelf = async args => {
-	const command = isCompiled() ? [process.execPath, ...args] : [process.execPath, Bun.main, ...args];
-	const child = Bun.spawn(command, { stdout: 'pipe', stderr: 'pipe', env: { ...process.env, NO_COLOR: '1' } });
+	const child = Bun.spawn(selfCommand(args), {
+		stdout: 'pipe',
+		stderr: 'pipe',
+		env: { ...process.env, NO_COLOR: '1' },
+	});
 	const [stdout, stderr, code] = await Promise.all([
 		new Response(child.stdout).text(),
 		new Response(child.stderr).text(),
@@ -40,19 +54,66 @@ export const runSelf = async args => {
 	return { code, output: `${stdout}${stderr}`.trim() };
 };
 
+/**
+ * This ender, run again and let go: a game outlives the page that started it, and Ctrl-C on ender web must not reach
+ * it. What it prints goes to a log, which is answered.
+ */
+export const startSelf = async (args, name) => {
+	const log = join(paths.cache, 'launches', `${name}.log`);
+
+	await mkdir(dirname(log), { recursive: true });
+
+	const out = openSync(log, 'w');
+	const child = spawn(selfCommand(args)[0], selfCommand(args).slice(1), {
+		detached: true,
+		stdio: ['ignore', out, out],
+		env: { ...process.env, NO_COLOR: '1' },
+	});
+
+	child.unref();
+	closeSync(out);
+
+	return { log };
+};
+
 const json = (body, status = 200) => Response.json(body, { status });
 
+const LOADERS = new Set(['fabric', 'quilt', 'forge', 'neoforge', 'vanilla']);
+
+/** A game version as new takes one: an id such as 26.3, or release or snapshot for the newest. */
+const MINECRAFT = /^[\w.+-]{1,40}$/;
+
+/** A pack import fetches: a gist, a GitHub repository, or a link over https; never a file on this machine. */
+const importable = source =>
+	typeof source === 'string' &&
+	(gistOf(source) !== undefined || REPOSITORY.test(source) || /^https:\/\/\S+$/.test(source));
+
+const specsOf = async request => {
+	const { specs } = await request.json().catch(() => ({}));
+
+	return Array.isArray(specs) && specs.every(spec => SPEC.test(spec)) ? specs : undefined;
+};
+
+const BAD_SPECS = 'Each mod has to be a spec search writes, such as gh:owner/repo';
+
 /**
- * The page's questions of this machine's instances, each answered by running ender: list them, show one, and add or
- * drop mods by spec. Undefined for a path that is not the API's.
+ * The page's questions of this machine's instances, each answered by running ender: list them and show one, make one
+ * from a list of mods or from a pack, add and drop mods, update, launch and delete one, and publish one, or a list,
+ * as a gist. Undefined for a path that is not the API's.
  */
 export const webApi =
-	({ run = runSelf } = {}) =>
+	({ run = runSelf, start = startSelf, publish = publishPack, packOf = instancePack } = {}) =>
 	async request => {
 		const { pathname } = new URL(request.url);
 
 		if (!pathname.startsWith('/api/')) return undefined;
 
+		const { method } = request;
+		const ran = async args => {
+			const { code, output } = await run(args);
+
+			return json({ ok: code === 0, output }, code === 0 ? 200 : 502);
+		};
 		const enderJson = async args => {
 			const { code, output } = await run(args);
 
@@ -60,28 +121,93 @@ export const webApi =
 
 			return json(JSON.parse(output));
 		};
-		const parts = pathname.split('/').slice(2).map(decodeURIComponent);
-		const [collection, name, verb, ...rest] = parts;
+		const published = async pack => {
+			try {
+				return json(await publish(pack));
+			} catch (error) {
+				return json({ error: error.message }, 502);
+			}
+		};
+		const [collection, name, verb, ...rest] = pathname.split('/').slice(2).map(decodeURIComponent);
 
-		if (collection !== 'instances' || rest.length > 0) return json({ error: 'Not found' }, 404);
-		if (name === undefined && request.method === 'GET') return enderJson(['ls', '--json']);
-		if (!INSTANCE.test(name ?? '')) return json({ error: 'Not an instance name' }, 400);
-		if (verb === undefined && request.method === 'GET') return enderJson(['info', name, '--json']);
+		if (rest.length > 0) return json({ error: 'Not found' }, 404);
 
-		if (['add', 'drop'].includes(verb) && request.method === 'POST') {
-			const { specs } = await request.json().catch(() => ({}));
+		if (collection === 'import' && name === undefined && method === 'POST') {
+			const { source } = await request.json().catch(() => ({}));
 
-			if (!Array.isArray(specs) || specs.length === 0 || !specs.every(spec => SPEC.test(spec))) {
-				return json({ error: 'Each mod has to be a spec search writes, such as gh:owner/repo' }, 400);
+			if (!importable(source)) return json({ error: 'A pack is a gist, gh:owner/repo, or an https link' }, 400);
+
+			return ran(['import', source]);
+		}
+
+		if (collection === 'gists' && name === undefined && method === 'POST') {
+			const { pack } = await request.json().catch(() => ({}));
+			let checked;
+
+			try {
+				checked = parseEnderPack(pack, { file: 'The pack' });
+			} catch (error) {
+				return json({ error: error.message }, 400);
 			}
 
-			const { code, output } = await run([verb, ...specs, '--instance', name]);
+			if (!checked.mods.every(({ spec }) => SPEC.test(spec))) return json({ error: BAD_SPECS }, 400);
 
-			return json({ ok: code === 0, output }, code === 0 ? 200 : 502);
+			return published(pack);
+		}
+
+		if (collection !== 'instances') return json({ error: 'Not found' }, 404);
+		if (name === undefined && method === 'GET') return enderJson(['ls', '--json']);
+
+		if (name === undefined && method === 'POST') {
+			const { name: wanted, minecraft, loader, specs = [] } = await request.json().catch(() => ({}));
+
+			if (!INSTANCE.test(wanted ?? '')) return json({ error: 'Not an instance name' }, 400);
+			if (minecraft !== undefined && !MINECRAFT.test(minecraft)) return json({ error: 'Not a game version' }, 400);
+			if (loader !== undefined && !LOADERS.has(loader)) return json({ error: 'Not a loader ender knows' }, 400);
+			if (!Array.isArray(specs) || !specs.every(spec => SPEC.test(spec))) return json({ error: BAD_SPECS }, 400);
+
+			return ran([
+				'new',
+				wanted,
+				...specs,
+				...(minecraft ? ['--minecraft', minecraft] : []),
+				...(loader ? ['--loader', loader] : []),
+			]);
+		}
+
+		if (!INSTANCE.test(name ?? '')) return json({ error: 'Not an instance name' }, 400);
+		if (verb === undefined && method === 'GET') return enderJson(['info', name, '--json']);
+		if (verb === undefined && method === 'DELETE') return ran(['delete', name, '--yes']);
+
+		if (['add', 'drop'].includes(verb) && method === 'POST') {
+			const specs = await specsOf(request);
+
+			if (!specs?.length) return json({ error: BAD_SPECS }, 400);
+
+			return ran([verb, ...specs, '--instance', name]);
+		}
+
+		if (verb === 'update' && method === 'POST') return ran(['update', '--instance', name]);
+
+		if (verb === 'launch' && method === 'POST') {
+			const { update } = await request.json().catch(() => ({}));
+
+			return json(await start(['launch', name, ...(update ? ['--update'] : [])], name), 202);
+		}
+
+		if (verb === 'gist' && method === 'POST') {
+			try {
+				return published(await packOf(name));
+			} catch (error) {
+				return json({ error: error.message }, 404);
+			}
 		}
 
 		return json({ error: 'Not found' }, 404);
 	};
+
+/** An instance's chosen mods as the pack export writes. */
+const instancePack = async name => packFrom(await instances.read(name)).pack;
 
 const TYPES = {
 	html: 'text/html; charset=utf-8',

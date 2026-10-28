@@ -18,7 +18,7 @@ let cachedToken;
  * Unauthenticated GitHub allows sixty requests an hour, which a sync can exhaust. A configured
  * token is used when there is one, and otherwise the `gh` CLI is asked for its own.
  */
-const token = async configured => {
+export const token = async configured => {
 	if (configured) return configured;
 	if (process.env.GITHUB_TOKEN) return process.env.GITHUB_TOKEN;
 	if (cachedToken !== undefined) return cachedToken || undefined;

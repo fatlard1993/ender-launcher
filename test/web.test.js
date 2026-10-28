@@ -105,4 +105,108 @@ describe('ender web', () => {
 			await rm(empty, { recursive: true, force: true });
 		}
 	});
+
+	test('makes, imports, updates, launches and deletes instances by the same rules, and refuses what they refuse', async () => {
+		const ran = [];
+		const started = [];
+		const api = webApi({
+			run: async args => {
+				ran.push(args);
+
+				return { code: 0, output: '' };
+			},
+			start: async (args, name) => {
+				started.push([args, name]);
+
+				return { log: `/logs/${name}.log` };
+			},
+		});
+		const send = (method, path, body) =>
+			api(request(path, { method, origin: 'http://localhost:7460', body: JSON.stringify(body) }));
+		const post = (path, body) => send('POST', path, body);
+
+		expect(
+			(await post('/api/instances', { name: 'family', minecraft: '26.3', loader: 'fabric', specs: ['mr:sodium'] }))
+				.status,
+		).toBe(200);
+		expect((await post('/api/instances', { name: '../x' })).status).toBe(400);
+		expect((await post('/api/instances', { name: 'x', loader: 'bukkit' })).status).toBe(400);
+		expect((await post('/api/instances', { name: 'x', minecraft: '26.3 --gameDir /' })).status).toBe(400);
+		expect((await post('/api/instances', { name: 'x', specs: ['./evil.jar'] })).status).toBe(400);
+		expect((await post('/api/import', { source: 'gist:a1db98319884288ad3d83a0db854291f' })).status).toBe(200);
+		expect((await post('/api/import', { source: 'gh:me/pack' })).status).toBe(200);
+		expect((await post('/api/import', { source: '/home/me/pack.zip' })).status).toBe(400);
+		expect((await post('/api/import', { source: 'http://plain.example/pack.zip' })).status).toBe(400);
+		expect((await post('/api/instances/family/update')).status).toBe(200);
+		expect((await post('/api/instances/family/launch', { update: true })).status).toBe(202);
+		expect((await send('DELETE', '/api/instances/family')).status).toBe(200);
+		expect(ran).toEqual([
+			['new', 'family', 'mr:sodium', '--minecraft', '26.3', '--loader', 'fabric'],
+			['import', 'gist:a1db98319884288ad3d83a0db854291f'],
+			['import', 'gh:me/pack'],
+			['update', '--instance', 'family'],
+			['delete', 'family', '--yes'],
+		]);
+		expect(started).toEqual([[['launch', 'family', '--update'], 'family']]);
+	});
+
+	test("publishes a list as a pack, or an instance's chosen mods, and only a pack of specs search writes", async () => {
+		const published = [];
+		const api = webApi({
+			publish: async pack => {
+				published.push(pack);
+
+				return { id: 'abc', url: 'https://gist.github.com/abc', line: 'ender import gist:abc' };
+			},
+			packOf: async name => ({ name, minecraft: '26.3', loader: 'fabric', mods: ['mr:sodium'] }),
+		});
+		const post = (path, body) =>
+			api(request(path, { method: 'POST', origin: 'http://localhost:7460', body: JSON.stringify(body) }));
+		const pack = { name: 'mine', minecraft: '26.3', loader: 'fabric', mods: ['gh:me/mod'] };
+
+		expect(await (await post('/api/gists', { pack })).json()).toEqual({
+			id: 'abc',
+			url: 'https://gist.github.com/abc',
+			line: 'ender import gist:abc',
+		});
+		expect((await post('/api/gists', { pack: { ...pack, mods: ['./evil.jar'] } })).status).toBe(400);
+		expect((await post('/api/gists', { pack: { mods: [] } })).status).toBe(400);
+		expect((await post('/api/instances/family/gist')).status).toBe(200);
+		expect(published.map(each => each.name)).toEqual(['mine', 'family']);
+	});
+});
+
+describe('publishing a gist', () => {
+	test('a secret gist holding ender.pack.json, under the account ender signs in with', async () => {
+		const { publishPack } = await import('../src/gist');
+		let asked;
+		const result = await publishPack(
+			{ name: 'family', minecraft: '26.3', loader: 'fabric', mods: ['mr:sodium'] },
+			{
+				configured: 'token',
+				fetcher: async (url, init) => {
+					asked = { url, ...init, body: JSON.parse(init.body) };
+
+					return Response.json({ id: 'abc', html_url: 'https://gist.github.com/abc' }, { status: 201 });
+				},
+			},
+		);
+
+		expect(asked.url).toBe('https://api.github.com/gists');
+		expect(asked.headers.authorization).toBe('Bearer token');
+		expect(asked.body.public).toBe(false);
+		expect(JSON.parse(asked.body.files['ender.pack.json'].content).name).toBe('family');
+		expect(result).toEqual({ id: 'abc', url: 'https://gist.github.com/abc', line: 'ender import gist:abc' });
+	});
+
+	test('says what GitHub refused, and what a token without the gist scope needs', async () => {
+		const { publishPack } = await import('../src/gist');
+
+		await expect(
+			publishPack(
+				{ minecraft: '26.3', loader: 'fabric', mods: [] },
+				{ configured: 'token', fetcher: async () => Response.json({ message: 'Not Found' }, { status: 404 }) },
+			),
+		).rejects.toThrow('the token needs the gist scope');
+	});
 });

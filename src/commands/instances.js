@@ -10,6 +10,7 @@ import { entryKey, resolveAll } from '../mods';
 import { resolveVersionId } from '../meta/mojang';
 import { LOADER_SERVICES, assertKnownLoader } from '../meta/resolve';
 import { done, info, paint, plural, step, warn } from '../out';
+import { publishPack } from '../gist';
 import { parseModSpec, refineModSpec, syncInstance } from './mods';
 import { fetchPack, isRemote, resolveSpecs, sourceOf } from './packSource';
 import { targetInstance, targetName } from './context';
@@ -431,6 +432,17 @@ export const exportPack = async ({ positionals, flags }) => {
 		warn(
 			`${entry.path ?? entry.url ?? entry.id} is ${UNSHAREABLE[entry.source] ?? entry.source}, so it is not in the pack`,
 		);
+	}
+
+	if (flags.gist) {
+		step(`Publishing ${manifest.name} as a gist`);
+
+		const { url, line } = await publishPack(pack);
+
+		done(`Published ${manifest.name} as a pack of ${plural(pack.mods.length, 'mod')}: ${url}`);
+		info(paint.dim(`  ${line}   installs it anywhere`));
+
+		return 0;
 	}
 
 	if (!flags.out) {
