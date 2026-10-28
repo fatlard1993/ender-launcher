@@ -28,9 +28,6 @@ const instanceSummary = (manifest, config) => ({
 export const ls = async ({ flags = {} } = {}) => {
 	const [found, config] = await Promise.all([instances.list(), readConfig()]);
 
-	// One name per line and nothing else, for callers that have to branch on whether an
-	// instance exists. Without it they matched this listing's prose, which made its column
-	// layout a contract nothing declared.
 	if (flags.names) {
 		for (const manifest of found) info(manifest.name);
 
@@ -175,7 +172,6 @@ const SETTABLE = new Set([
 	'window.height',
 ]);
 
-/** Everything about an instance except its mods was fixed at creation until this existed. */
 export const set = async ({ positionals, flags }) => {
 	const [key, ...rest] = positionals;
 	const { manifest } = await targetInstance(flags.instance);

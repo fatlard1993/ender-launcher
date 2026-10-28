@@ -13,6 +13,8 @@ import { isCompiled } from './upgrade';
 
 export const PORT = 7460;
 
+export const REFUSED = 'Only a page served from this machine may ask';
+
 /** A mod the page names: a repository or a project by the prefixes search writes, never a path or a flag. */
 export const SPEC = /^(gh|cb|gl|mr|cf):[\w-][\w.-]*(\/[\w-][\w.-]*)*$/;
 
@@ -294,7 +296,6 @@ export const servePage = (files, pathname) => {
 	return new Response(bytes, { headers: { 'content-type': typeOf(path), 'cache-control': 'no-cache' } });
 };
 
-/** Serve the index, managing this machine's instances, on this machine alone, and open it in the browser. */
 export const web = async ({ flags }) => {
 	const port = Number(flags.port ?? PORT);
 	const files = await siteFiles();
@@ -315,8 +316,7 @@ export const web = async ({ flags }) => {
 			hostname: '127.0.0.1',
 			port,
 			fetch: async request => {
-				if (!allowed(request, port))
-					return new Response('Only a page served from this machine may ask', { status: 403 });
+				if (!allowed(request, port)) return new Response(REFUSED, { status: 403 });
 
 				return (
 					(await answer(request)) ??
