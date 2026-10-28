@@ -40,10 +40,15 @@ export const packwizMod = (source, { side = 'client' } = {}) => {
 	const curseforge = mod.update?.curseforge;
 
 	if (modrinth?.['mod-id']) return { source: 'modrinth', id: modrinth['mod-id'], version: modrinth.version };
-	if (curseforge?.['project-id'])
-		return { source: 'curseforge', id: String(curseforge['project-id']), version: String(curseforge['file-id']) };
-
 	const { url, hash, 'hash-format': format } = mod.download ?? {};
+
+	if (curseforge?.['project-id'])
+		return {
+			source: 'curseforge',
+			id: String(curseforge['project-id']),
+			version: String(curseforge['file-id']),
+			...(hash && format === 'sha1' ? { checksum: `sha1:${hash.toLowerCase()}` } : {}),
+		};
 
 	if (!url) throw new Error(`${mod.name ?? 'a mod'} has neither a link nor a Modrinth or CurseForge id`);
 

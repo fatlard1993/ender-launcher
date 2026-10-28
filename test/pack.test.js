@@ -319,6 +319,40 @@ describe('a packwiz pack', () => {
 		expect(await unpackInto(path, read, join(directory, 'packwiz-game'))).toEqual(['config/sodium.json']);
 	});
 
+	test('takes a CurseForge mod from Modrinth where Modrinth has the very same file, and says how many', async () => {
+		const { preferModrinth } = await import('../src/instance/pack');
+		const mods = [
+			{ source: 'curseforge', id: '238222', version: '5101365', checksum: 'sha1:aaa' },
+			{ source: 'curseforge', id: '1', version: '2', checksum: 'sha1:bbb' },
+			{ source: 'curseforge', id: '3', version: '4' },
+			{ source: 'modrinth', id: 'AANobbMI', version: 'abc123' },
+		];
+		const asked = [];
+		const moved = await preferModrinth(mods, {
+			byHash: async hashes => {
+				asked.push(...hashes);
+
+				return new Map([['aaa', { project: 'u6dRKJwZ', version: 'v1' }]]);
+			},
+		});
+
+		expect(asked).toEqual(['aaa', 'bbb']);
+		expect(moved).toBe(1);
+		expect(mods.map(mod => `${mod.source}:${mod.id}`)).toEqual([
+			'modrinth:u6dRKJwZ',
+			'curseforge:1',
+			'curseforge:3',
+			'modrinth:AANobbMI',
+		]);
+		expect(
+			await preferModrinth(mods, {
+				byHash: async () => {
+					throw new Error('offline');
+				},
+			}),
+		).toBe(0);
+	});
+
 	test('whose index lists no mods, as packwiz leaves it until refreshed, has the mod files beside it read', async () => {
 		const path = await zip('packwiz-stale', async staging => {
 			await mkdir(join(staging, 'mods'), { recursive: true });

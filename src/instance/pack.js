@@ -2,7 +2,8 @@ import { mkdir } from 'node:fs/promises';
 import { basename, extname, join } from 'node:path';
 
 import { extractArchive, listEntries, readEntry, readEntryJson } from '../archive';
-import { detail, plural, step } from '../out';
+import { versionsByHash } from '../mods/modrinth';
+import { detail, plural, step, warn } from '../out';
 import { ENDER_PACK, GAME_FILES, parseEnderPack } from './enderPack';
 import { packwizMetafiles, packwizMod, packwizPack } from './packwiz';
 
@@ -174,7 +175,37 @@ const fromEnder = async (path, { name }) => {
  * A packwiz pack keeps a file per mod beside its pack.toml, listed by its index: each becomes an entry, a Modrinth or
  * CurseForge one where it names one. As for an ender pack, the game's own files beside it are its overrides.
  */
-const fromPackwiz = async (path, { name, side = 'client' }) => {
+/**
+ * CurseForge mods a pack names by checksum, taken from Modrinth where it has the very same file: CurseForge serves its
+ * files only to a client with a key of its own. A lookup that fails leaves them as they were. Answers how many moved.
+ */
+export const preferModrinth = async (mods, { byHash = versionsByHash } = {}) => {
+	const wanted = mods.filter(mod => mod.source === 'curseforge' && mod.checksum?.startsWith('sha1:'));
+	let found;
+
+	try {
+		found = await byHash(wanted.map(mod => mod.checksum.slice('sha1:'.length)));
+	} catch (error) {
+		warn(`Modrinth could not be asked for the pack's CurseForge files (${error.message}); they stay CurseForge's`);
+
+		return 0;
+	}
+
+	let moved = 0;
+
+	for (const [index, mod] of mods.entries()) {
+		const same = mod.source === 'curseforge' && found.get(mod.checksum?.slice('sha1:'.length));
+
+		if (!same) continue;
+
+		mods[index] = { source: 'modrinth', id: same.project, version: same.version };
+		moved++;
+	}
+
+	return moved;
+};
+
+const fromPackwiz = async (path, { name, side = 'client', byHash }) => {
 	const file = atTop(await listEntries(path), 'pack.toml');
 	const folder = file.slice(0, -'pack.toml'.length);
 	const text = async inside => (await readEntry(path, `${folder}${inside}`))?.toString('utf8');
@@ -210,7 +241,14 @@ const fromPackwiz = async (path, { name, side = 'client' }) => {
 		if (entry) mods.push(entry);
 	}
 
+	const moved = await preferModrinth(mods, { byHash });
+
 	return {
+		...(moved > 0
+			? {
+					summary: `${plural(moved, 'CurseForge mod')} come from Modrinth instead, the same file by its checksum`,
+				}
+			: {}),
 		manifest: { name: name ?? pack.name ?? nameFrom(path), minecraft: pack.minecraft, loader: pack.loader, mods },
 		overridePrefixes: [folder],
 		keepOverride: isGameFile,

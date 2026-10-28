@@ -16,6 +16,27 @@ const facets = ({ minecraft, loader }) => {
 	return encodeURIComponent(JSON.stringify(built));
 };
 
+/**
+ * The Modrinth versions that are these very files, by their SHA-1: hash -> { project, version }. A file Modrinth does
+ * not have is left out.
+ */
+export const versionsByHash = async hashes => {
+	if (hashes.length === 0) return new Map();
+
+	const found = await fetchJson(`${API}/version_files`, {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify({ hashes, algorithm: 'sha1' }),
+	});
+
+	return new Map(
+		Object.entries(found).map(([hash, version]) => [
+			hash.toLowerCase(),
+			{ project: version.project_id, version: version.id },
+		]),
+	);
+};
+
 export const search = async (query, { minecraft, loader, limit = 10 } = {}) => {
 	const url = `${API}/search?query=${encodeURIComponent(query)}&limit=${limit}&facets=${facets({ minecraft, loader })}`;
 	const { hits } = await fetchJson(url);
