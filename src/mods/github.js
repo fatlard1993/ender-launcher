@@ -54,6 +54,17 @@ export const parseRepository = reference => {
 	return { owner, repository };
 };
 
+/** The newest full release's file whose name ends in this, or undefined when none of the last thirty carries one. */
+export const newestAsset = async (reference, suffix, configuredToken) => {
+	const { owner, repository } = parseRepository(reference);
+	const releases = await request(`/repos/${owner}/${repository}/releases?per_page=30`, configuredToken);
+
+	return releases
+		.filter(release => !release.draft && !release.prerelease)
+		.flatMap(release => release.assets ?? [])
+		.find(asset => asset.name.endsWith(suffix));
+};
+
 const releaseFor = async (entry, configuredToken, allowPrerelease) => {
 	const { owner, repository } = parseRepository(entry.id);
 

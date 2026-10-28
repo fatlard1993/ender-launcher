@@ -6,9 +6,10 @@ import { fetchWithRetry } from '../download';
 import { paths } from '../paths';
 import * as instances from '../instance';
 import { fromPrism, identifyMods } from '../instance/import';
-import { packFrom } from '../instance/enderPack';
-import { readPack, unpackInto } from '../instance/pack';
+import { ENDER_PACK, packFrom } from '../instance/enderPack';
+import { detectPack, readPack, unpackInto } from '../instance/pack';
 import { entryKey, resolveAll } from '../mods';
+import { newestAsset } from '../mods/github';
 import { resolveVersionId } from '../meta/mojang';
 import { LOADER_SERVICES, assertKnownLoader } from '../meta/resolve';
 import { done, info, paint, plural, step, warn } from '../out';
@@ -417,15 +418,10 @@ const importPrismInstance = async (directory, flags) => {
 	return 0;
 };
 
-/** A Prism instance directory, or a modpack in any of the shapes people actually hand around. */
-/** A repository named as `gh:owner/repo`, whose zip GitHub serves at its default branch. */
+/** A repository named as `gh:owner/repo`. */
 const REPOSITORY = /^(?:gh:|github:)([\w.-]+\/[\w.-]+)$/;
 
-/** A pack named by a link or a GitHub repository, downloaded where import reads files from. */
-const fetchPack = async target => {
-	const repository = target.match(REPOSITORY)?.[1];
-	const url = repository ? `https://github.com/${repository}/archive/HEAD.zip` : target;
-	const name = repository ? `${repository.replace('/', '-')}.zip` : basename(new URL(url).pathname) || 'pack.zip';
+const download = async (url, name) => {
 	const path = join(paths.cache, 'packs', name);
 
 	step(`Downloading ${url}`);
@@ -438,9 +434,41 @@ const fetchPack = async target => {
 	return path;
 };
 
-/** What import takes, as its usage names it. */
-export const IMPORTABLE = 'prism-instance-dir | pack.mrpack | pack.zip | ender.pack.json | packwiz | link | gh:owner/repo';
+/**
+ * A repository's pack: the ender pack or packwiz pack at the head of its default branch, as GitHub zips it, and
+ * otherwise the newest release's .mrpack.
+ */
+const repositoryPack = async repository => {
+	const head = await download(
+		`https://github.com/${repository}/archive/HEAD.zip`,
+		`${repository.replace('/', '-')}.zip`,
+	);
 
+	if (['ender', 'packwiz'].includes(await detectPack(head).catch(() => undefined))) return head;
+
+	const asset = await newestAsset(repository, '.mrpack', (await readConfig()).githubToken);
+
+	if (asset === undefined) {
+		throw new Error(
+			`${repository} has no ${ENDER_PACK} or pack.toml at its root, and none of its releases carries a .mrpack`,
+		);
+	}
+
+	return download(asset.browser_download_url, asset.name);
+};
+
+/** A pack named by a link or a GitHub repository, downloaded where import reads files from. */
+const fetchPack = target => {
+	const repository = target.match(REPOSITORY)?.[1];
+
+	return repository ? repositoryPack(repository) : download(target, basename(new URL(target).pathname) || 'pack.zip');
+};
+
+/** What import takes, as its usage names it. */
+export const IMPORTABLE =
+	'prism-instance-dir | pack.mrpack | pack.zip | ender.pack.json | packwiz | link | gh:owner/repo';
+
+/** A Prism instance directory, or a modpack in any of the shapes people actually hand around. */
 export const importAny = async ({ positionals, flags }) => {
 	const [target] = positionals;
 
