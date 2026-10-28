@@ -96,11 +96,16 @@ export const commands = {
 	},
 	export: {
 		summary: 'Write an instance as an ender pack of the mods it chose',
-		usage: 'ender export [name] [--out ender.pack.json] [--gist]',
+		usage: 'ender export [name] [--out ender.pack.json] [--gist [--new] [--json]]',
 		flags: {
 			...instanceFlag,
 			out: { alias: 'o', description: 'Write it to this file instead of printing it' },
-			gist: { type: 'boolean', description: 'Publish it as a secret gist, to install anywhere with ender import' },
+			gist: {
+				type: 'boolean',
+				description: 'Publish it as a secret gist, to install anywhere with ender import; again updates the same gist',
+			},
+			new: { type: 'boolean', description: 'With --gist, publish to a new gist rather than the one before' },
+			json: { type: 'boolean', description: 'With --gist, print where it went as JSON' },
 		},
 		run: instanceCommands.exportPack,
 	},

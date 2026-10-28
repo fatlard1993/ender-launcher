@@ -79,7 +79,7 @@ Whatever a pack carries as loose files is unpacked into the game directory, then
 
 ### Keeping clients on a pack
 
-An ender pack is one small file, `ender.pack.json`, naming the game version, the loader and the mods chosen; what they need is resolved where it is installed. `ender export` writes one from an instance. Kept in a gist, it is a pack anyone can follow:
+An ender pack is one small file, `ender.pack.json`, naming the game version, the loader and the mods chosen; what they need is resolved where it is installed. `ender export` writes one from an instance, and `ender export --gist` publishes it as a secret gist; publishing the same instance again updates that gist, so whoever follows it gets the change (`--new` starts another). Kept in a gist, it is a pack anyone can follow:
 
 ```
 ender import gist:aa5e1f0c9b2d4e6f8a1b3c5d7e9f0a2b

@@ -21,15 +21,15 @@ let cachedToken;
 export const token = async configured => {
 	if (configured) return configured;
 	if (process.env.GITHUB_TOKEN) return process.env.GITHUB_TOKEN;
-	if (cachedToken !== undefined) return cachedToken || undefined;
+	if (cachedToken) return cachedToken;
 
 	try {
 		const process_ = Bun.spawn(['gh', 'auth', 'token'], { stdout: 'pipe', stderr: 'ignore' });
 		const output = (await new Response(process_.stdout).text()).trim();
 
-		cachedToken = (await process_.exited) === 0 ? output : '';
+		if ((await process_.exited) === 0 && output) cachedToken = output;
 	} catch {
-		cachedToken = '';
+		// No gh on PATH: asked again next time, as a sign-in since may have put one there
 	}
 
 	return cachedToken || undefined;

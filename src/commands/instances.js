@@ -262,8 +262,9 @@ export const clone = async ({ positionals, flags }) => {
 
 	const original = await instances.read(source);
 
+	const { gist, ...rest } = original;
 	const copy = await instances.create(destination, {
-		...original,
+		...rest,
 		name: destination,
 		gameDir: flags.gameDir ? resolve(flags.gameDir) : undefined,
 		mods: structuredClone(original.mods),
@@ -447,12 +448,22 @@ export const exportPack = async ({ positionals, flags }) => {
 	}
 
 	if (flags.gist) {
-		step(`Publishing ${manifest.name} as a gist`);
+		if (!flags.json) step(`Publishing ${manifest.name} as a gist`);
 
-		const { url, line } = await publishPack(pack);
+		const published = await publishPack(pack, { id: flags.new ? undefined : manifest.gist });
 
-		done(`Published ${manifest.name} as a pack of ${plural(pack.mods.length, 'mod')}: ${url}`);
-		info(paint.dim(`  ${line}   installs it anywhere`));
+		if (published.id !== manifest.gist) await instances.write({ ...manifest, gist: published.id });
+
+		if (flags.json) {
+			info(JSON.stringify({ ...published, left: left.map(entry => entry.path ?? entry.url ?? entry.id) }));
+
+			return 0;
+		}
+
+		done(
+			`${published.updated ? 'Updated' : 'Published'} ${manifest.name} as a pack of ${plural(pack.mods.length, 'mod')}: ${published.url}`,
+		);
+		info(paint.dim(`  ${published.line}   installs it anywhere`));
 
 		return 0;
 	}
