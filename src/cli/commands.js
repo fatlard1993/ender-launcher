@@ -251,6 +251,12 @@ export const commands = {
 			...instanceFlag,
 			...depsFlag,
 			keep: { type: 'boolean', description: "Keep the instance's own mods beside the pack's" },
+			sync: {
+				type: 'boolean',
+				default: true,
+				description: 'Fetch what the pack names now',
+				off: 'Only record the pack, for a running server: its next start with --update fetches it',
+			},
 		},
 		run: modCommands.follow,
 	},
@@ -261,7 +267,17 @@ export const commands = {
 		flags: instanceFlag,
 		subcommands: {
 			provision: { summary: 'Fetch or install the server for its loader', run: serveCommands.provision },
-			start: { summary: 'Run the server in the foreground', run: serveCommands.start },
+			start: {
+				summary: 'Run the server in the foreground',
+				flags: {
+					...instanceFlag,
+					update: {
+						type: 'boolean',
+						description: "Update its mods first, and its pack's list; if that fails, start what is installed",
+					},
+				},
+				run: serveCommands.start,
+			},
 			offline: { summary: 'Set online-mode=false so offline clients can join', run: serveCommands.offline },
 			status: { summary: 'Show the server instance', run: serveCommands.status },
 		},

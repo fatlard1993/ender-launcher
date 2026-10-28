@@ -236,6 +236,26 @@ export const update = async ({ positionals, flags }) => {
 	return result.failures.length > 0 ? 1 : 0;
 };
 
+/**
+ * Update an instance, and its pack, on the way to starting it. An update that fails says what failed and starts the
+ * mods already installed: a game or server that will not start because a host is down is worse than one a day behind.
+ */
+export const updateBeforeStart = async (manifest, config, flags) => {
+	const going = manifest.type === 'server' ? 'starting' : 'launching';
+
+	try {
+		const result = await updateInstance(manifest, config, { flags });
+
+		if (result.failures.length > 0) {
+			warn(`${plural(result.failures.length, 'mod')} did not update; ${going} with what is installed`);
+		} else {
+			done(updatedLine(result));
+		}
+	} catch (error) {
+		warn(`The update did not run (${error.message}); ${going} with what is installed`);
+	}
+};
+
 const FOLLOW_USAGE =
 	'ender follow <pack> [--instance name] [--keep]: a gist link or gist:id, gh:owner/repo, an https link, or an ender pack file';
 
@@ -267,6 +287,14 @@ export const follow = async ({ positionals, flags }) => {
 	const given = startFollowing(manifest, source, { keep: flags.keep });
 
 	if (!following) step(`${manifest.name} follows ${source} now`);
+
+	if (flags.sync === false) {
+		await instances.write(manifest);
+
+		if (!following) info(paint.dim('  its next update, or start with --update, fetches what the pack names'));
+
+		return 0;
+	}
 
 	const result = await updateInstance(manifest, config, { flags });
 	const followed = new Set(manifest.pack.mods);

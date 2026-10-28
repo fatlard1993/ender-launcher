@@ -2,6 +2,7 @@ import * as instances from '../instance';
 import { done, info, step } from '../out';
 import * as server from '../server';
 import { settingsFor, targetInstance } from './context';
+import { updateBeforeStart } from './mods';
 
 export const provision = async ({ positionals, flags }) => {
 	const { manifest } = await targetInstance(flags.instance ?? positionals[0]);
@@ -21,6 +22,8 @@ export const start = async ({ positionals, flags }) => {
 
 	await server.acceptEula(manifest);
 	await server.warnIfUnreachableOffline(manifest);
+
+	if (flags.update) await updateBeforeStart(manifest, config, flags);
 
 	return server.run(manifest, settingsFor(manifest, config));
 };
