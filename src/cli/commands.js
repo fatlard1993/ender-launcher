@@ -90,6 +90,7 @@ export const commands = {
 			gameDir: { description: 'Use an existing directory as the game directory' },
 			minecraft: { alias: 'm', description: 'Game version, for an archive that names none' },
 			loader: { alias: 'l', description: 'Loader, for an archive that names none' },
+			sync: { type: 'boolean', description: 'Fetch the mods it names straight away, as ender sync does' },
 		},
 		run: instanceCommands.importAny,
 	},

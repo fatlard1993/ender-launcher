@@ -366,13 +366,20 @@ const importPack = async (path, flags, target = path) => {
 	info(paint.dim(`  ${plural(written.length, 'file')} unpacked, ${plural(manifest.mods.length, 'mod')} declared`));
 
 	reportUnmanaged(unmatched, manifest.gameDir);
-
-	info('');
-	info(paint.dim(`  ender sync -i ${manifest.name}   to fetch what the pack references`));
-
 	await activateIfFirst(manifest.name);
 
-	return 0;
+	if (!flags.sync) {
+		info('');
+		info(paint.dim(`  ender sync -i ${manifest.name}   to fetch what the pack references`));
+
+		return 0;
+	}
+
+	step(`Syncing mods for ${manifest.name}`);
+
+	const { failures } = await syncInstance(manifest, await readConfig(), { withDependencies: true });
+
+	return failures.length > 0 ? 1 : 0;
 };
 
 const importPrismInstance = async (directory, flags) => {

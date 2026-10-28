@@ -90,6 +90,7 @@ describe('ender web', () => {
 		for (const files of [fromDirectory, built]) {
 			expect([...files.keys()].toSorted()).toEqual(['@fontsource/font.woff2', 'index.html']);
 			expect(servePage(files, '/').headers.get('content-type')).toStartWith('text/html');
+			expect(servePage(files, '/').headers.get('cache-control')).toBe('no-cache');
 			expect(servePage(files, '/@fontsource/font.woff2').headers.get('content-type')).toBe('font/woff2');
 			expect(servePage(files, '/../../etc/passwd')).toBeUndefined();
 			expect(servePage(files, '/missing.js')).toBeUndefined();
@@ -142,8 +143,8 @@ describe('ender web', () => {
 		expect((await send('DELETE', '/api/instances/family')).status).toBe(200);
 		expect(ran).toEqual([
 			['new', 'family', 'mr:sodium', '--minecraft', '26.3', '--loader', 'fabric'],
-			['import', 'gist:a1db98319884288ad3d83a0db854291f'],
-			['import', 'gh:me/pack'],
+			['import', 'gist:a1db98319884288ad3d83a0db854291f', '--sync'],
+			['import', 'gh:me/pack', '--sync'],
 			['update', '--instance', 'family'],
 			['delete', 'family', '--yes'],
 		]);
