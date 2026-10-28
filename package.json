@@ -29,7 +29,7 @@
 		"lint:fix": "bun --bun eslint --fix",
 		"format": "bun run lint:fix && bun --bun prettier --write .",
 		"compile": "bun build --compile index.js --outfile ender",
-		"version": "npm version"
+		"version": "bun pm version"
 	},
 	"repository": {
 		"type": "git",
