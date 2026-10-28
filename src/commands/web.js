@@ -95,9 +95,12 @@ const TYPES = {
 
 const typeOf = path => TYPES[path.split('.').at(-1)] ?? 'application/octet-stream';
 
+/** Where a checkout finds the index's built pages when ENDER_SITE names none: an ender-index checkout beside it. */
+export const SIBLING_SITE = join(import.meta.dir, '..', '..', '..', 'ender-index', 'client', 'build');
+
 /**
- * The index's pages, as path -> bytes: those a release built in, else the built site in ENDER_SITE. Undefined when
- * there are neither, as in a checkout nobody built the site for.
+ * The index's pages, as path -> bytes: those a release built in, else the built site in ENDER_SITE, else a sibling
+ * ender-index checkout's. Undefined when there are none, as in a checkout nobody built the site for.
  */
 export const siteFiles = async (directory = process.env.ENDER_SITE) => {
 	if (directory) {
@@ -113,7 +116,10 @@ export const siteFiles = async (directory = process.env.ENDER_SITE) => {
 	// eslint-disable-next-line import/no-unresolved -- written by scripts/embedSite.js for a release
 	const built = await import('./site.generated.js').catch(() => undefined);
 
-	return built && new Map(Object.entries(built.default).map(([path, data]) => [path, Buffer.from(data, 'base64')]));
+	if (built) return new Map(Object.entries(built.default).map(([path, data]) => [path, Buffer.from(data, 'base64')]));
+	if (!isCompiled() && (await Bun.file(join(SIBLING_SITE, 'index.html')).exists())) return siteFiles(SIBLING_SITE);
+
+	return undefined;
 };
 
 /** A file of the site for a request's path; the page for the root, and nothing outside the site. */
@@ -131,7 +137,7 @@ export const web = async ({ flags }) => {
 
 	if (files === undefined) {
 		throw new Error(
-			'This ender has no pages built in, as a checkout does not: build the index (bun run build:site in ender-index) and run it with ENDER_SITE set to its client/build',
+			'This ender has no pages built in, as a checkout does not: build the index (bun run build:site in ender-index, beside this checkout) or set ENDER_SITE to a built site',
 		);
 	}
 
