@@ -21,6 +21,9 @@ export const binaryFor = (platform = process.platform, arch = process.arch) => {
 /** Whether this is a compiled ender, which carries its code inside it, rather than a checkout run by Bun. */
 export const isCompiled = (main = Bun.main) => main.startsWith('/$bunfs/') || main.includes('~BUN');
 
+/** Whether Homebrew keeps this binary, in its Cellar, where only brew should replace it. */
+export const isBrewed = (path = process.execPath) => path.includes('/Cellar/');
+
 const sha256 = bytes => new Bun.CryptoHasher('sha256').update(bytes).digest('hex');
 
 /**
@@ -33,6 +36,8 @@ export const upgrade = async ({ flags }) => {
 			'This ender runs from a checkout, which git pull brings up to date; upgrade replaces a released binary',
 		);
 	}
+
+	if (isBrewed()) throw new Error('Homebrew installed this ender; brew upgrade ender brings it up to date');
 
 	const release = await (await fetchWithRetry(LATEST, { headers: { 'user-agent': userAgent } })).json();
 	const latest = release.tag_name.replace(/^v/, '');

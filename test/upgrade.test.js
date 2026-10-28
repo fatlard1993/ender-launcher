@@ -19,4 +19,12 @@ describe('ender upgrade', () => {
 		expect(isCompiled('/home/me/ender-launcher/index.js')).toBe(false);
 		await expect(upgrade({ flags: {} })).rejects.toThrow('git pull');
 	});
+
+	test('leaves an ender Homebrew installed to brew', async () => {
+		const { isBrewed } = await import('../src/commands/upgrade');
+
+		expect(isBrewed('/opt/homebrew/Cellar/ender/0.1.0/bin/ender')).toBe(true);
+		expect(isBrewed('/home/linuxbrew/.linuxbrew/Cellar/ender/0.1.0/bin/ender')).toBe(true);
+		expect(isBrewed('/home/me/.local/bin/ender')).toBe(false);
+	});
 });
