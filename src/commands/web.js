@@ -137,7 +137,7 @@ export const webApi =
 
 			if (!importable(source)) return json({ error: 'A pack is a gist, gh:owner/repo, or an https link' }, 400);
 
-			return ran(['import', source]);
+			return ran(['import', source, '--sync']);
 		}
 
 		if (collection === 'gists' && name === undefined && method === 'POST') {
@@ -253,7 +253,10 @@ export const servePage = (files, pathname) => {
 	const path = normalize(decodeURIComponent(pathname)).replace(/^[/\\]+/, '') || 'index.html';
 	const bytes = files.get(path.split(sep).join('/'));
 
-	return bytes ? new Response(bytes, { headers: { 'content-type': typeOf(path) } }) : undefined;
+	if (!bytes) return undefined;
+
+	// Asked for again each time, or a browser keeps showing the pages of the ender before an upgrade
+	return new Response(bytes, { headers: { 'content-type': typeOf(path), 'cache-control': 'no-cache' } });
 };
 
 /** Serve the index, managing this machine's instances, on this machine alone, and open it in the browser. */
