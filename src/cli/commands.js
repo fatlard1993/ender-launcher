@@ -201,7 +201,7 @@ export const commands = {
 		run: modCommands.support,
 	},
 	web: {
-		summary: 'Browse the index in your browser, adding and dropping mods in your instances',
+		summary: 'Browse the index in your browser and manage your instances there: make, import, update, launch, publish',
 		usage: 'ender web [--port number]',
 		flags: {
 			port: { type: 'number', description: 'Serve on this port rather than 7460' },

@@ -1,26 +1,24 @@
-import { spawn } from 'node:child_process';
-import { closeSync, openSync } from 'node:fs';
-import { mkdir } from 'node:fs/promises';
-import { dirname, join, normalize, sep } from 'node:path';
+import { join, normalize, sep } from 'node:path';
 
+import { version } from '../../package.json';
 import { openInBrowser } from '../browser';
 import { publishPack } from '../gist';
-import * as instances from '../instance';
-import { packFrom, parseEnderPack } from '../instance/enderPack';
+import { INSTANCE_NAME } from '../instance';
+import { parseEnderPack } from '../instance/enderPack';
+import { jobRunner, shown } from '../jobs';
+import { KNOWN_LOADERS } from '../meta/resolve';
 import { done, info, paint } from '../out';
-import { paths } from '../paths';
 import { REPOSITORY, gistOf } from './packSource';
 import { isCompiled } from './upgrade';
 
 export const PORT = 7460;
 
-/**
- * What the page may ask ender to add or drop: a repository or a project by the prefixes search writes. A path or a url
- * is refused, because then any page that reached this server could put any jar in an instance.
- */
+/** A mod the page names: a repository or a project by the prefixes search writes, never a path or a flag. */
 export const SPEC = /^(gh|cb|gl|mr|cf):[\w-][\w.-]*(\/[\w-][\w.-]*)*$/;
 
-export const INSTANCE = /^[\w-][\w.-]*$/;
+export const INSTANCE = INSTANCE_NAME;
+
+const GAME_VERSION = /^\w[\w.+-]{0,39}$/;
 
 /**
  * A request this server answers. It runs ender on this machine, so only a page served from here may ask: another
@@ -35,113 +33,117 @@ export const allowed = (request, port = PORT) => {
 	return local.map(host => `http://${host}`).includes(request.headers.get('origin'));
 };
 
-/** How this ender is run again: the binary itself when compiled, else Bun on this checkout. */
-const selfCommand = args => (isCompiled() ? [process.execPath, ...args] : [process.execPath, Bun.main, ...args]);
+/**
+ * A form posts from this origin too, and a mod's readme on this page may carry one past its sanitizing; a form cannot
+ * send JSON, so a write that is not JSON is refused.
+ */
+const sentAsJson = request => request.headers.get('content-type')?.split(';')[0].trim() === 'application/json';
 
-/** This ender, run again with these arguments, waited for: what it printed, and how it ended. */
-export const runSelf = async args => {
-	const child = Bun.spawn(selfCommand(args), {
-		stdout: 'pipe',
-		stderr: 'pipe',
-		env: { ...process.env, NO_COLOR: '1' },
-	});
+export const selfCommand = args => (isCompiled() ? [process.execPath, ...args] : [process.execPath, Bun.main, ...args]);
+
+/** A command run to its end: what it printed to each stream, and how it ended. */
+export const collect = async (argv, options = {}) => {
+	const child = Bun.spawn(argv, { stdout: 'pipe', stderr: 'pipe', ...options });
 	const [stdout, stderr, code] = await Promise.all([
 		new Response(child.stdout).text(),
 		new Response(child.stderr).text(),
 		child.exited,
 	]);
 
-	return { code, output: `${stdout}${stderr}`.trim() };
-};
-
-/**
- * This ender, run again and let go: a game outlives the page that started it, and Ctrl-C on ender web must not reach
- * it. What it prints goes to a log, which is answered.
- */
-export const startSelf = async (args, name) => {
-	const log = join(paths.cache, 'launches', `${name}.log`);
-
-	await mkdir(dirname(log), { recursive: true });
-
-	const out = openSync(log, 'w');
-	const child = spawn(selfCommand(args)[0], selfCommand(args).slice(1), {
-		detached: true,
-		stdio: ['ignore', out, out],
-		env: { ...process.env, NO_COLOR: '1' },
-	});
-
-	child.unref();
-	closeSync(out);
-
-	return { log };
+	return { code, stdout: stdout.trim(), stderr: stderr.trim() };
 };
 
 const json = (body, status = 200) => Response.json(body, { status });
 
-const LOADERS = new Set(['fabric', 'quilt', 'forge', 'neoforge', 'vanilla']);
-
-/** A game version as new takes one: an id such as 26.3, or release or snapshot for the newest. */
-const MINECRAFT = /^[\w.+-]{1,40}$/;
+const bodyOf = request => request.json().catch(() => ({}));
 
 /** A pack import fetches: a gist, a GitHub repository, or a link over https; never a file on this machine. */
 const importable = source =>
 	typeof source === 'string' &&
 	(gistOf(source) !== undefined || REPOSITORY.test(source) || /^https:\/\/\S+$/.test(source));
 
-const specsOf = async request => {
-	const { specs } = await request.json().catch(() => ({}));
-
-	return Array.isArray(specs) && specs.every(spec => SPEC.test(spec)) ? specs : undefined;
-};
-
 const BAD_SPECS = 'Each mod has to be a spec search writes, such as gh:owner/repo';
 
+const allSpecs = specs => Array.isArray(specs) && specs.every(spec => SPEC.test(spec));
+
+const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
+
 /**
- * The page's questions of this machine's instances, each answered by running ender: list them and show one, make one
- * from a list of mods or from a pack, add and drop mods, update, launch and delete one, and publish one, or a list,
- * as a gist. Undefined for a path that is not the API's.
+ * The page's questions of this machine's instances, each answered by running ender as `command` builds it. What takes
+ * a while is a job the page follows; what ender answers as JSON is answered as it is. Undefined for a path that is not
+ * the API's.
  */
-export const webApi =
-	({ run = runSelf, start = startSelf, publish = publishPack, packOf = instancePack } = {}) =>
-	async request => {
-		const { pathname } = new URL(request.url);
+export const webApi = ({
+	command = selfCommand,
+	run = args => collect(command(args), { env: { ...process.env, NO_COLOR: '1' } }),
+	jobs = jobRunner({ command }),
+	publish = publishPack,
+} = {}) => {
+	const answerJson = async args => {
+		const { code, stdout, stderr } = await run(args);
+
+		if (code !== 0) return json({ error: stderr || stdout || `ender ${args[0]} failed` }, 502);
+
+		try {
+			return json(JSON.parse(stdout));
+		} catch {
+			return json({ error: `ender ${args[0]} did not answer JSON: ${stdout.slice(0, 200)}` }, 502);
+		}
+	};
+	const startJob = async (args, { title, instance }) => {
+		const busy = jobs.running(instance);
+
+		if (busy) return json({ error: `${instance} is busy: ${busy.title}`, job: shown(busy) }, 409);
+
+		return json({ job: shown(await jobs.start(args, { title, instance })) }, 202);
+	};
+
+	return async request => {
+		const { pathname, searchParams } = new URL(request.url);
 
 		if (!pathname.startsWith('/api/')) return undefined;
 
 		const { method } = request;
-		const ran = async args => {
-			const { code, output } = await run(args);
 
-			return json({ ok: code === 0, output }, code === 0 ? 200 : 502);
-		};
-		const enderJson = async args => {
-			const { code, output } = await run(args);
+		if (method !== 'GET' && !sentAsJson(request)) return json({ error: 'The page sends its requests as JSON' }, 415);
 
-			if (code !== 0) return json({ error: output || `ender ${args[0]} failed` }, 502);
+		let segments;
 
-			return json(JSON.parse(output));
-		};
-		const published = async pack => {
-			try {
-				return json(await publish(pack));
-			} catch (error) {
-				return json({ error: error.message }, 502);
-			}
-		};
-		const [collection, name, verb, ...rest] = pathname.split('/').slice(2).map(decodeURIComponent);
+		try {
+			segments = pathname.split('/').slice(2).map(decodeURIComponent);
+		} catch {
+			return json({ error: 'Not a path the page asks' }, 400);
+		}
+
+		const [area, name, verb, ...rest] = segments;
 
 		if (rest.length > 0) return json({ error: 'Not found' }, 404);
+		if (area === 'ender' && method === 'GET') return json({ version });
 
-		if (collection === 'import' && name === undefined && method === 'POST') {
-			const { source } = await request.json().catch(() => ({}));
+		if (area === 'jobs' && method === 'GET') {
+			if (name === undefined) return json(jobs.list().map(shown));
+
+			const job = jobs.get(name);
+
+			if (!job) return json({ error: 'No such job' }, 404);
+
+			const from = Math.max(0, Number(searchParams.get('from')) || 0);
+			const seen = shown(job);
+			const lines = await jobs.lines(seen, from);
+
+			return json({ ...seen, lines, next: from + lines.length });
+		}
+
+		if (area === 'import' && name === undefined && method === 'POST') {
+			const { source } = await bodyOf(request);
 
 			if (!importable(source)) return json({ error: 'A pack is a gist, gh:owner/repo, or an https link' }, 400);
 
-			return ran(['import', source, '--sync']);
+			return startJob(['import', source, '--sync'], { title: `Importing ${source}` });
 		}
 
-		if (collection === 'gists' && name === undefined && method === 'POST') {
-			const { pack } = await request.json().catch(() => ({}));
+		if (area === 'gists' && name === undefined && method === 'POST') {
+			const { pack } = await bodyOf(request);
 			let checked;
 
 			try {
@@ -152,62 +154,77 @@ export const webApi =
 
 			if (!checked.mods.every(({ spec }) => SPEC.test(spec))) return json({ error: BAD_SPECS }, 400);
 
-			return published(pack);
+			try {
+				return json(
+					await publish({ name: pack.name, minecraft: pack.minecraft, loader: pack.loader, mods: pack.mods }),
+				);
+			} catch (error) {
+				return json({ error: error.message }, 502);
+			}
 		}
 
-		if (collection !== 'instances') return json({ error: 'Not found' }, 404);
-		if (name === undefined && method === 'GET') return enderJson(['ls', '--json']);
+		if (area !== 'instances') return json({ error: 'Not found' }, 404);
+		if (name === undefined && method === 'GET') return answerJson(['ls', '--json']);
 
 		if (name === undefined && method === 'POST') {
-			const { name: wanted, minecraft, loader, specs = [] } = await request.json().catch(() => ({}));
+			const { name: wanted, minecraft, loader, specs = [] } = await bodyOf(request);
 
-			if (!INSTANCE.test(wanted ?? '')) return json({ error: 'Not an instance name' }, 400);
-			if (minecraft !== undefined && !MINECRAFT.test(minecraft)) return json({ error: 'Not a game version' }, 400);
-			if (loader !== undefined && !LOADERS.has(loader)) return json({ error: 'Not a loader ender knows' }, 400);
-			if (!Array.isArray(specs) || !specs.every(spec => SPEC.test(spec))) return json({ error: BAD_SPECS }, 400);
+			if (!INSTANCE.test(wanted ?? '')) return json({ error: `"${wanted ?? ''}" cannot name an instance` }, 400);
+			if (minecraft !== undefined && !GAME_VERSION.test(minecraft)) return json({ error: 'Not a game version' }, 400);
+			if (loader !== undefined && !KNOWN_LOADERS.has(loader)) return json({ error: 'Not a loader ender knows' }, 400);
+			if (!allSpecs(specs)) return json({ error: BAD_SPECS }, 400);
 
-			return ran([
-				'new',
-				wanted,
-				...specs,
-				...(minecraft ? ['--minecraft', minecraft] : []),
-				...(loader ? ['--loader', loader] : []),
-			]);
+			return startJob(
+				[
+					'new',
+					wanted,
+					...specs,
+					...(minecraft ? ['--minecraft', minecraft] : []),
+					...(loader ? ['--loader', loader] : []),
+				],
+				{ title: `Making ${wanted}`, instance: wanted },
+			);
 		}
 
 		if (!INSTANCE.test(name ?? '')) return json({ error: 'Not an instance name' }, 400);
-		if (verb === undefined && method === 'GET') return enderJson(['info', name, '--json']);
-		if (verb === undefined && method === 'DELETE') return ran(['delete', name, '--yes']);
 
-		if (['add', 'drop'].includes(verb) && method === 'POST') {
-			const specs = await specsOf(request);
+		const named = { instance: name };
 
-			if (!specs?.length) return json({ error: BAD_SPECS }, 400);
-
-			return ran([verb, ...specs, '--instance', name]);
+		if (verb === undefined && method === 'GET') return answerJson(['info', name, '--json']);
+		if (verb === undefined && method === 'DELETE') {
+			return startJob(['delete', name, '--yes'], { title: `Deleting ${name}`, ...named });
 		}
 
-		if (verb === 'update' && method === 'POST') return ran(['update', '--instance', name]);
+		if (['add', 'drop'].includes(verb) && method === 'POST') {
+			const { specs } = await bodyOf(request);
+
+			if (!allSpecs(specs) || specs.length === 0) return json({ error: BAD_SPECS }, 400);
+
+			return startJob([verb, ...specs, '--instance', name], {
+				title: `${verb === 'add' ? 'Adding' : 'Dropping'} ${specs.length === 1 ? specs[0] : plural(specs.length, 'mod')}`,
+				...named,
+			});
+		}
+
+		if (verb === 'update' && method === 'POST') {
+			return startJob(['update', '--instance', name], { title: `Updating ${name}`, ...named });
+		}
 
 		if (verb === 'launch' && method === 'POST') {
-			const { update } = await request.json().catch(() => ({}));
+			const { update } = await bodyOf(request);
 
-			return json(await start(['launch', name, ...(update ? ['--update'] : [])], name), 202);
+			return startJob(['launch', name, ...(update ? ['--update'] : [])], { title: `Playing ${name}`, ...named });
 		}
 
 		if (verb === 'gist' && method === 'POST') {
-			try {
-				return published(await packOf(name));
-			} catch (error) {
-				return json({ error: error.message }, 404);
-			}
+			const { fresh } = await bodyOf(request);
+
+			return answerJson(['export', name, '--gist', '--json', ...(fresh ? ['--new'] : [])]);
 		}
 
 		return json({ error: 'Not found' }, 404);
 	};
-
-/** An instance's chosen mods as the pack export writes. */
-const instancePack = async name => packFrom(await instances.read(name)).pack;
+};
 
 const TYPES = {
 	html: 'text/html; charset=utf-8',
@@ -228,22 +245,14 @@ export const SIBLING_INDEX = join(import.meta.dir, '..', '..', '..', 'ender-inde
 export const buildSibling = async (index = SIBLING_INDEX) => {
 	if (!(await Bun.file(join(index, 'package.json')).exists())) return undefined;
 
-	const build = Bun.spawn([process.execPath, 'run', 'build:site'], { cwd: index, stdout: 'pipe', stderr: 'pipe' });
-	const [stdout, stderr, code] = await Promise.all([
-		new Response(build.stdout).text(),
-		new Response(build.stderr).text(),
-		build.exited,
-	]);
+	const { code, stdout, stderr } = await collect([process.execPath, 'run', 'build:site'], { cwd: index });
 
-	if (code !== 0) throw new Error(`The index's pages in ${index} did not build: ${`${stdout}${stderr}`.trim()}`);
+	if (code !== 0) throw new Error(`The index's pages in ${index} did not build: ${[stdout, stderr].join('\n').trim()}`);
 
 	return join(index, 'client', 'build');
 };
 
-/**
- * The index's pages, as path -> bytes: the built site in ENDER_SITE, else those a release built in, else a sibling
- * ender-index checkout's, built for the occasion. Undefined when there are none, as in a checkout with no index beside it.
- */
+/** The index's pages, as path -> bytes, or undefined when there are none. */
 export const siteFiles = async (directory = process.env.ENDER_SITE, { sibling = buildSibling } = {}) => {
 	if (directory) {
 		const files = new Map();
@@ -261,14 +270,22 @@ export const siteFiles = async (directory = process.env.ENDER_SITE, { sibling = 
 	if (built) return new Map(Object.entries(built.default).map(([path, data]) => [path, Buffer.from(data, 'base64')]));
 	if (isCompiled()) return undefined;
 
-	const fromIndex = await sibling();
+	const siblingBuild = await sibling();
 
-	return fromIndex ? siteFiles(fromIndex) : undefined;
+	return siblingBuild ? siteFiles(siblingBuild) : undefined;
 };
 
 /** A file of the site for a request's path; the page for the root, and nothing outside the site. */
 export const servePage = (files, pathname) => {
-	const path = normalize(decodeURIComponent(pathname)).replace(/^[/\\]+/, '') || 'index.html';
+	let decoded;
+
+	try {
+		decoded = decodeURIComponent(pathname);
+	} catch {
+		return undefined;
+	}
+
+	const path = normalize(decoded).replace(/^[/\\]+/, '') || 'index.html';
 	const bytes = files.get(path.split(sep).join('/'));
 
 	if (!bytes) return undefined;
@@ -284,7 +301,9 @@ export const web = async ({ flags }) => {
 
 	if (files === undefined) {
 		throw new Error(
-			`This ender has no pages built in, as a checkout does not, and no ender-index checkout is beside it at ${SIBLING_INDEX}: clone one there, or set ENDER_SITE to a built site`,
+			isCompiled()
+				? "This ender was built without the index's pages: set ENDER_SITE to a built site, or install a release"
+				: `A checkout has no pages built in, and no ender-index checkout is beside it at ${SIBLING_INDEX}: clone one there, or set ENDER_SITE to a built site`,
 		);
 	}
 
@@ -307,7 +326,11 @@ export const web = async ({ flags }) => {
 			},
 		});
 	} catch (error) {
-		if (error.code === 'EADDRINUSE') throw new Error(`Port ${port} is in use; pick another with ender web --port`);
+		if (error.code === 'EADDRINUSE') {
+			throw new Error(
+				`Port ${port} is in use, perhaps by an ender web already running: open http://localhost:${port}/, or pick another port with ender web --port`,
+			);
+		}
 
 		throw error;
 	}
