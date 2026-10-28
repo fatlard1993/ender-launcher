@@ -19,6 +19,9 @@ const PROFILE = 'https://api.minecraftservices.com/minecraft/profile';
 
 const SCOPE = 'XboxLive.signin offline_access';
 
+/** What Prism asks for. A refresh token renews only for the scopes it was granted, so one taken from Prism keeps these. */
+export const PRISM_SCOPE = 'XboxLive.SignIn XboxLive.offline_access';
+
 const form = body => ({
 	method: 'POST',
 	headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -121,10 +124,10 @@ const defaultPrompt = (start, { qr = true } = {}) => {
 	info(paint.dim('  once the browser is done and three more exchanges have completed.'));
 };
 
-export const refresh = async ({ refreshToken, clientId }) => {
+export const refresh = async ({ refreshToken, clientId, scope = SCOPE }) => {
 	const response = await fetch(
 		TOKEN,
-		form({ client_id: clientId, grant_type: 'refresh_token', refresh_token: refreshToken, scope: SCOPE }),
+		form({ client_id: clientId, grant_type: 'refresh_token', refresh_token: refreshToken, scope }),
 	);
 	const body = await response.json();
 

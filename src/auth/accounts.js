@@ -4,7 +4,7 @@ import { readJson, writeJson } from '../json';
 import { detail } from '../out';
 import { paths } from '../paths';
 import { offlineProfile, offlineUuid } from './offline';
-import { fetchProfile, refresh, signIn, toMinecraft } from './microsoft';
+import { PRISM_SCOPE, fetchProfile, refresh, signIn, toMinecraft } from './microsoft';
 
 /** Accounts stored before offline ones existed are all Microsoft ones. */
 const kindOf = account => account.kind ?? 'microsoft';
@@ -104,7 +104,11 @@ export const use = async name => {
 
 /** Walk a Microsoft account's tokens forward from its refresh token, keeping what each step returns. */
 const renew = async account => {
-	const tokens = await refresh({ refreshToken: account.refreshToken, clientId: account.clientId });
+	const tokens = await refresh({
+		refreshToken: account.refreshToken,
+		clientId: account.clientId,
+		scope: account.scope,
+	});
 	const minecraft = await toMinecraft(tokens.accessToken, account.clientId);
 
 	return Object.assign(account, {
@@ -140,6 +144,7 @@ export const importPrism = async (file, { renewal = renew } = {}) => {
 				uuid: entry.profile.id,
 				clientId: entry['msa-client-id'],
 				refreshToken: entry.msa.refresh_token,
+				scope: PRISM_SCOPE,
 			});
 
 			if (entry.active || store.active === undefined) store.active = name;

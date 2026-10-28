@@ -268,6 +268,7 @@ describe('accounts taken over from Prism', () => {
 			uuid: 'uuid-Ben',
 			clientId: 'prism-cid',
 			refreshToken: 'refresh-Ben-rotated',
+			scope: 'XboxLive.SignIn XboxLive.offline_access',
 			token: 't',
 			expiresAt: 1,
 		});
