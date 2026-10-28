@@ -102,6 +102,59 @@ export const use = async name => {
 	await writeAccounts(store);
 };
 
+/** Walk a Microsoft account's tokens forward from its refresh token, keeping what each step returns. */
+const renew = async account => {
+	const tokens = await refresh({ refreshToken: account.refreshToken, clientId: account.clientId });
+	const minecraft = await toMinecraft(tokens.accessToken, account.clientId);
+
+	return Object.assign(account, {
+		refreshToken: tokens.refreshToken,
+		token: minecraft.token,
+		expiresAt: minecraft.expiresAt,
+	});
+};
+
+/**
+ * Take over the Microsoft accounts Prism signed in, so a player who moves from it needs no second sign in. Prism
+ * records the client id each refresh token answers to; each account is renewed before it is kept, so one that no
+ * longer works is said here rather than at launch. One replaces an account of the same name, as an offline stand-in
+ * for the player usually is, and Prism's active account becomes the active one.
+ */
+export const importPrism = async (file, { renewal = renew } = {}) => {
+	const prism = await readJson(file, undefined);
+
+	if (prism === undefined) throw new Error(`No Prism accounts at ${file}`);
+
+	const store = await readAccounts();
+	const results = [];
+
+	for (const entry of prism.accounts ?? []) {
+		const name = entry.profile?.name;
+
+		if (entry.type !== 'MSA' || !name || !entry.msa?.refresh_token || !entry['msa-client-id']) continue;
+
+		try {
+			store.accounts[name] = await renewal({
+				kind: 'microsoft',
+				name,
+				uuid: entry.profile.id,
+				clientId: entry['msa-client-id'],
+				refreshToken: entry.msa.refresh_token,
+			});
+
+			if (entry.active || store.active === undefined) store.active = name;
+
+			results.push({ name });
+		} catch (error) {
+			results.push({ name, error: error.message });
+		}
+	}
+
+	await writeAccounts(store);
+
+	return results;
+};
+
 /**
  * The account an instance plays as, with its Minecraft token renewed if it has gone stale.
  * Renewal walks the whole chain again, because a Minecraft token is minted from an Xbox token
@@ -124,15 +177,7 @@ export const resolveAccount = async wanted => {
 
 	detail('auth', `renewing ${account.name}`);
 
-	const tokens = await refresh({ refreshToken: account.refreshToken, clientId: account.clientId });
-	const minecraft = await toMinecraft(tokens.accessToken, account.clientId);
-
-	Object.assign(account, {
-		refreshToken: tokens.refreshToken,
-		token: minecraft.token,
-		expiresAt: minecraft.expiresAt,
-	});
-
+	await renew(account);
 	await writeAccounts(store);
 
 	return account;

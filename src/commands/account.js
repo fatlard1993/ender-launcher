@@ -1,3 +1,5 @@
+import { join } from 'node:path';
+
 import { accounts } from '../auth';
 import * as instances from '../instance';
 import { readConfig } from '../config';
@@ -75,6 +77,20 @@ export const add = async ({ positionals, flags }) => {
 	info(paint.dim(`  ${account.uuid}`));
 
 	return 0;
+};
+
+export const importAccounts = async ({ positionals }) => {
+	const [file = join(instances.PRISM_ROOT, 'accounts.json')] = positionals;
+	const results = await accounts.importPrism(file);
+
+	if (results.length === 0) info(`Prism has no Microsoft accounts in ${file}`);
+
+	for (const { name, error } of results) {
+		if (error) warn(`${name} was not taken over: ${error}`);
+		else done(`Took over ${name} from Prism`);
+	}
+
+	return results.some(result => result.error) ? 1 : 0;
 };
 
 export const use = async ({ positionals }) => {

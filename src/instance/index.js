@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { readJson, writeJson } from '../json';
 import { instanceDir, lockPath, manifestPath, paths } from '../paths';
 
-const PRISM_ROOT = join(homedir(), '.local/share/PrismLauncher');
+export const PRISM_ROOT = join(homedir(), '.local/share/PrismLauncher');
 
 const isDirectory = async path => {
 	try {

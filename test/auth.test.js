@@ -226,3 +226,72 @@ describe('account listing for scripts', () => {
 		expect(lines.some(line => line.includes('No accounts yet'))).toBe(true);
 	});
 });
+
+describe('accounts taken over from Prism', () => {
+	const prismFile = async accounts => {
+		const file = join(home, 'prism-accounts.json');
+
+		await Bun.write(file, JSON.stringify({ formatVersion: 3, accounts }));
+
+		return file;
+	};
+	const msa = (name, extra = {}) => ({
+		type: 'MSA',
+		'msa-client-id': 'prism-cid',
+		msa: { refresh_token: `refresh-${name}` },
+		profile: { id: `uuid-${name}`, name },
+		...extra,
+	});
+	const renewal = async account => ({
+		...account,
+		refreshToken: `${account.refreshToken}-rotated`,
+		token: 't',
+		expiresAt: 1,
+	});
+
+	// The player played online through Prism and offline under the same name through ender: the sign in replaces the stand-in
+	test('replace the offline stand-in of the same name and become active', async () => {
+		const accounts = await accountsModule();
+
+		await accounts.addOffline('Ben');
+
+		const file = await prismFile([msa('Ben', { active: true }), { type: 'Offline', profile: { name: 'Local' } }]);
+
+		expect(await accounts.importPrism(file, { renewal })).toEqual([{ name: 'Ben' }]);
+
+		const { active, accounts: stored } = await accounts.readAccounts();
+
+		expect(active).toBe('Ben');
+		expect(stored.Ben).toEqual({
+			kind: 'microsoft',
+			name: 'Ben',
+			uuid: 'uuid-Ben',
+			clientId: 'prism-cid',
+			refreshToken: 'refresh-Ben-rotated',
+			token: 't',
+			expiresAt: 1,
+		});
+	});
+
+	test('keep nothing for one that no longer renews, and say why', async () => {
+		const accounts = await accountsModule();
+
+		await accounts.addOffline('Ben');
+
+		const file = await prismFile([msa('Ben', { active: true })]);
+		const refused = async () => {
+			throw new Error('Could not refresh the sign in (invalid_grant). Sign in again.');
+		};
+
+		expect(await accounts.importPrism(file, { renewal: refused })).toEqual([
+			{ name: 'Ben', error: 'Could not refresh the sign in (invalid_grant). Sign in again.' },
+		]);
+		expect((await accounts.readAccounts()).accounts.Ben.kind).toBe('offline');
+	});
+
+	test('names the file when Prism has none', async () => {
+		const accounts = await accountsModule();
+
+		await expect(accounts.importPrism(join(home, 'missing.json'), { renewal })).rejects.toThrow('missing.json');
+	});
+});

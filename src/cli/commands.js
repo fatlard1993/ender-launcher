@@ -218,7 +218,7 @@ export const commands = {
 
 	account: {
 		summary: 'Who instances play as, online or offline',
-		usage: 'ender account [ls|add|use <name>|remove <name>|assign <name>|status]',
+		usage: 'ender account [ls|add|import [accounts.json]|use <name>|remove <name>|assign <name>|status]',
 		flags: {
 			...instanceFlag,
 			offline: { type: 'boolean', description: 'Add an offline identity, no sign in' },
@@ -233,6 +233,10 @@ export const commands = {
 		subcommands: {
 			ls: { summary: 'List accounts, online and offline', run: accountCommands.ls },
 			add: { summary: 'Sign in, or add an offline identity with --offline', run: accountCommands.add },
+			import: {
+				summary: 'Take over the Microsoft accounts Prism signed in, so they need no second sign in',
+				run: accountCommands.importAccounts,
+			},
 			use: { summary: 'Choose which account instances play as', run: accountCommands.use },
 			remove: { summary: 'Forget an account', run: accountCommands.remove },
 			assign: { summary: 'Bind one instance to one account', run: accountCommands.assign },
