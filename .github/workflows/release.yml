@@ -27,14 +27,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: site/ender-launcher
+          persist-credentials: false
       - uses: actions/checkout@v4
         with:
           repository: fatlard1993/ender-index
           path: site/ender-index
+          persist-credentials: false
       - name: the index's pages
         run: |
-          (cd site/ender-index && bun install && bun run build:site)
+          (cd site/ender-index && bun install --frozen-lockfile && bun run build:site)
           bun scripts/embedSite.js site/ender-index/client/build
+          echo "INDEX_COMMIT=$(git -C site/ender-index rev-parse HEAD)" >> "$GITHUB_ENV"
       # Bun compiles for every platform from this one; each binary carries Bun itself, so needs nothing installed
       - name: build
         run: |
@@ -48,7 +51,9 @@ jobs:
       - name: publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --title "ender $GITHUB_REF_NAME" --generate-notes
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* --title "ender $GITHUB_REF_NAME" --generate-notes \
+            --notes "ender web serves the index's pages as of fatlard1993/ender-index@$INDEX_COMMIT."
       - name: homebrew
         env:
           TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
