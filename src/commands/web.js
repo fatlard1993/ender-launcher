@@ -221,14 +221,30 @@ const TYPES = {
 
 const typeOf = path => TYPES[path.split('.').at(-1)] ?? 'application/octet-stream';
 
-/** Where a checkout finds the index's built pages when ENDER_SITE names none: an ender-index checkout beside it. */
-export const SIBLING_SITE = join(import.meta.dir, '..', '..', '..', 'ender-index', 'client', 'build');
+/** Where a checkout finds the index's pages when ENDER_SITE names none: an ender-index checkout beside it. */
+export const SIBLING_INDEX = join(import.meta.dir, '..', '..', '..', 'ender-index');
+
+/** The sibling index's pages, built fresh from its checkout, so a checkout serves the pages as they stand. */
+export const buildSibling = async (index = SIBLING_INDEX) => {
+	if (!(await Bun.file(join(index, 'package.json')).exists())) return undefined;
+
+	const build = Bun.spawn([process.execPath, 'run', 'build:site'], { cwd: index, stdout: 'pipe', stderr: 'pipe' });
+	const [stdout, stderr, code] = await Promise.all([
+		new Response(build.stdout).text(),
+		new Response(build.stderr).text(),
+		build.exited,
+	]);
+
+	if (code !== 0) throw new Error(`The index's pages in ${index} did not build: ${`${stdout}${stderr}`.trim()}`);
+
+	return join(index, 'client', 'build');
+};
 
 /**
- * The index's pages, as path -> bytes: those a release built in, else the built site in ENDER_SITE, else a sibling
- * ender-index checkout's. Undefined when there are none, as in a checkout nobody built the site for.
+ * The index's pages, as path -> bytes: the built site in ENDER_SITE, else those a release built in, else a sibling
+ * ender-index checkout's, built for the occasion. Undefined when there are none, as in a checkout with no index beside it.
  */
-export const siteFiles = async (directory = process.env.ENDER_SITE) => {
+export const siteFiles = async (directory = process.env.ENDER_SITE, { sibling = buildSibling } = {}) => {
 	if (directory) {
 		const files = new Map();
 
@@ -243,9 +259,11 @@ export const siteFiles = async (directory = process.env.ENDER_SITE) => {
 	const built = await import('./site.generated.js').catch(() => undefined);
 
 	if (built) return new Map(Object.entries(built.default).map(([path, data]) => [path, Buffer.from(data, 'base64')]));
-	if (!isCompiled() && (await Bun.file(join(SIBLING_SITE, 'index.html')).exists())) return siteFiles(SIBLING_SITE);
+	if (isCompiled()) return undefined;
 
-	return undefined;
+	const fromIndex = await sibling();
+
+	return fromIndex ? siteFiles(fromIndex) : undefined;
 };
 
 /** A file of the site for a request's path; the page for the root, and nothing outside the site. */
@@ -266,7 +284,7 @@ export const web = async ({ flags }) => {
 
 	if (files === undefined) {
 		throw new Error(
-			'This ender has no pages built in, as a checkout does not: build the index (bun run build:site in ender-index, beside this checkout) or set ENDER_SITE to a built site',
+			`This ender has no pages built in, as a checkout does not, and no ender-index checkout is beside it at ${SIBLING_INDEX}: clone one there, or set ENDER_SITE to a built site`,
 		);
 	}
 

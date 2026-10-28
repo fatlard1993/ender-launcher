@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 
 import { siteModule } from '../scripts/embedSite';
-import { INSTANCE, SPEC, allowed, servePage, siteFiles, webApi } from '../src/commands/web';
+import { INSTANCE, SPEC, allowed, buildSibling, servePage, siteFiles, webApi } from '../src/commands/web';
 
 const request = (path, { method = 'GET', host = 'localhost:7460', origin, body } = {}) =>
 	new Request(`http://${host}${path}`, {
@@ -94,6 +94,24 @@ describe('ender web', () => {
 			expect(servePage(files, '/@fontsource/font.woff2').headers.get('content-type')).toBe('font/woff2');
 			expect(servePage(files, '/../../etc/passwd')).toBeUndefined();
 			expect(servePage(files, '/missing.js')).toBeUndefined();
+		}
+	});
+
+	test('a checkout builds the index beside it for each start, and says so when that build fails', async () => {
+		const index = await mkdtemp(join(tmpdir(), 'ender-web-index-'));
+
+		try {
+			expect(await buildSibling(index)).toBeUndefined();
+
+			await Bun.write(join(index, 'package.json'), JSON.stringify({ scripts: { 'build:site': 'echo broken && exit 3' } }));
+			await expect(buildSibling(index)).rejects.toThrow('did not build: broken');
+
+			const files = await siteFiles(undefined, { sibling: async () => site });
+
+			expect(files.has('index.html')).toBe(true);
+			expect(await siteFiles(undefined, { sibling: async () => undefined })).toBeUndefined();
+		} finally {
+			await rm(index, { recursive: true, force: true });
 		}
 	});
 
