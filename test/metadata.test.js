@@ -125,7 +125,7 @@ describe('mods declared in a built jar', () => {
 				depends: { 'fabric-api': '*' },
 				recommends: { modmenu: '*' },
 				suggests: { jei: '*' },
-				breaks: { optifabric: '*' },
+				breaks: { optifabric: '*', pandorical: ['<15.0.0', '>=20'] },
 				conflicts: { sodium: '<0.6' },
 			}),
 		});
@@ -135,7 +135,7 @@ describe('mods declared in a built jar', () => {
 					id: 'q',
 					version: '1',
 					depends: ['qsl', { id: 'emi', optional: true }],
-					breaks: [{ id: 'optifabric' }],
+					breaks: [{ id: 'optifabric', versions: '<2' }],
 				},
 			}),
 		});
@@ -154,6 +154,7 @@ describe('mods declared in a built jar', () => {
 				'[[dependencies.g]]',
 				'modId = "optifine"',
 				'type = "incompatible"',
+				'versionRange = "[1.0,2.0)"',
 				'[[dependencies.g]]',
 				'modId = "rubidium"',
 				'type = "discouraged"',
@@ -163,15 +164,24 @@ describe('mods declared in a built jar', () => {
 		expect((await readMods(fabric))[0]).toMatchObject({
 			depends: ['fabric-api'],
 			suggests: ['modmenu', 'jei'],
-			breaks: ['optifabric'],
+			breaks: ['optifabric', 'pandorical'],
+			breaksVersions: { optifabric: '*', pandorical: '<15.0.0 || >=20' },
 			conflicts: ['sodium'],
+			conflictsVersions: { sodium: '<0.6' },
 		});
-		expect((await readMods(quilt))[0]).toMatchObject({ depends: ['qsl'], suggests: ['emi'], breaks: ['optifabric'] });
+		expect((await readMods(quilt))[0]).toMatchObject({
+			depends: ['qsl'],
+			suggests: ['emi'],
+			breaks: ['optifabric'],
+			breaksVersions: { optifabric: '<2' },
+		});
 		expect((await readMods(forge))[0]).toMatchObject({
 			depends: ['architectury'],
 			suggests: ['curios'],
 			breaks: ['optifine'],
+			breaksVersions: { optifine: '[1.0,2.0)' },
 			conflicts: ['rubidium'],
+			conflictsVersions: { rubidium: '*' },
 		});
 		expect((await readMods(forge))[0]).not.toHaveProperty('depends', expect.arrayContaining(['optifine']));
 	});

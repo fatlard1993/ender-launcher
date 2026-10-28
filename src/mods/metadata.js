@@ -44,15 +44,26 @@ const manifestValue = (manifest, key) => {
 	return unwrapped.match(new RegExp(`^${key}: *(.*)$`, 'm'))?.[1]?.trim();
 };
 
+/** A range as the loader writes it, any of several joined as Fabric joins them; `*` for every version. */
+const rangeOf = versions => [versions].flat().filter(Boolean).join(' || ') || '*';
+
 /**
  * The mods a mod names besides those it needs: ones it works with (suggests), ones the loader refuses to run beside
- * it (breaks), and ones it warns about (conflicts). Each is listed only when it names any.
+ * it (breaks), and ones it warns about (conflicts), each listed only when it names any. A break or conflict holds for
+ * the versions in its range alone, kept by id beside it: `"breaks": {"pandorical": "<15.0.0"}` is no clash with
+ * Pandorical 15. Each of breaks and conflicts is given as [id, range] pairs.
  */
 const relations = ({ suggests = [], breaks = [], conflicts = [] }) => ({
 	...(suggests.length > 0 ? { suggests: [...new Set(suggests)] } : {}),
-	...(breaks.length > 0 ? { breaks: [...new Set(breaks)] } : {}),
-	...(conflicts.length > 0 ? { conflicts: [...new Set(conflicts)] } : {}),
+	...(breaks.length > 0
+		? { breaks: [...new Set(breaks.map(([id]) => id))], breaksVersions: Object.fromEntries(breaks) }
+		: {}),
+	...(conflicts.length > 0
+		? { conflicts: [...new Set(conflicts.map(([id]) => id))], conflictsVersions: Object.fromEntries(conflicts) }
+		: {}),
 });
+
+const ranged = declared => Object.entries(declared ?? {}).map(([id, versions]) => [id, rangeOf(versions)]);
 
 const fabric = (json, loader = 'fabric', bundled = []) => ({
 	loader,
@@ -66,8 +77,8 @@ const fabric = (json, loader = 'fabric', bundled = []) => ({
 	provides: [...(json.provides ?? []), ...bundled],
 	...relations({
 		suggests: [...Object.keys(json.recommends ?? {}), ...Object.keys(json.suggests ?? {})],
-		breaks: Object.keys(json.breaks ?? {}),
-		conflicts: Object.keys(json.conflicts ?? {}),
+		breaks: ranged(json.breaks),
+		conflicts: ranged(json.conflicts),
 	}),
 });
 
@@ -91,7 +102,7 @@ const quilt = (json, bundled = []) => {
 		provides: [...(loader.provides ?? []).map(provided => provided.id ?? provided), ...bundled],
 		...relations({
 			suggests: depends.filter(dependency => dependency.optional).map(dependency => dependency.id),
-			breaks: listed(loader.breaks).map(dependency => dependency.id),
+			breaks: listed(loader.breaks).map(dependency => [dependency.id, rangeOf(dependency.versions)]),
 		}),
 	};
 };
@@ -156,10 +167,10 @@ const toml = (source, loader, manifest) => {
 					.map(dependency => dependency.modId),
 				breaks: dependencies
 					.filter(dependency => kindOf(dependency) === 'incompatible')
-					.map(dependency => dependency.modId),
+					.map(dependency => [dependency.modId, rangeOf(dependency.versionRange)]),
 				conflicts: dependencies
 					.filter(dependency => kindOf(dependency) === 'discouraged')
-					.map(dependency => dependency.modId),
+					.map(dependency => [dependency.modId, rangeOf(dependency.versionRange)]),
 			}),
 		};
 	});
