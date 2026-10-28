@@ -39,6 +39,9 @@ export const paths = {
 	get cache() {
 		return join(dataRoot(), 'cache');
 	},
+	get kept() {
+		return join(dataRoot(), 'kept');
+	},
 };
 
 export const instanceDir = name => join(paths.instances, name);

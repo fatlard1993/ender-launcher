@@ -1,6 +1,6 @@
-import { mkdir, readdir, rm, stat } from 'node:fs/promises';
+import { mkdir, readdir, rename, rm, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 
 import { readJson, writeJson } from '../json';
 import { instanceDir, lockPath, manifestPath, paths } from '../paths';
@@ -109,14 +109,32 @@ export const create = async (name, overrides = {}) => {
 	return write(manifest);
 };
 
+const isWithin = (path, directory) => {
+	const between = relative(directory, path);
+
+	return between !== '' && !between.startsWith('..');
+};
+
+/**
+ * Forget an instance. A game directory inside the instance's own, as every default one is, is moved aside to
+ * paths.kept rather than deleted with it, worlds and all; only purgeGameDir deletes it. Answers where it was kept.
+ */
 export const remove = async (name, { purgeGameDir = false } = {}) => {
 	const manifest = await read(name);
+	let kept;
 
-	if (purgeGameDir) await rm(manifest.gameDir, { recursive: true, force: true });
+	if (purgeGameDir) {
+		await rm(manifest.gameDir, { recursive: true, force: true });
+	} else if (isWithin(manifest.gameDir, instanceDir(name)) && (await isDirectory(manifest.gameDir))) {
+		kept = join(paths.kept, `${name}-${new Date().toISOString().slice(0, 19).replaceAll(':', '-')}`);
+
+		await mkdir(paths.kept, { recursive: true });
+		await rename(manifest.gameDir, kept);
+	}
 
 	await rm(instanceDir(name), { recursive: true, force: true });
 
-	return manifest;
+	return { manifest, kept };
 };
 
 export const modsDir = manifest => join(manifest.gameDir, 'mods');

@@ -11,6 +11,7 @@ import { resolveVersionId } from '../meta/mojang';
 import { LOADER_SERVICES, assertKnownLoader } from '../meta/resolve';
 import { done, info, paint, plural, step, warn } from '../out';
 import { publishPack } from '../gist';
+import { paths } from '../paths';
 import { parseModSpec, refineModSpec, syncInstance } from './mods';
 import { fetchPack, isRemote, resolveSpecs, sourceOf } from './packSource';
 import { targetInstance, targetName } from './context';
@@ -283,19 +284,21 @@ export const remove = async ({ positionals, flags }) => {
 		warn(`This removes the instance "${name}".`);
 		info(
 			flags.purge
-				? `  Its game directory ${manifest.gameDir} goes too.`
-				: `  Its game directory ${manifest.gameDir} stays.`,
+				? `  Its game directory ${manifest.gameDir} goes too, worlds and all.`
+				: `  Its game directory ${manifest.gameDir} is kept, moved to ${paths.kept} if it is inside the instance.`,
 		);
 		info('  Pass --yes to go ahead.');
 
 		return 1;
 	}
 
-	await instances.remove(name, { purgeGameDir: flags.purge });
+	const { kept } = await instances.remove(name, { purgeGameDir: flags.purge });
 
 	if ((await readConfig()).activeInstance === name) await updateConfig({ activeInstance: undefined });
 
 	done(`Removed ${name}`);
+
+	if (kept) info(`  Its game directory, worlds included, is kept at ${kept}`);
 
 	return 0;
 };
