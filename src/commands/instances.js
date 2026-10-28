@@ -325,6 +325,8 @@ const importPack = async (path, flags, target = path) => {
 
 	assertKnownLoader(pack.manifest.loader);
 
+	if (flags.name === undefined) pack.manifest.name = instances.instanceNameOf(pack.manifest.name);
+
 	if (await instances.exists(pack.manifest.name))
 		throw new Error(`An instance named "${pack.manifest.name}" already exists`);
 
@@ -387,9 +389,9 @@ const importPrismInstance = async (directory, flags) => {
 
 	const { manifest, unmatched } = await fromPrism(directory, { name: flags.name });
 
-	if (await instances.exists(manifest.name)) throw new Error(`An instance named "${manifest.name}" already exists`);
+	if (flags.name === undefined) manifest.name = instances.instanceNameOf(manifest.name);
 
-	await instances.write(manifest);
+	await instances.create(manifest.name, manifest);
 
 	done(
 		`Imported ${manifest.name} :: Minecraft ${manifest.minecraft}, ${manifest.loader.type} ${manifest.loader.version ?? ''}`,

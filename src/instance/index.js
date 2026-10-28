@@ -5,6 +5,25 @@ import { join } from 'node:path';
 import { readJson, writeJson } from '../json';
 import { instanceDir, lockPath, manifestPath, paths } from '../paths';
 
+export const INSTANCE_NAME = /^\w[\w.-]{0,63}$/;
+
+export const assertInstanceName = name => {
+	if (!INSTANCE_NAME.test(name ?? '')) {
+		throw new Error(
+			`"${name}" cannot name an instance: start with a letter or digit, then use letters, digits, dots, dashes and underscores, 64 at most`,
+		);
+	}
+};
+
+/** A name anyone gave a pack, made into one an instance can take. */
+export const instanceNameOf = text =>
+	(text ?? '')
+		.trim()
+		.toLowerCase()
+		.replaceAll(/[^\w.-]+/g, '-')
+		.replaceAll(/^[-.]+|-+$/g, '')
+		.slice(0, 64) || 'pack';
+
 export const PRISM_ROOT = join(homedir(), '.local/share/PrismLauncher');
 
 const isDirectory = async path => {
@@ -79,6 +98,8 @@ export const list = async () => {
 const given = overrides => Object.fromEntries(Object.entries(overrides).filter(([, value]) => value !== undefined));
 
 export const create = async (name, overrides = {}) => {
+	assertInstanceName(name);
+
 	if (await exists(name)) throw new Error(`An instance named "${name}" already exists`);
 
 	const manifest = { ...defaults(name), ...given(overrides), name };
