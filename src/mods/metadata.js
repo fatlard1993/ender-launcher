@@ -196,6 +196,29 @@ export const readMods = async jar => {
 	return mods;
 };
 
+/** A source file's `${key}` placeholders, filled from gradle.properties as its build fills them: `version` is the mod's. */
+const expand = (text, properties) =>
+	text.replaceAll(
+		/\$\{(\w+)\}/g,
+		(whole, key) => (key === 'version' ? (properties.mod_version ?? properties.version) : properties[key]) ?? whole,
+	);
+
+/**
+ * The mods a source tree's metadata says it holds, given each file's text by loader, with its placeholders filled from
+ * gradle.properties. A game range a placeholder left unfilled is the game version the project builds against.
+ */
+export const readSourceMods = ({ fabric: fabricJson, quilt: quiltJson, neoforge, forge }, properties = {}) => {
+	const filled = text => text && expand(text, properties);
+	const mods = [
+		...(fabricJson ? [fabric(parseLeniently(filled(fabricJson)))] : []),
+		...(quiltJson ? [quilt(parseLeniently(filled(quiltJson)))] : []),
+		...(neoforge ? toml(filled(neoforge), 'neoforge') : []),
+		...(forge ? toml(filled(forge), 'forge') : []),
+	];
+
+	return mods.map(mod => (mod.minecraft?.includes('${') ? { ...mod, minecraft: properties.minecraft_version } : mod));
+};
+
 /** Larger than an icon has reason to be; a jar declaring one past it is shown without. */
 export const ICON_LIMIT = 256 * 1024;
 

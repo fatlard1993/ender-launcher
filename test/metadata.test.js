@@ -3,7 +3,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 
-import { ICON_LIMIT, parseLeniently, readContent, readIcon, readLinks, readMods } from '../src/mods/metadata';
+import {
+	ICON_LIMIT,
+	parseLeniently,
+	readContent,
+	readIcon,
+	readLinks,
+	readMods,
+	readSourceMods,
+} from '../src/mods/metadata';
 import { jar as jarIn } from './jars';
 
 let directory;
@@ -351,5 +359,32 @@ describe('what a jar adds', () => {
 
 	test('a jar with no language file or data adds nothing it names', async () => {
 		expect(await readContent(await jar({ 'a/A.class': 'x' }))).toEqual({ names: {}, data: [], shaders: false });
+	});
+});
+
+describe("a source tree's metadata", () => {
+	test('has its placeholders filled from gradle.properties, as its build fills them', () => {
+		const [mod] = readSourceMods(
+			{
+				fabric: JSON.stringify({
+					id: 'boats',
+					version: '${version}',
+					depends: { minecraft: '~${minecraft_version}', fabricloader: '>=${loader_version}', 'fabric-api': '*' },
+				}),
+			},
+			{ mod_version: '1.3.6', minecraft_version: '1.21.4', loader_version: '0.16.9' },
+		);
+
+		expect(mod).toMatchObject({ loader: 'fabric', id: 'boats', version: '1.3.6', minecraft: '~1.21.4' });
+		expect(mod.depends).toEqual(['minecraft', 'fabricloader', 'fabric-api']);
+	});
+
+	test('names the game the project builds against when a range is left to a placeholder it cannot fill', () => {
+		const [mod] = readSourceMods(
+			{ fabric: JSON.stringify({ id: 'x', depends: { minecraft: '${mc_range}' } }) },
+			{ minecraft_version: '1.21.4' },
+		);
+
+		expect(mod.minecraft).toBe('1.21.4');
 	});
 });
