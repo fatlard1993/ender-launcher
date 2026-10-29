@@ -1,7 +1,7 @@
 import { checksumOf, fetchJson } from '../download';
 import { detail } from '../out';
 import * as catalog from './catalog';
-import { resolveFromRecord } from './indexed';
+import { resolveFromRecord, resolveFromSource } from './indexed';
 import { chooseAsset, pickBuild } from './pick';
 
 export { chooseAsset } from './pick';
@@ -131,7 +131,11 @@ export const resolve = async (entry, context = {}) => {
 		detail('github', `the index could not be read (${error.message}); asking GitHub directly`);
 	}
 
+	const named = { ...entry, source: id };
+
 	return (
-		(indexed && (await resolveFromRecord(indexed, { ...entry, source: id }, context))) ?? resolveFromApi(entry, context)
+		(indexed && (await resolveFromRecord(indexed, named, context))) ??
+		(indexed && (await resolveFromSource(indexed, named, context))) ??
+		resolveFromApi(entry, context)
 	);
 };

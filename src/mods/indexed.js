@@ -3,6 +3,7 @@ import { detail, warn } from '../out';
 import * as catalog from './catalog';
 import { chooseAsset, pickBuild } from './pick';
 import { HOSTS, rank } from './rank';
+import { allowBuilding, buildFromSource } from './source';
 
 export { HOSTS } from './rank';
 
@@ -110,6 +111,47 @@ export const resolveFromRecord = async (record, entry, context) => {
 	};
 };
 
+/**
+ * A repository with no release to install from, built from the commit the index found its source could build at, once
+ * the player has allowed building it. Undefined when the index knows no source for it.
+ */
+export const resolveFromSource = async (record, entry, context) => {
+	const { source } = record;
+
+	if (source === undefined) return undefined;
+
+	const key = `${entry.source}:${entry.id}`;
+	const { minecraft, loader } = context;
+
+	if ((source.mods ?? []).length > 0 && catalog.fit(source.mods, { minecraft, loader }) === 0) {
+		throw new Error(
+			`${key} has no built release, and its source builds for Minecraft ${source.minecraft ?? 'another version'} on ${source.loader ?? 'another loader'}`,
+		);
+	}
+
+	if (!(await allowBuilding(key, context.buildMissing))) {
+		throw new Error(
+			`${key} has no built release, only its source. Building it runs its gradle scripts on this machine with your permissions; ender add ${key} --build allows that for it from now on.`,
+		);
+	}
+
+	const jar = await buildFromSource({ host: entry.source, name: entry.id, commit: source.commit, minecraft: source.minecraft });
+	const short = source.commit.slice(0, 7);
+
+	return {
+		source: entry.source,
+		id: entry.id,
+		name: `${entry.id} ${short}`,
+		version: source.commit,
+		file: { filename: `${entry.id.split('/').at(-1)}-${short}.jar`, localPath: jar },
+		dependencies: await dependenciesOf(
+			entry,
+			(source.mods ?? []).filter(mod => catalog.loaderFits(mod.loader, loader)),
+			context,
+		),
+	};
+};
+
 /** Search the index: repositories whose own jars declare a loader and game version the instance can use. */
 export const search = async (query, { minecraft, loader, limit = 10, index } = {}) =>
 	rank(await catalog.listing({ index }), query, { minecraft, loader })
@@ -147,7 +189,8 @@ export const hosted = host => ({
 			throw new Error(`${host}:${entry.id} is not in the index; add "${host}:${entry.id}" to ender-index's repos.txt`);
 		}
 
-		const resolved = await resolveFromRecord(record, entry, context);
+		const resolved =
+			(await resolveFromRecord(record, entry, context)) ?? (await resolveFromSource(record, entry, context));
 
 		if (resolved === undefined) {
 			throw new Error(

@@ -4,6 +4,7 @@ module.exports = {
 	skipWords: [
 		'aarch64',
 		'abc',
+		'adoptium',
 		'algo',
 		'alloc',
 		'amd64',
@@ -81,6 +82,7 @@ module.exports = {
 		'intel',
 		'issuehunt',
 		'jarsplitter',
+		'javac',
 		'javadoc',
 		'javafml',
 		'jdk',
@@ -181,6 +183,7 @@ module.exports = {
 		'superclass',
 		'symlink',
 		'symlinks',
+		'temurin',
 		'testsupport',
 		'tidelift',
 		'tmpdir',

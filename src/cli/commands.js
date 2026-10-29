@@ -19,7 +19,10 @@ const depsFlag = {
 		off: 'Install only what was named, not its dependencies',
 	},
 	pre: { type: 'boolean', description: 'Allow alpha and beta builds, not just releases' },
-	build: { type: 'boolean', description: 'Rebuild mods that come from a gradle project first' },
+	build: {
+		type: 'boolean',
+		description: 'Build mods from source: a gradle project on disk, or a repository with no built release, allowed from then on',
+	},
 };
 
 export const commands = {
