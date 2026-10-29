@@ -2,16 +2,16 @@ import { info, paint } from '../out';
 import { commands } from './commands';
 
 const GROUPS = [
-	['Instances', ['ls', 'new', 'use', 'info', 'set', 'bump', 'clone', 'delete', 'import', 'export']],
+	['Instances', ['ls', 'new', 'use', 'info', 'set', 'bump', 'clone', 'delete', 'kept', 'import', 'export']],
 	['Running', ['install', 'launch', 'explain']],
-	['Mods', ['search', 'add', 'drop', 'sync', 'update', 'support', 'share', 'web']],
+	['Mods', ['search', 'add', 'drop', 'sync', 'update', 'scan', 'follow', 'support', 'share', 'web']],
 	['Servers', ['server']],
 	['Accounts', ['account']],
 	['Settings', ['config', 'java', 'upgrade']],
 ];
 
 export const usage = () => {
-	info(`${paint.bold('ender')} :: Minecraft instances, mods, and servers`);
+	info(`${paint.bold('ender')} :: Minecraft instances, mods, modpacks and servers`);
 	info('');
 	info(`  ${paint.dim('ender <command> [arguments] [flags]')}`);
 

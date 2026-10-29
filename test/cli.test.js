@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import { commands } from '../src/cli/commands';
-import { commandHelp } from '../src/cli/help';
+import { commandHelp, usage } from '../src/cli/help';
 
 const rendered = (name, command) => {
 	const lines = [];
@@ -59,3 +59,21 @@ describe('flag help', () => {
 		}
 	});
 });
+
+test('ender --help lists every command, so none is found only by reading the source', () => {
+	const lines = [];
+	const real = console.log;
+
+	console.log = (...parts) => lines.push(parts.join(' '));
+
+	try {
+		usage();
+	} finally {
+		console.log = real;
+	}
+
+	const listed = new Set(lines.map(line => line.trim().split(/\s+/)[0]));
+
+	expect(Object.keys(commands).filter(name => !listed.has(name))).toEqual([]);
+});
+
