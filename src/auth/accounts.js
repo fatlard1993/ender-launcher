@@ -11,8 +11,12 @@ const kindOf = account => account.kind ?? 'microsoft';
 
 const accountsPath = () => paths.accounts;
 
-/** A minute of slack, so a token does not expire between being chosen and being used. */
-const EXPIRY_MARGIN = 60_000;
+/**
+ * A game keeps the token it launched with for as long as it stays open, and a Minecraft token lasts a day. One older
+ * than an hour is renewed, so a launch always has nearly the whole day: a game left open overnight on a token near its
+ * end has its joins refused by the next afternoon.
+ */
+const FRESH_FOR = 23 * 60 * 60_000;
 
 export const readAccounts = async () => readJson(accountsPath(), { active: undefined, accounts: {} });
 
@@ -178,7 +182,7 @@ export const resolveAccount = async wanted => {
 	// An offline identity has nothing to renew; it is a name and the uuid that follows from it.
 	if (kindOf(account) === 'offline') return account;
 
-	if (account.expiresAt > Date.now() + EXPIRY_MARGIN) return account;
+	if (account.expiresAt > Date.now() + FRESH_FOR) return account;
 
 	detail('auth', `renewing ${account.name}`);
 

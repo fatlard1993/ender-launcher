@@ -39,8 +39,8 @@ describe('account storage', () => {
 		await accounts.writeAccounts({
 			active: 'one',
 			accounts: {
-				one: { name: 'one', uuid: 'a', expiresAt: Date.now() + 1e6 },
-				two: { name: 'two', uuid: 'b', expiresAt: Date.now() + 1e6 },
+				one: { name: 'one', uuid: 'a', expiresAt: Date.now() + 864e5 },
+				two: { name: 'two', uuid: 'b', expiresAt: Date.now() + 864e5 },
 			},
 		});
 
@@ -111,7 +111,7 @@ describe('offline accounts', () => {
 		await accounts.writeAccounts({
 			active: 'signedin',
 			accounts: {
-				signedin: { kind: 'microsoft', name: 'signedin', uuid: 'x', expiresAt: Date.now() + 1e6 },
+				signedin: { kind: 'microsoft', name: 'signedin', uuid: 'x', expiresAt: Date.now() + 864e5 },
 			},
 		});
 		await accounts.addOffline('Tester');
@@ -170,7 +170,7 @@ describe('who an instance plays as', () => {
 					name: 'player',
 					uuid: 'abc',
 					token: 'secret',
-					expiresAt: Date.now() + 1e6,
+					expiresAt: Date.now() + 864e5,
 					clientId: 'cid',
 				},
 			},
@@ -294,5 +294,43 @@ describe('accounts taken over from Prism', () => {
 		const accounts = await accountsModule();
 
 		await expect(accounts.importPrism(join(home, 'missing.json'), { renewal })).rejects.toThrow('missing.json');
+	});
+});
+
+describe('renewal before a launch', () => {
+	// A game holds its token until it closes, so a launch on one near its end loses its joins partway through
+	test('renews a token older than an hour, though it has not expired', async () => {
+		const accounts = await accountsModule();
+
+		await accounts.writeAccounts({
+			active: 'player',
+			accounts: {
+				player: {
+					kind: 'microsoft',
+					name: 'player',
+					uuid: 'abc',
+					token: 'old',
+					expiresAt: Date.now() + 3600e3,
+					clientId: 'cid',
+				},
+			},
+		});
+
+		const requested = [];
+		const realFetch = globalThis.fetch;
+
+		globalThis.fetch = async url => {
+			requested.push(String(url));
+
+			return Response.json({ error: 'offline in tests' }, { status: 400 });
+		};
+
+		try {
+			await expect(accounts.resolveAccount()).rejects.toThrow('Could not refresh');
+		} finally {
+			globalThis.fetch = realFetch;
+		}
+
+		expect(requested[0]).toContain('oauth2/v2.0/token');
 	});
 });
