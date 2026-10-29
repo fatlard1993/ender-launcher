@@ -19,7 +19,7 @@
 		"./support": "./src/mods/support.js",
 		"./web": "./src/commands/web.js"
 	},
-	"description": "Minecraft instances, mods and servers from the command line",
+	"description": "Minecraft instances, mods, modpacks and servers from the command line",
 	"author": "fatlard1993",
 	"license": "MIT",
 	"scripts": {

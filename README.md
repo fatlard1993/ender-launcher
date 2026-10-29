@@ -1,14 +1,19 @@
 # ender-launcher
 
-Minecraft instances, mods, and servers from the command line. `ender` for short.
+Minecraft instances, mods, modpacks and servers from one small program, `ender`. It installs mods from where their source lives, keeps a household of clients and its server on one pack, and starts the game itself, with no launcher in between.
 
-## Why
+## What it does
 
-Prism Launcher does four things that matter: it resolves version metadata, downloads libraries and assets, signs you in, and builds the java command. Everything else about an instance already lives in a directory you own.
-
-One of those four costs you. Prism does not ship version data; it fetches it from `meta.prismlauncher.org`, and that service ingests a new snapshot some days after Mojang publishes it. In between, an instance pinned to that version will not launch at all, while the official launcher plays it fine.
-
-This reads Mojang's manifest and Fabric's meta directly. There is no mirror to wait for, so the lag never happens and there is nothing to patch around.
+- **Instances.** Make one for any Minecraft version with Fabric, Quilt, Forge, NeoForge or none; clone it, move it to another version, delete it with its worlds kept aside. ender fetches the Java each version needs.
+- **Mods from their source.** `ender add gh:owner/repo` installs a mod from its own releases on GitHub, Codeberg or GitLab, with what it depends on; Modrinth and CurseForge mods too (`mr:`, `cf:`), and a mod you are writing is built from its Gradle project. `ender update` moves each to its newest compatible build, and `ender scan` shows what a jar's code can reach before you trust it: running programs, the network, native code.
+- **Search.** `ender search` looks through the [ender index](https://fatlard1993.github.io/ender-index/), mods found where their source lives and read from their own jars, beside Modrinth and CurseForge.
+- **Any modpack.** `ender import` takes a Modrinth `.mrpack`, a CurseForge zip, a packwiz pack, a Prism instance or an ender pack, from a file or a link. A packwiz pack's CurseForge mods come from Modrinth where it has the very same file.
+- **A pack everyone follows.** An ender pack is one small file naming the mods chosen. `ender export --gist` publishes one, and publishing again updates the same gist; `ender follow` puts any instance on it, and `ender launch --update` reads it again before every launch, so every client in the house runs the same mods without anyone copying jars.
+- **Servers.** A server instance is made and filled the same way, and `ender server start --update` takes new releases each time it starts.
+- **Accounts.** Microsoft sign-in, on this machine or from a phone by scanning a code, or offline identities; each instance plays as the account it is given.
+- **In the browser.** `ender web` opens the index with your instances beside it: install a mod with a button, make instances from what you collected or from a pack, watch an import or update as it runs, launch, and publish a pack.
+- **The people who make them.** `ender support` says how to support the authors of an instance's mods, and `ender share` puts a screenshot and its story on the mods' pages in the index.
+- **No mirror to wait for.** ender reads Mojang's and the loaders' own metadata, so a snapshot plays the day it ships. Prism waits on a metadata service of its own, which takes days to take a new version in.
 
 ## Getting started
 
