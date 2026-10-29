@@ -141,6 +141,7 @@ describe('ender web', () => {
 		expect((await post('/api/import', { source: '/home/me/pack.zip' })).status).toBe(400);
 		expect((await post('/api/import', { source: 'http://plain.example/pack.zip' })).status).toBe(400);
 		await startedJob(await post('/api/instances/family/add', { specs: ['gh:me/mod'] }));
+		await startedJob(await post('/api/instances/family/add', { specs: ['gh:me/source'], build: true }));
 		expect((await post('/api/instances/family/add', { specs: ['./evil.jar'] })).status).toBe(400);
 		await startedJob(await post('/api/instances/family/update'));
 		await startedJob(await post('/api/instances/family/launch', { update: true }));
@@ -153,6 +154,7 @@ describe('ender web', () => {
 			['new', 'family', 'mr:sodium', '--minecraft', '26.3', '--loader', 'fabric'],
 			['import', 'gist:a1db98319884288ad3d83a0db854291f', '--sync'],
 			['add', 'gh:me/mod', '--instance', 'family'],
+			['add', 'gh:me/source', '--build', '--instance', 'family'],
 			['update', '--instance', 'family'],
 			['launch', 'family', '--update'],
 			['delete', 'family', '--yes'],

@@ -198,11 +198,11 @@ export const webApi = ({
 		}
 
 		if (['add', 'drop'].includes(verb) && method === 'POST') {
-			const { specs } = await bodyOf(request);
+			const { specs, build } = await bodyOf(request);
 
 			if (!allSpecs(specs) || specs.length === 0) return json({ error: BAD_SPECS }, 400);
 
-			return startJob([verb, ...specs, '--instance', name], {
+			return startJob([verb, ...specs, ...(verb === 'add' && build === true ? ['--build'] : []), '--instance', name], {
 				title: `${verb === 'add' ? 'Adding' : 'Dropping'} ${specs.length === 1 ? specs[0] : plural(specs.length, 'mod')}`,
 				...named,
 			});
