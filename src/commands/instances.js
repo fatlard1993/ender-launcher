@@ -11,6 +11,7 @@ import { resolveVersionId } from '../meta/mojang';
 import { LOADER_SERVICES, assertKnownLoader } from '../meta/resolve';
 import { done, info, paint, plural, step, warn } from '../out';
 import { publishPack } from '../gist';
+import { listPackUrl } from './share';
 import { paths } from '../paths';
 import { parseModSpec, refineModSpec, syncInstance } from './mods';
 import { fetchPack, isRemote, resolveSpecs, sourceOf } from './packSource';
@@ -460,6 +461,8 @@ export const exportPack = async ({ positionals, flags }) => {
 			`${published.updated ? 'Updated' : 'Published'} ${manifest.name} as a pack of ${plural(pack.mods.length, 'mod')}: ${published.url}`,
 		);
 		info(paint.dim(`  ${published.line}   installs it anywhere`));
+
+		if (!published.updated) info(paint.dim(`  ${listPackUrl(published.url)}   lists it on the index`));
 
 		return 0;
 	}

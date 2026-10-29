@@ -17,4 +17,13 @@ describe('ender share', () => {
 		expect(url.searchParams.get('template')).toBe('shot.yml');
 		expect(url.searchParams.get('mods')).toBe('github:a/boats\nlithium');
 	});
+
+	test('opens the pack form with the published pack filled in', async () => {
+		const { SHARE_FORM, listPackUrl } = await import('../src/commands/share');
+		const url = new URL(listPackUrl('https://gist.github.com/you/abc'));
+
+		expect(`${url.origin}${url.pathname}`).toBe(SHARE_FORM);
+		expect(url.searchParams.get('template')).toBe('pack.yml');
+		expect(url.searchParams.get('pack')).toBe('https://gist.github.com/you/abc');
+	});
 });
