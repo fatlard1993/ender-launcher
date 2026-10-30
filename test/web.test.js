@@ -360,6 +360,18 @@ describe('issues on the index', () => {
 			['pack', 'gist:0123456789abcdef0123456789abcdef'],
 			['pack', 'gh:me/pack'],
 		]);
+
+		const again = webApi({ fileIssue: async () => ({ number: 7, url: 'https://github.com/x/7', before: true }) });
+		const answer = await again(
+			request('/api/asks', {
+				method: 'POST',
+				origin: ORIGIN,
+				body: JSON.stringify({ kind: 'fund', mod: 'github:a/b' }),
+			}),
+		);
+
+		expect(answer.status).toBe(200);
+		expect(await answer.json()).toMatchObject({ before: true });
 	});
 
 	test("are written as the index's issue form writes them, under its title and labels", async () => {
@@ -367,7 +379,10 @@ describe('issues on the index', () => {
 		let asked;
 		const result = await fileIndexIssue('fund', 'github:a/b', {
 			configured: 'token',
-			fetcher: async (url, init) => {
+			fetcher: async (url, init = {}) => {
+				if (url.endsWith('/user')) return Response.json({ login: 'me' });
+				if (init.method !== 'POST') return Response.json([]);
+
 				asked = { url, ...init, body: JSON.parse(init.body) };
 
 				return Response.json({ number: 7, html_url: 'https://github.com/x/7' }, { status: 201 });
@@ -381,6 +396,44 @@ describe('issues on the index', () => {
 			body: '### Mod\n\ngithub:a/b\n',
 		});
 		expect(result).toEqual({ number: 7, url: 'https://github.com/x/7' });
+	});
+
+	test('are not filed again by an account that filed the same one before, open or closed', async () => {
+		const { fileIndexIssue } = await import('../src/indexIssues');
+		const asked = [];
+		const opened = [
+			{
+				number: 2,
+				title: "I would pay this mod's author",
+				body: '### Mod\n\ngithub:a/other',
+				html_url: 'https://github.com/x/2',
+			},
+			{
+				number: 3,
+				title: "I would pay this mod's author",
+				body: '### Mod\n\ngithub:a/b',
+				html_url: 'https://github.com/x/3',
+			},
+		];
+		const fetcher = async (url, init = {}) => {
+			asked.push(`${init.method ?? 'GET'} ${url}`);
+
+			if (url.endsWith('/user')) return Response.json({ login: 'me' });
+			if (init.method !== 'POST') return Response.json(opened);
+
+			return Response.json({ number: 9, html_url: 'https://github.com/x/9' }, { status: 201 });
+		};
+
+		expect(await fileIndexIssue('fund', 'github:a/b', { configured: 'token', fetcher })).toEqual({
+			number: 3,
+			url: 'https://github.com/x/3',
+			before: true,
+		});
+		expect(asked).toContain(
+			'GET https://api.github.com/repos/fatlard1993/ender-index/issues?creator=me&state=all&per_page=100',
+		);
+		expect(asked.some(line => line.startsWith('POST'))).toBe(false);
+		expect((await fileIndexIssue('release', 'github:a/b', { configured: 'token', fetcher })).number).toBe(9);
 	});
 });
 

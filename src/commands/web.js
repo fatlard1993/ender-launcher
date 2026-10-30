@@ -108,7 +108,9 @@ export const webApi = ({
 	};
 	const filed = async (kind, answer) => {
 		try {
-			return json(await fileIssue(kind, answer), 201);
+			const issue = await fileIssue(kind, answer);
+
+			return json(issue, issue.before ? 200 : 201);
 		} catch (error) {
 			return json({ error: error.message }, error.status ?? 502);
 		}

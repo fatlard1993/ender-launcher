@@ -470,7 +470,8 @@ export const exportPack = async ({ positionals, flags }) => {
 		);
 		info(paint.dim(`  ${published.line}   installs it anywhere`));
 
-		if (listing) info(paint.dim(`  ${listing.url}   asks the index to list it, which takes a few minutes`));
+		if (listing?.before) info(paint.dim(`  ${listing.url}   asked the index to list it before`));
+		else if (listing) info(paint.dim(`  ${listing.url}   asks the index to list it, which takes a few minutes`));
 		else if (!published.updated) {
 			info(paint.dim(`  ender export ${manifest.name} --gist --list   lists it on the index, as your GitHub account`));
 		}
