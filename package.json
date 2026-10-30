@@ -10,6 +10,7 @@
 		".": "./index.js",
 		"./archive": "./src/archive.js",
 		"./enderPack": "./src/instance/enderPack.js",
+		"./indexIssues": "./src/indexIssues.js",
 		"./metadata": "./src/mods/metadata.js",
 		"./packwiz": "./src/instance/packwiz.js",
 		"./scan": "./src/mods/capabilities.js",
