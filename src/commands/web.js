@@ -8,6 +8,7 @@ import { parseEnderPack } from '../instance/enderPack';
 import { jobRunner, shown } from '../jobs';
 import { KNOWN_LOADERS } from '../meta/resolve';
 import { done, info, paint } from '../out';
+import { setStar, starredRepositories } from '../stars';
 import { REPOSITORY, gistOf } from './packSource';
 import { isCompiled } from './upgrade';
 
@@ -64,6 +65,9 @@ const importable = source =>
 	typeof source === 'string' &&
 	(gistOf(source) !== undefined || REPOSITORY.test(source) || /^https:\/\/\S+$/.test(source));
 
+/** A GitHub repository as owner/repo, neither of them dots alone, which would climb out of the path it is put in. */
+const STARRABLE = /^(?!\.+\/)[\w.-]+\/(?!\.+$)[\w.-]+$/;
+
 const BAD_SPECS = 'Each mod has to be a spec search writes, such as gh:owner/repo';
 
 const allSpecs = specs => Array.isArray(specs) && specs.every(spec => SPEC.test(spec));
@@ -80,6 +84,7 @@ export const webApi = ({
 	run = args => collect(command(args), { env: { ...process.env, NO_COLOR: '1' } }),
 	jobs = jobRunner({ command }),
 	publish = publishPack,
+	stars = { list: starredRepositories, set: setStar },
 } = {}) => {
 	const answerJson = async args => {
 		const { code, stdout, stderr } = await run(args);
@@ -162,6 +167,21 @@ export const webApi = ({
 				);
 			} catch (error) {
 				return json({ error: error.message }, 502);
+			}
+		}
+
+		if (area === 'stars') {
+			const starring = { PUT: true, DELETE: false }[method];
+
+			try {
+				if (name === undefined && method === 'GET') return json({ repositories: await stars.list() });
+				if (starring === undefined || !STARRABLE.test(`${name}/${verb}`)) return json({ error: 'Not found' }, 404);
+
+				await stars.set(`${name}/${verb}`, starring);
+
+				return json({ starred: starring });
+			} catch (error) {
+				return json({ error: error.message }, error.status ?? 502);
 			}
 		}
 

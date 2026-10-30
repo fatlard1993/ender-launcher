@@ -267,6 +267,69 @@ describe('ender web', () => {
 	});
 });
 
+describe('stars', () => {
+	test('are listed and set through the account ender signs in with, for an owner/repo and nothing else', async () => {
+		const set = [];
+		const api = webApi({
+			stars: {
+				list: async () => ['me/mod'],
+				set: async (repository, starring) => {
+					set.push([repository, starring]);
+				},
+			},
+		});
+		const send = (method, path) => api(request(path, { method, origin: ORIGIN, body: '{}' }));
+
+		expect(await (await api(request('/api/stars', { origin: ORIGIN }))).json()).toEqual({ repositories: ['me/mod'] });
+		expect((await send('PUT', '/api/stars/me/mod')).status).toBe(200);
+		expect((await send('DELETE', '/api/stars/me/mod')).status).toBe(200);
+		expect((await send('PUT', '/api/stars/../user')).status).toBe(404);
+		expect((await send('PUT', '/api/stars/me/%2E%2E')).status).toBe(404);
+		expect((await send('POST', '/api/stars/me/mod')).status).toBe(404);
+		expect(set).toEqual([
+			['me/mod', true],
+			['me/mod', false],
+		]);
+	});
+
+	test('say how to sign in when there is no account to keep them', async () => {
+		const api = webApi({
+			stars: {
+				list: async () => {
+					throw Object.assign(new Error('Stars are kept by a GitHub account'), { status: 401 });
+				},
+			},
+		});
+		const answer = await api(request('/api/stars', { origin: ORIGIN }));
+
+		expect(answer.status).toBe(401);
+		expect((await answer.json()).error).toContain('GitHub account');
+	});
+
+	test('are read from GitHub page by page, and a refusal says the token needs starring', async () => {
+		const { setStar, starredRepositories } = await import('../src/stars');
+		const asked = [];
+		const fetcher = async (url, init) => {
+			asked.push(`${init.method ?? 'GET'} ${url}`);
+
+			if (url.includes('page=2')) return Response.json([{ full_name: 'b/two' }]);
+			if (init.method === 'PUT') return Response.json({ message: 'Resource not accessible' }, { status: 403 });
+
+			return Response.json([{ full_name: 'a/one' }], {
+				headers: { link: '<https://api.github.com/user/starred?per_page=100&page=2>; rel="next"' },
+			});
+		};
+
+		expect(await starredRepositories({ configured: 'token', fetcher })).toEqual(['a/one', 'b/two']);
+		await expect(setStar('a/one', true, { configured: 'token', fetcher })).rejects.toThrow('allowed to star');
+		expect(asked).toEqual([
+			'GET https://api.github.com/user/starred?per_page=100',
+			'GET https://api.github.com/user/starred?per_page=100&page=2',
+			'PUT https://api.github.com/user/starred/a/one',
+		]);
+	});
+});
+
 describe('publishing a gist', () => {
 	test('a secret gist holding ender.pack.json, under the account ender signs in with', async () => {
 		const { publishPack } = await import('../src/gist');
