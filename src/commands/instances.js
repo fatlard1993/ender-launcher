@@ -11,7 +11,7 @@ import { resolveVersionId } from '../meta/mojang';
 import { LOADER_SERVICES, assertKnownLoader } from '../meta/resolve';
 import { done, info, paint, plural, step, warn } from '../out';
 import { publishPack } from '../gist';
-import { listPackUrl } from './share';
+import { fileIndexIssue } from '../indexIssues';
 import { paths } from '../paths';
 import { parseModSpec, refineModSpec, syncInstance } from './mods';
 import { fetchPack, isRemote, resolveSpecs, sourceOf } from './packSource';
@@ -451,8 +451,16 @@ export const exportPack = async ({ positionals, flags }) => {
 
 		if (published.id !== manifest.gist) await instances.write({ ...manifest, gist: published.id });
 
+		const listing = flags.list ? await fileIndexIssue('pack', published.url) : undefined;
+
 		if (flags.json) {
-			info(JSON.stringify({ ...published, left: left.map(entry => entry.path ?? entry.url ?? entry.id) }));
+			info(
+				JSON.stringify({
+					...published,
+					...(listing ? { listing: listing.url } : {}),
+					left: left.map(entry => entry.path ?? entry.url ?? entry.id),
+				}),
+			);
 
 			return 0;
 		}
@@ -462,7 +470,10 @@ export const exportPack = async ({ positionals, flags }) => {
 		);
 		info(paint.dim(`  ${published.line}   installs it anywhere`));
 
-		if (!published.updated) info(paint.dim(`  ${listPackUrl(published.url)}   lists it on the index`));
+		if (listing) info(paint.dim(`  ${listing.url}   asks the index to list it, which takes a few minutes`));
+		else if (!published.updated) {
+			info(paint.dim(`  ender export ${manifest.name} --gist --list   lists it on the index, as your GitHub account`));
+		}
 
 		return 0;
 	}

@@ -5,7 +5,7 @@ import { openInBrowser } from '../browser';
 import { done, info, paint, warn } from '../out';
 import { parseModSpec, targetInstance } from './context';
 
-/** The index's issue forms, for a shot or a pack, which a player fills in with their GitHub account. */
+/** The index's issue forms, for a shot, which a player fills in with their GitHub account. */
 export const SHARE_FORM = 'https://github.com/fatlard1993/ender-index/issues/new';
 
 const REPOSITORY_SOURCES = new Set(['github', 'codeberg', 'gitlab']);
@@ -19,9 +19,6 @@ export const shareKey = spec => {
 
 /** The share form, with the mods a shot shows filled in. */
 export const shareUrl = mods => `${SHARE_FORM}?${new URLSearchParams({ template: 'shot.yml', mods: mods.join('\n') })}`;
-
-/** The form that asks the index to list a published pack, which it cannot find in a gist on its own. */
-export const listPackUrl = link => `${SHARE_FORM}?${new URLSearchParams({ template: 'pack.yml', pack: link })}`;
 
 /** The newest picture in the instance's screenshots folder, which F2 saves to. */
 const newestScreenshot = async manifest => {

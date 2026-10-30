@@ -21,7 +21,8 @@ const depsFlag = {
 	pre: { type: 'boolean', description: 'Allow alpha and beta builds, not just releases' },
 	build: {
 		type: 'boolean',
-		description: 'Build mods from source: a gradle project on disk, or a repository with no built release, allowed from then on',
+		description:
+			'Build mods from source: a gradle project on disk, or a repository with no built release, allowed from then on',
 	},
 };
 
@@ -114,7 +115,7 @@ export const commands = {
 	},
 	export: {
 		summary: 'Write an instance as an ender pack of the mods it chose',
-		usage: 'ender export [name] [--out ender.pack.json] [--gist [--new] [--json]]',
+		usage: 'ender export [name] [--out ender.pack.json] [--gist [--new] [--list] [--json]]',
 		flags: {
 			...instanceFlag,
 			out: { alias: 'o', description: 'Write it to this file instead of printing it' },
@@ -123,6 +124,7 @@ export const commands = {
 				description: 'Publish it as a secret gist, to install anywhere with ender import; again updates the same gist',
 			},
 			new: { type: 'boolean', description: 'With --gist, publish to a new gist rather than the one before' },
+			list: { type: 'boolean', description: 'With --gist, ask the index to list it, as your GitHub account' },
 			json: { type: 'boolean', description: 'With --gist, print where it went as JSON' },
 		},
 		run: instanceCommands.exportPack,
