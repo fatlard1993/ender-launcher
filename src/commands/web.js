@@ -8,6 +8,8 @@ import { parseEnderPack } from '../instance/enderPack';
 import { jobRunner, shown } from '../jobs';
 import { KNOWN_LOADERS } from '../meta/resolve';
 import { done, info, paint } from '../out';
+import { signedInAs } from '../githubAccount';
+import { fileIndexIssue } from '../indexIssues';
 import { setStar, starredRepositories } from '../stars';
 import { REPOSITORY, gistOf } from './packSource';
 import { isCompiled } from './upgrade';
@@ -68,6 +70,11 @@ const importable = source =>
 /** A GitHub repository as owner/repo, neither of them dots alone, which would climb out of the path it is put in. */
 const STARRABLE = /^(?!\.+\/)[\w.-]+\/(?!\.+$)[\w.-]+$/;
 
+const ASKABLE = new Set(['fund', 'release']);
+
+/** A mod as the index keys it, a repository on a host it crawls, no part of it dots alone. */
+const MOD_KEY = /^(github|codeberg|gitlab):(?!\.+\/)[\w.-]+(\/(?!\.+(\/|$))[\w.-]+)+$/;
+
 const BAD_SPECS = 'Each mod has to be a spec search writes, such as gh:owner/repo';
 
 const allSpecs = specs => Array.isArray(specs) && specs.every(spec => SPEC.test(spec));
@@ -85,6 +92,8 @@ export const webApi = ({
 	jobs = jobRunner({ command }),
 	publish = publishPack,
 	stars = { list: starredRepositories, set: setStar },
+	account = signedInAs,
+	fileIssue = fileIndexIssue,
 } = {}) => {
 	const answerJson = async args => {
 		const { code, stdout, stderr } = await run(args);
@@ -95,6 +104,13 @@ export const webApi = ({
 			return json(JSON.parse(stdout));
 		} catch {
 			return json({ error: `ender ${args[0]} did not answer JSON: ${stdout.slice(0, 200)}` }, 502);
+		}
+	};
+	const filed = async (kind, answer) => {
+		try {
+			return json(await fileIssue(kind, answer), 201);
+		} catch (error) {
+			return json({ error: error.message }, error.status ?? 502);
 		}
 	};
 	const startJob = async (args, { title, instance }) => {
@@ -168,6 +184,33 @@ export const webApi = ({
 			} catch (error) {
 				return json({ error: error.message }, 502);
 			}
+		}
+
+		if (area === 'account' && name === undefined && method === 'GET') {
+			try {
+				return json({ login: await account() });
+			} catch (error) {
+				return json({ error: error.message }, error.status ?? 502);
+			}
+		}
+
+		if (area === 'asks' && name === undefined && method === 'POST') {
+			const { kind, mod } = await bodyOf(request);
+
+			if (!ASKABLE.has(kind)) return json({ error: 'An ask is for a way to pay its author, or a built release' }, 400);
+			if (!MOD_KEY.test(mod ?? '')) return json({ error: 'A mod is named as the index keys it, host:owner/repo' }, 400);
+
+			return filed(kind, mod);
+		}
+
+		if (area === 'listings' && name === undefined && method === 'POST') {
+			const { pack } = await bodyOf(request);
+			const gist = typeof pack === 'string' ? gistOf(pack) : undefined;
+
+			if (gist) return filed('pack', `gist:${gist}`);
+			if (!REPOSITORY.test(pack ?? '')) return json({ error: 'A pack to list is a gist, or gh:owner/repo' }, 400);
+
+			return filed('pack', pack);
 		}
 
 		if (area === 'stars') {

@@ -296,7 +296,7 @@ describe('stars', () => {
 		const api = webApi({
 			stars: {
 				list: async () => {
-					throw Object.assign(new Error('Stars are kept by a GitHub account'), { status: 401 });
+					throw Object.assign(new Error('This needs a GitHub account'), { status: 401 });
 				},
 			},
 		});
@@ -327,6 +327,60 @@ describe('stars', () => {
 			'GET https://api.github.com/user/starred?per_page=100&page=2',
 			'PUT https://api.github.com/user/starred/a/one',
 		]);
+	});
+});
+
+describe('issues on the index', () => {
+	test('are filed as the signed-in account for an ask or a pack, and only in the shapes the index reads', async () => {
+		const filed = [];
+		const api = webApi({
+			account: async () => 'me',
+			fileIssue: async (kind, answer) => {
+				filed.push([kind, answer]);
+
+				return { number: 7, url: 'https://github.com/fatlard1993/ender-index/issues/7' };
+			},
+		});
+		const post = (path, body) => api(request(path, { method: 'POST', origin: ORIGIN, body: JSON.stringify(body) }));
+
+		expect(await (await api(request('/api/account', { origin: ORIGIN }))).json()).toEqual({ login: 'me' });
+		expect((await post('/api/asks', { kind: 'fund', mod: 'github:a/b' })).status).toBe(201);
+		expect((await post('/api/asks', { kind: 'release', mod: 'gitlab:g/sub/p' })).status).toBe(201);
+		expect(
+			(await post('/api/listings', { pack: 'https://gist.github.com/me/0123456789ABCDEF0123456789abcdef/raw' })).status,
+		).toBe(201);
+		expect((await post('/api/listings', { pack: 'gh:me/pack' })).status).toBe(201);
+		expect((await post('/api/asks', { kind: 'anything', mod: 'github:a/b' })).status).toBe(400);
+		expect((await post('/api/asks', { kind: 'fund', mod: 'github:a/b\n### Pack' })).status).toBe(400);
+		expect((await post('/api/asks', { kind: 'fund', mod: 'github:../b' })).status).toBe(400);
+		expect((await post('/api/listings', { pack: 'https://example.com/pack' })).status).toBe(400);
+		expect(filed).toEqual([
+			['fund', 'github:a/b'],
+			['release', 'gitlab:g/sub/p'],
+			['pack', 'gist:0123456789abcdef0123456789abcdef'],
+			['pack', 'gh:me/pack'],
+		]);
+	});
+
+	test("are written as the index's issue form writes them, under its title and labels", async () => {
+		const { fileIndexIssue } = await import('../src/indexIssues');
+		let asked;
+		const result = await fileIndexIssue('fund', 'github:a/b', {
+			configured: 'token',
+			fetcher: async (url, init) => {
+				asked = { url, ...init, body: JSON.parse(init.body) };
+
+				return Response.json({ number: 7, html_url: 'https://github.com/x/7' }, { status: 201 });
+			},
+		});
+
+		expect(asked.url).toBe('https://api.github.com/repos/fatlard1993/ender-index/issues');
+		expect(asked.body).toEqual({
+			title: "I would pay this mod's author",
+			labels: ['interest', 'fund'],
+			body: '### Mod\n\ngithub:a/b\n',
+		});
+		expect(result).toEqual({ number: 7, url: 'https://github.com/x/7' });
 	});
 });
 
