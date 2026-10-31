@@ -214,6 +214,12 @@ export const commands = {
 		flags: { ...instanceFlag, ...depsFlag },
 		run: modCommands.sync,
 	},
+	submit: {
+		summary: 'Ask the index to list a mod now, as your GitHub account; it is listed within minutes',
+		usage: 'ender submit <gh:owner/repo | cb:owner/repo | gl:group/project | link>',
+		flags: { json: { type: 'boolean', description: "Print the issue's number and link as JSON" } },
+		run: modCommands.submit,
+	},
 	support: {
 		summary: "Who made an instance's mods, and how to support them",
 		usage: 'ender support [--instance name]',

@@ -2,6 +2,7 @@ import { mkdir, readdir } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 
 import { readConfig } from '../config';
+import { fileIndexIssue, modLink } from '../indexIssues';
 import * as instances from '../instance';
 import { scanJar } from '../mods/capabilities';
 import { listing } from '../mods/catalog';
@@ -536,6 +537,41 @@ export const support = async ({ flags }) => {
 			),
 		);
 	}
+
+	return 0;
+};
+
+/**
+ * Ask the index to list a mod now, rather than when its discovery finds it, as the GitHub account ender signs in with:
+ * the index crawls it within minutes and answers on the issue.
+ */
+export const submit = async ({ positionals, flags }, { file = fileIndexIssue } = {}) => {
+	const [named] = positionals;
+	const link = named && modLink(named);
+
+	if (!link) {
+		fail(
+			named
+				? `${named} is not a repository the index can list: name it gh:owner/repo, cb:owner/repo, gl:group/project, or by its link`
+				: 'ender submit <gh:owner/repo | link>',
+		);
+
+		return 2;
+	}
+
+	const filed = await file('mod', link);
+
+	if (flags.json) {
+		info(JSON.stringify(filed));
+
+		return 0;
+	}
+
+	done(
+		filed.before
+			? `Asked the index to list ${link} before: ${filed.url}`
+			: `Asked the index to list ${link}: ${filed.url}. It is crawled within a few minutes, and the issue says it is listed or why not`,
+	);
 
 	return 0;
 };

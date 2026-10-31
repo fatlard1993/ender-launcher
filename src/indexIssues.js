@@ -11,6 +11,31 @@ export const INDEX_ISSUES = {
 	fund: { title: "I would pay this mod's author", labels: ['interest', 'fund'], heading: 'Mod' },
 	release: { title: 'I want a built release of this mod', labels: ['interest', 'release'], heading: 'Mod' },
 	pack: { title: 'List a pack', labels: ['pack'], heading: 'Pack' },
+	mod: { title: 'List a mod', labels: ['mod'], heading: 'Mod' },
+};
+
+const HOST_SITES = { gh: 'github.com', cb: 'codeberg.org', gl: 'gitlab.com' };
+
+const SEGMENT = /^[\w-][\w.-]*$/;
+
+/**
+ * The link the index's List a mod form takes for a repository named as ender names one, `gh:owner/repo`, `cb:` or
+ * `gl:` (a GitLab group nested), or bare `owner/repo` on GitHub, or already as its link on one of those hosts.
+ * Undefined for anything else.
+ */
+export const modLink = named => {
+	const text = named.trim().replace(/(\.git|\/)$/, '');
+	const linked = text.match(/^https:\/\/(github\.com|codeberg\.org|gitlab\.com)\/(.+)$/i);
+	const prefixed = text.match(/^(gh|cb|gl):(.+)$/i);
+	let [site, path] = ['github.com', text];
+
+	if (linked) [site, path] = [linked[1].toLowerCase(), linked[2]];
+	else if (prefixed) [site, path] = [HOST_SITES[prefixed[1].toLowerCase()], prefixed[2]];
+
+	const parts = path.split('/');
+	const fits = site === 'gitlab.com' ? parts.length >= 2 : parts.length === 2;
+
+	return fits && parts.every(part => SEGMENT.test(part)) ? `https://${site}/${parts.join('/')}` : undefined;
 };
 
 /** The body an issue form writes for its one field. */

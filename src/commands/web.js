@@ -9,7 +9,7 @@ import { jobRunner, shown } from '../jobs';
 import { KNOWN_LOADERS } from '../meta/resolve';
 import { done, info, paint } from '../out';
 import { signedInAs } from '../githubAccount';
-import { fileIndexIssue } from '../indexIssues';
+import { fileIndexIssue, modLink } from '../indexIssues';
 import { setStar, starredRepositories } from '../stars';
 import { REPOSITORY, gistOf } from './packSource';
 import { isCompiled } from './upgrade';
@@ -206,7 +206,14 @@ export const webApi = ({
 		}
 
 		if (area === 'listings' && name === undefined && method === 'POST') {
-			const { pack } = await bodyOf(request);
+			const { pack, mod } = await bodyOf(request);
+
+			if (mod !== undefined) {
+				const link = typeof mod === 'string' ? modLink(mod) : undefined;
+
+				return link ? filed('mod', link) : json({ error: 'A mod to list is gh:owner/repo, or its link' }, 400);
+			}
+
 			const gist = typeof pack === 'string' ? gistOf(pack) : undefined;
 
 			if (gist) return filed('pack', `gist:${gist}`);

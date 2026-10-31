@@ -12,7 +12,7 @@ Minecraft instances, mods, modpacks and servers from one small program, `ender`.
 - **Servers.** A server instance is made and filled the same way, and `ender server start --update` takes new releases each time it starts.
 - **Accounts.** Microsoft sign-in, on this machine or from a phone by scanning a code, or offline identities; each instance plays as the account it is given.
 - **In the browser.** `ender web` opens the index with your instances beside it: install a mod with a button, make instances from what you collected or from a pack, watch an import or update as it runs, launch, and publish a pack.
-- **The people who make them.** `ender support` says how to support the authors of an instance's mods, and `ender share` puts a screenshot and its story on the mods' pages in the index.
+- **The people who make them.** `ender support` says how to support the authors of an instance's mods, and `ender share` puts a screenshot and its story on the mods' pages in the index. A mod's author runs `ender submit gh:owner/repo` to have the index list it within minutes, rather than when its discovery finds it.
 - **No mirror to wait for.** ender reads Mojang's and the loaders' own metadata, so a snapshot plays the day it ships. Prism waits on a metadata service of its own, which takes days to take a new version in.
 
 ## Getting started

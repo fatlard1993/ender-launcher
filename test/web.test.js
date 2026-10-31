@@ -354,11 +354,15 @@ describe('issues on the index', () => {
 		expect((await post('/api/asks', { kind: 'fund', mod: 'github:a/b\n### Pack' })).status).toBe(400);
 		expect((await post('/api/asks', { kind: 'fund', mod: 'github:../b' })).status).toBe(400);
 		expect((await post('/api/listings', { pack: 'https://example.com/pack' })).status).toBe(400);
+		expect((await post('/api/listings', { mod: 'gh:me/mod' })).status).toBe(201);
+		expect((await post('/api/listings', { mod: 'https://example.com/me/mod' })).status).toBe(400);
+		expect((await post('/api/listings', { mod: 'me/mod\n### Pack' })).status).toBe(400);
 		expect(filed).toEqual([
 			['fund', 'github:a/b'],
 			['release', 'gitlab:g/sub/p'],
 			['pack', 'gist:0123456789abcdef0123456789abcdef'],
 			['pack', 'gh:me/pack'],
+			['mod', 'https://github.com/me/mod'],
 		]);
 
 		const again = webApi({ fileIssue: async () => ({ number: 7, url: 'https://github.com/x/7', before: true }) });
@@ -558,5 +562,39 @@ describe('jobs', () => {
 		} finally {
 			await rm(directory, { recursive: true, force: true });
 		}
+	});
+});
+
+describe('listing a mod', () => {
+	test("is asked for by the repository's link, however ender names it, on a host the index crawls", async () => {
+		const { modLink } = await import('../src/indexIssues');
+
+		expect(modLink('gh:me/mod')).toBe('https://github.com/me/mod');
+		expect(modLink('me/mod.git')).toBe('https://github.com/me/mod');
+		expect(modLink('cb:me/mod')).toBe('https://codeberg.org/me/mod');
+		expect(modLink('gl:group/sub/mod')).toBe('https://gitlab.com/group/sub/mod');
+		expect(modLink('https://GitHub.com/me/mod/')).toBe('https://github.com/me/mod');
+		expect(modLink('mr:sodium')).toBeUndefined();
+		expect(modLink('gh:me/../mod')).toBeUndefined();
+		expect(modLink('https://example.com/me/mod')).toBeUndefined();
+		expect(modLink('me/mod/extra')).toBeUndefined();
+	});
+
+	test("files the index's List a mod issue, and says when it was asked before or names nothing it can list", async () => {
+		const { submit } = await import('../src/commands/mods');
+		const filed = [];
+		const file = async (kind, answer) => {
+			filed.push([kind, answer]);
+
+			return { number: 3, url: 'https://github.com/fatlard1993/ender-index/issues/3', before: filed.length > 1 };
+		};
+
+		expect(await submit({ positionals: ['gh:me/mod'], flags: {} }, { file })).toBe(0);
+		expect(await submit({ positionals: ['gh:me/mod'], flags: {} }, { file })).toBe(0);
+		expect(await submit({ positionals: ['mr:sodium'], flags: {} }, { file })).toBe(2);
+		expect(filed).toEqual([
+			['mod', 'https://github.com/me/mod'],
+			['mod', 'https://github.com/me/mod'],
+		]);
 	});
 });
