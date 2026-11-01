@@ -1,4 +1,4 @@
-import { join, normalize, sep } from 'node:path';
+import { extname, join, normalize, sep } from 'node:path';
 
 import { version } from '../../package.json';
 import { openInBrowser } from '../browser';
@@ -349,7 +349,10 @@ export const siteFiles = async (directory = process.env.ENDER_SITE, { sibling = 
 	return siblingBuild ? siteFiles(siblingBuild) : undefined;
 };
 
-/** A file of the site for a request's path; the page for the root, and nothing outside the site. */
+/**
+ * A file of the site for a request's path, nothing outside the site, and the page for any path with no extension: the
+ * site's pages are paths, /mod/github/a/b, which its script shows.
+ */
 export const servePage = (files, pathname) => {
 	let decoded;
 
@@ -359,7 +362,8 @@ export const servePage = (files, pathname) => {
 		return undefined;
 	}
 
-	const path = normalize(decoded).replace(/^[/\\]+/, '') || 'index.html';
+	const asked = normalize(decoded).replace(/^[/\\]+/, '');
+	const path = extname(asked) === '' ? 'index.html' : asked;
 	const bytes = files.get(path.split(sep).join('/'));
 
 	if (!bytes) return undefined;

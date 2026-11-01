@@ -230,7 +230,9 @@ describe('ender web', () => {
 			expect(servePage(files, '/').headers.get('content-type')).toStartWith('text/html');
 			expect(servePage(files, '/').headers.get('cache-control')).toBe('no-cache');
 			expect(servePage(files, '/@fontsource/font.woff2').headers.get('content-type')).toBe('font/woff2');
-			expect(servePage(files, '/../../etc/passwd')).toBeUndefined();
+			expect(await servePage(files, '/mod/github/a/b').text()).toBe('<!doctype html><title>index</title>');
+			expect(await servePage(files, '/../../etc/passwd').text()).toBe('<!doctype html><title>index</title>');
+			expect(servePage(files, '/../../etc/passwd.txt')).toBeUndefined();
 			expect(servePage(files, '/missing.js')).toBeUndefined();
 		}
 	});
