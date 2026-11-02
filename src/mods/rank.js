@@ -246,6 +246,36 @@ const namesItself = (entry, mod) => {
 		.some(name => ids.some(id => spelledIn(id, name) || spelledIn(name, id)));
 };
 
+const claimsById = new WeakMap();
+
+/**
+ * Each mod id, to the entries whose own mods have it and those providing it as a module, in listing order, kept once
+ * per listing: a listing asks this of every id each of its mods requires.
+ */
+const idClaims = entries => {
+	let claims = claimsById.get(entries);
+
+	if (claims !== undefined) return claims;
+
+	claims = { own: new Map(), provided: new Map() };
+
+	const add = (map, id, entry) => {
+		const list = map.get(id);
+
+		if (list === undefined) map.set(id, [entry]);
+		else if (list.at(-1) !== entry) list.push(entry);
+	};
+
+	for (const entry of entries) {
+		for (const mod of entry.latest?.mods ?? []) add(claims.own, mod.id, entry);
+		for (const id of entry.latest?.provides ?? []) add(claims.provided, id, entry);
+	}
+
+	claimsById.set(entries, claims);
+
+	return claims;
+};
+
 /**
  * Every index entry claiming a mod id, most likely first: those whose own mod has the id and is named by it, by stars,
  * then those that provide it as a module of their own, named under their own id, by how much they provide. A library
@@ -255,10 +285,11 @@ const namesItself = (entry, mod) => {
 export const claimantsOf = (id, entries, fits = {}) => {
 	const byStars = (a, b) => (b.stars ?? 0) - (a.stars ?? 0);
 	const fitting = entry => (!fits.minecraft && !fits.loader) || fit(entry.targets, fits) > 0;
-	const own = entries
-		.filter(entry => entry.latest?.mods.some(mod => mod.id === id && namesItself(entry, mod)) && fitting(entry))
+	const claims = idClaims(entries);
+	const own = (claims.own.get(id) ?? [])
+		.filter(entry => entry.latest.mods.some(mod => mod.id === id && namesItself(entry, mod)) && fitting(entry))
 		.sort(byStars);
-	const providers = entries
+	const providers = (claims.provided.get(id) ?? [])
 		.filter(
 			entry =>
 				!own.includes(entry) &&
