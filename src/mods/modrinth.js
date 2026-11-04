@@ -58,7 +58,12 @@ export const resolve = async (entry, { minecraft, loader, allowPrerelease }) => 
 	if (loader) query.set('loaders', JSON.stringify([loader]));
 	if (minecraft) query.set('game_versions', JSON.stringify([minecraft]));
 
-	const versions = await fetchJson(`${API}/project/${entry.id}/version?${query}`);
+	const versions = await fetchJson(`${API}/project/${entry.id}/version?${query}`).catch(error => {
+		if (error.status === 404)
+			throw new Error(`modrinth:${entry.id} is not a Modrinth project; ender search finds what it is called`);
+
+		throw error;
+	});
 
 	if (versions.length === 0) {
 		throw new Error(`modrinth:${entry.id} has no build for Minecraft ${minecraft} on ${loader}`);
