@@ -43,3 +43,4 @@ if (($path -split ';') -notcontains $directory) {
 }
 
 Write-Host "Installed $(& (Join-Path $directory 'ender.exe') --version) at $directory\ender.exe"
+Write-Host 'Start with: ender new survival, then ender launch'

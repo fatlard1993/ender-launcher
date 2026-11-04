@@ -1,6 +1,11 @@
-import { describe, expect, test } from 'bun:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 
 import { commands } from '../src/cli/commands';
+import { run } from '../src/cli/index';
+import { NO_INSTANCES, targetName } from '../src/commands/context';
 import { commandHelp, usage } from '../src/cli/help';
 
 const rendered = (name, command) => {
@@ -51,9 +56,7 @@ describe('flag help', () => {
 
 				if (spec?.description === undefined || spec.off === undefined) continue;
 
-				expect(line, `${name} --no-${negated[1]} printed its positive description`).not.toContain(
-					spec.description,
-				);
+				expect(line, `${name} --no-${negated[1]} printed its positive description`).not.toContain(spec.description);
 				expect(line).toContain(spec.off);
 			}
 		}
@@ -77,3 +80,70 @@ test('ender --help lists every command, so none is found only by reading the sou
 	expect(Object.keys(commands).filter(name => !listed.has(name))).toEqual([]);
 });
 
+describe('a first run, with no instance yet', () => {
+	let home;
+	let previous;
+
+	beforeEach(async () => {
+		home = await mkdtemp(join(tmpdir(), 'ender-first-run-'));
+		previous = process.env.ENDER_HOME;
+		process.env.ENDER_HOME = home;
+	});
+
+	afterEach(async () => {
+		if (previous === undefined) delete process.env.ENDER_HOME;
+		else process.env.ENDER_HOME = previous;
+
+		await rm(home, { recursive: true, force: true });
+	});
+
+	test('bare ender says only where to start, and asking is not a failure', async () => {
+		const lines = [];
+		const real = console.log;
+
+		console.log = (...parts) => lines.push(parts.join(' '));
+
+		try {
+			expect(await run([])).toBe(0);
+		} finally {
+			console.log = real;
+		}
+
+		expect(lines[0]).toContain('Start here');
+		expect(lines.some(line => line.includes('ender new survival'))).toBe(true);
+		expect(lines.some(line => line.includes('ender help'))).toBe(true);
+		expect(lines.some(line => line.includes('Instances'))).toBe(false);
+	});
+
+	test('ender help still lists every command with no instance yet', async () => {
+		const lines = [];
+		const real = console.log;
+
+		console.log = (...parts) => lines.push(parts.join(' '));
+
+		try {
+			expect(await run(['help'])).toBe(0);
+		} finally {
+			console.log = real;
+		}
+
+		expect(lines.some(line => line.includes('Instances'))).toBe(true);
+	});
+
+	test('listing and launching with no instance say the same thing', async () => {
+		const { ls } = await import('../src/commands/instances');
+		const lines = [];
+		const real = console.log;
+
+		console.log = (...parts) => lines.push(parts.join(' '));
+
+		try {
+			await ls({ positionals: [], flags: {} });
+		} finally {
+			console.log = real;
+		}
+
+		expect(lines).toEqual([NO_INSTANCES]);
+		await expect(targetName(undefined, {})).rejects.toThrow(NO_INSTANCES);
+	});
+});

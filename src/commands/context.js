@@ -5,9 +5,16 @@ import { isProject } from '../mods/gradle';
 import { specFor } from '../mods/spec';
 import { info, paint } from '../out';
 
+export const NO_INSTANCES =
+	'No instances yet. Make one with "ender new <name>", or adopt a modpack or Prism instance with "ender import <path>".';
+
 /** Which instance a command acts on: what the caller resolved, then whatever `use` last set. */
 export const targetName = async (explicit, config) => {
 	const name = explicit ?? (config ?? (await readConfig())).activeInstance;
+
+	if (name === undefined && (await instances.list()).length === 0) {
+		throw new Error(NO_INSTANCES);
+	}
 
 	if (name === undefined) {
 		throw new Error('No instance given and none is active. Try "ender use <name>" or pass --instance.');

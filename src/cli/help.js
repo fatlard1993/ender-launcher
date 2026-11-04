@@ -10,6 +10,16 @@ const GROUPS = [
 	['Settings', ['config', 'java', 'upgrade']],
 ];
 
+/** The first three things to type, for someone with no instance yet. */
+export const startHere = () => {
+	info(paint.bold('Start here'));
+	info(`  ${paint.cyan('ender new survival'.padEnd(22))} an instance on the newest release, with Fabric`);
+	info(`  ${paint.cyan('ender launch'.padEnd(22))} play it`);
+	info(`  ${paint.cyan('ender import <pack>'.padEnd(22))} or begin from a modpack or a Prism instance`);
+	info('');
+	info(paint.dim('  ender help  lists every command'));
+};
+
 export const usage = () => {
 	info(`${paint.bold('ender')} :: Minecraft instances, mods, modpacks and servers`);
 	info('');

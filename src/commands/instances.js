@@ -15,7 +15,7 @@ import { fileIndexIssue } from '../indexIssues';
 import { paths } from '../paths';
 import { parseModSpec, refineModSpec, refuseUnplaced, syncInstance } from './mods';
 import { fetchPack, isRemote, resolveSpecs, sourceOf } from './packSource';
-import { targetInstance, targetName } from './context';
+import { NO_INSTANCES, targetInstance, targetName } from './context';
 
 const instanceSummary = (manifest, config) => ({
 	name: manifest.name,
@@ -42,7 +42,7 @@ export const ls = async ({ flags = {} } = {}) => {
 	}
 
 	if (found.length === 0) {
-		info('No instances yet. Create one with "ender new <name>", or adopt a Prism one with "ender import <path>".');
+		info(NO_INSTANCES);
 
 		return 0;
 	}
@@ -117,11 +117,17 @@ export const create = async ({ positionals, flags }) => {
 	done(`Created ${name} :: Minecraft ${minecraft}, ${loader.type}${loader.version ? ` ${loader.version}` : ''}`);
 	info(paint.dim(`  ${manifest.gameDir}`));
 
-	await activateIfFirst(name);
+	const next = (await activateIfFirst(name)) ? 'ender launch' : `ender launch ${name}`;
 
-	if (mods.length === 0) return 0;
+	if (mods.length === 0) {
+		info(paint.dim(`  next: ${next}`));
+
+		return 0;
+	}
 
 	const { failures } = await syncInstance(manifest, config, { withDependencies: flags.deps !== false, flags });
+
+	if (failures.length === 0) info(paint.dim(`  next: ${next}`));
 
 	return failures.length > 0 ? 1 : 0;
 };
@@ -320,8 +326,13 @@ const reportUnmanaged = (unmatched, gameDir) => {
 	info(paint.dim(`    ender add ${join(gameDir, 'mods', unmatched[0])}`));
 };
 
+/** Makes the first instance the active one; true when this one is now active. */
 const activateIfFirst = async name => {
-	if ((await readConfig()).activeInstance === undefined) await updateConfig({ activeInstance: name });
+	const { activeInstance } = await readConfig();
+
+	if (activeInstance === undefined) await updateConfig({ activeInstance: name });
+
+	return activeInstance === undefined || activeInstance === name;
 };
 
 const importPack = async (path, flags, target = path) => {

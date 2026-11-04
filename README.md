@@ -39,16 +39,14 @@ brew install fatlard1993/tap/ender
 
 Each checks the download against the release's sha256 before installing it. `ender upgrade` brings an installed ender up to the newest release.
 
-To work on ender itself, run it from a checkout with [Bun](https://bun.sh):
+Then make an instance and play it:
 
 ```
-git clone https://github.com/fatlard1993/ender-launcher
-cd ender-launcher
-bun install
-bun link            # puts `ender` on your PATH
+ender new survival
+ender launch
 ```
 
-`bun run compile` builds the single binary the releases carry.
+With no flags, `ender new` is the newest release on the newest stable Fabric loader, and the first instance you make is the one later commands act on. The game plays offline until you sign in, and signing in to Microsoft needs an app registration of your own: see [Accounts](#accounts) before counting on online servers.
 
 If you have a modpack, start from it:
 
@@ -322,11 +320,19 @@ Since 1.19 the game unpacks its own native libraries out of the classpath, and e
 
 Libraries and assets are shared across instances, under `~/.local/share/ender-launcher`. On the first install, any file another launcher already has is hardlinked rather than downloaded, so adopting a Prism setup costs close to nothing in either bandwidth or disk. Set `ENDER_HOME` to put everything somewhere else.
 
-## Tests
+## Working on ender
+
+Run it from a checkout with [Bun](https://bun.sh):
 
 ```
+git clone https://github.com/fatlard1993/ender-launcher
+cd ender-launcher
+bun install
+bun link            # puts `ender` on your PATH
 bun test
 ```
+
+`bun run compile` builds the single binary the releases carry.
 
 ## License
 

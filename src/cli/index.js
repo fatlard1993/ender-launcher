@@ -1,7 +1,8 @@
 import { version } from '../../package.json';
 import { fail, info, paint, setVerbosity } from '../out';
 import { commands } from './commands';
-import { commandHelp, usage } from './help';
+import * as instances from '../instance';
+import { commandHelp, startHere, usage } from './help';
 import { parseArgv } from './parse';
 
 const GLOBAL_FLAGS = {
@@ -23,10 +24,16 @@ const VERSION_WORDS = new Set(['version', '--version', '-V']);
 export const run = async argv => {
 	const [name, ...rest] = argv;
 
+	if (name === undefined && (await instances.list()).length === 0) {
+		startHere();
+
+		return 0;
+	}
+
 	if (name === undefined || HELP_WORDS.has(name)) {
 		usage();
 
-		return name === undefined ? 1 : 0;
+		return 0;
 	}
 
 	if (VERSION_WORDS.has(name)) {

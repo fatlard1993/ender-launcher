@@ -70,6 +70,6 @@ mv "$staging/$binary" "$directory/ender"
 echo "Installed $("$directory/ender" --version) at $directory/ender"
 
 case ":$PATH:" in
-	*":$directory:"*) echo 'Start with: ender new' ;;
-	*) echo "$directory is not on your PATH; add it in your shell's profile, or run $directory/ender" ;;
+	*":$directory:"*) echo 'Start with: ender new survival, then ender launch' ;;
+	*) echo "$directory is not on your PATH; add it in your shell's profile, or start with: $directory/ender new survival" ;;
 esac
