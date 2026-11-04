@@ -13,7 +13,7 @@ const request = (path, { method = 'GET', host = 'localhost:7460', origin, body, 
 	new Request(`http://${host}${path}`, {
 		method,
 		headers: { host, ...(origin ? { origin } : {}), ...(method === 'GET' ? {} : { 'content-type': type }) },
-		...(['POST', 'DELETE'].includes(method) ? { body: body ?? '{}' } : {}),
+		...(['POST', 'PUT', 'DELETE'].includes(method) ? { body: body ?? '{}' } : {}),
 	});
 
 /** A job runner that runs nothing: each job prints what it was asked and ends as `code` says. */
@@ -104,6 +104,61 @@ describe('ender web', () => {
 		expect((await api(request('/api/instances/%E0%A4%A'))).status).toBe(400);
 		expect((await api(request('/api/other'))).status).toBe(404);
 		expect(await api(request('/index.html'))).toBeUndefined();
+	});
+
+	test('lists, adds, switches and removes players by name, answering each change with the accounts ender then holds', async () => {
+		const ran = [];
+		const listing = { signIn: false, fallback: 'Player', accounts: [] };
+		const api = webApi({
+			run: async args => {
+				ran.push(args);
+
+				return { code: 0, stdout: JSON.stringify(listing), stderr: '' };
+			},
+		});
+		const send = (method, path, body) =>
+			api(request(path, { method, origin: ORIGIN, body: body === undefined ? undefined : JSON.stringify(body) }));
+
+		expect(await (await api(request('/api/players'))).json()).toEqual(listing);
+		expect(await (await send('POST', '/api/players', { name: 'Steve' })).json()).toEqual(listing);
+		await send('POST', '/api/players/Steve/use');
+		await send('DELETE', '/api/players/Steve');
+		await send('PUT', '/api/instances/suite/player', { player: 'Steve' });
+		await send('PUT', '/api/instances/suite/player', { player: null });
+
+		expect(ran).toEqual([
+			['account', '--json'],
+			['account', 'add', '--offline', 'Steve'],
+			['account', '--json'],
+			['account', 'use', 'Steve'],
+			['account', '--json'],
+			['account', 'remove', 'Steve'],
+			['account', '--json'],
+			['account', 'assign', 'Steve', '--instance', 'suite'],
+			['info', 'suite', '--json'],
+			['account', 'assign', 'none', '--instance', 'suite'],
+			['info', 'suite', '--json'],
+		]);
+	});
+
+	test('refuses a player name Minecraft would not take, or one shaped like a flag, before running anything', async () => {
+		const api = webApi({ run: () => expect.unreachable() });
+		const send = (method, path, body) => api(request(path, { method, origin: ORIGIN, body: JSON.stringify(body) }));
+
+		expect((await send('POST', '/api/players', { name: '--offline' })).status).toBe(400);
+		expect((await send('POST', '/api/players', { name: 'a b' })).status).toBe(400);
+		expect((await send('POST', '/api/players/-x/use', {})).status).toBe(400);
+		expect((await send('PUT', '/api/instances/suite/player', { player: '--all' })).status).toBe(400);
+	});
+
+	test('signs in to Microsoft as a job the page follows, since it waits on a code typed elsewhere', async () => {
+		const { jobs, started } = await fakeJobs();
+		const api = webApi({ jobs });
+		const response = await api(request('/api/sign-in', { method: 'POST', origin: ORIGIN }));
+
+		expect(response.status).toBe(202);
+		await jobs.get((await response.json()).job.id).finished;
+		expect(started).toEqual([['account', 'add', '--no-qr']]);
 	});
 
 	test('answers which ender it is without running anything', async () => {

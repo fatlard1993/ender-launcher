@@ -1,6 +1,7 @@
 import { extname, join, normalize, sep } from 'node:path';
 
 import { version } from '../../package.json';
+import { NAME as PLAYER } from '../auth/accounts';
 import { openInBrowser } from '../browser';
 import { publishPack } from '../gist';
 import { INSTANCE_NAME } from '../instance';
@@ -106,6 +107,15 @@ export const webApi = ({
 			return json({ error: `ender ${args[0]} did not answer JSON: ${stdout.slice(0, 200)}` }, 502);
 		}
 	};
+	/** Runs a change, then answers with what `then` reads afterwards, so the page shows the state ender holds. */
+	const changeThen = async (args, then) => {
+		const { code, stdout, stderr } = await run(args);
+
+		if (code !== 0) return json({ error: stderr || stdout || `ender ${args.join(' ')} failed` }, 502);
+
+		return answerJson(then);
+	};
+	const players = ['account', '--json'];
 	const filed = async (kind, answer) => {
 		try {
 			const issue = await fileIssue(kind, answer);
@@ -194,6 +204,29 @@ export const webApi = ({
 			} catch (error) {
 				return json({ error: error.message }, error.status ?? 502);
 			}
+		}
+
+		if (area === 'players') {
+			if (name === undefined && method === 'GET') return answerJson(players);
+
+			if (name === undefined && method === 'POST') {
+				const { name: wanted } = await bodyOf(request);
+
+				if (!PLAYER.test(wanted ?? ''))
+					return json({ error: 'A player name is 3 to 16 letters, digits or underscores' }, 400);
+
+				return changeThen(['account', 'add', '--offline', wanted], players);
+			}
+
+			if (!PLAYER.test(name ?? '')) return json({ error: 'Not a player name' }, 400);
+			if (verb === 'use' && method === 'POST') return changeThen(['account', 'use', name], players);
+			if (verb === undefined && method === 'DELETE') return changeThen(['account', 'remove', name], players);
+
+			return json({ error: 'Not found' }, 404);
+		}
+
+		if (area === 'sign-in' && name === undefined && method === 'POST') {
+			return startJob(['account', 'add', '--no-qr'], { title: 'Signing in to Microsoft' });
 		}
 
 		if (area === 'asks' && name === undefined && method === 'POST') {
@@ -288,6 +321,14 @@ export const webApi = ({
 			const { update } = await bodyOf(request);
 
 			return startJob(['launch', name, ...(update ? ['--update'] : [])], { title: `Playing ${name}`, ...named });
+		}
+
+		if (verb === 'player' && method === 'PUT') {
+			const { player } = await bodyOf(request);
+
+			if (player !== null && !PLAYER.test(player ?? '')) return json({ error: 'Not a player name' }, 400);
+
+			return changeThen(['account', 'assign', player ?? 'none', '--instance', name], ['info', name, '--json']);
 		}
 
 		if (verb === 'gist' && method === 'POST') {
