@@ -78,6 +78,51 @@ export const resolveEntry = async (entry, context) => {
 };
 
 /** Resolve the declared list, pulling in required dependencies the declared mods name. */
+const spellingOf = claimant =>
+	`${{ github: 'gh', codeberg: 'cb', gitlab: 'gl' }[claimant.host ?? 'github']}:${claimant.repo}`;
+
+const lastSegment = id =>
+	String(id ?? '')
+		.split('/')
+		.at(-1)
+		.toLowerCase();
+
+/**
+ * The required mod ids the index could not place for these resolutions, less those an entry in `declared` already
+ * answers: one naming the id itself, as mr:mixinextras does, or one of the repositories claiming it.
+ */
+export const unplacedOf = (resolutions, declared) => {
+	const named = new Set(declared.map(entry => lastSegment(entry.id)));
+	const keys = new Set(declared.map(entryKey));
+
+	return resolutions.flatMap(resolution =>
+		(resolution.unplaced ?? [])
+			.filter(
+				({ modId, claimants }) =>
+					!named.has(modId.toLowerCase()) &&
+					!claimants.some(claimant => keys.has(`${claimant.host ?? 'github'}:${claimant.repo}`)),
+			)
+			.map(missing => ({ ...missing, requiredBy: `${resolution.source}:${resolution.id}` })),
+	);
+};
+
+/** Why a mod cannot come with what it requires, and for each repository claiming it, the line that would bring it. */
+export const unplacedMessage = (unplaced, command) =>
+	unplaced
+		.map(({ modId, claimants, requiredBy }) => {
+			const named = claimants.slice(0, 3);
+
+			if (named.length === 0) {
+				return `${requiredBy} requires "${modId}", which the index does not know. Name its source beside it: ${command} gh:owner/repo, mr:<slug> or cf:<slug>.`;
+			}
+
+			return [
+				`${requiredBy} requires "${modId}", and no repository claiming it is established enough to install unasked. Name the one you trust beside it, or its own source:`,
+				...named.map(claimant => `  ${command} ${spellingOf(claimant)}   ${plural(claimant.stars ?? 0, 'star')}`),
+			].join('\n');
+		})
+		.join('\n');
+
 export const resolveAll = async (entries, context, { withDependencies = true } = {}) => {
 	const resolved = new Map();
 	const queue = entries.map(entry => ({ entry, requested: true }));
@@ -94,6 +139,10 @@ export const resolveAll = async (entries, context, { withDependencies = true } =
 			resolved.set(key, { ...resolution, key, requested });
 
 			if (!withDependencies) continue;
+
+			const missing = unplacedOf([resolution], entries);
+
+			if (missing.length > 0) warn(unplacedMessage(missing, 'ender add'));
 
 			for (const dependency of resolution.dependencies ?? []) {
 				if (!resolved.has(entryKey(dependency))) queue.push({ entry: dependency, requested: false });

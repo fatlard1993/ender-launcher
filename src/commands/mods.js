@@ -7,7 +7,7 @@ import * as instances from '../instance';
 import { scanJar } from '../mods/capabilities';
 import { listing } from '../mods/catalog';
 import { ownerName, supportOf } from '../mods/support';
-import { entryKey, evidence, reportSync, resolveAll, sources, syncMods } from '../mods';
+import { entryKey, evidence, reportSync, resolveAll, sources, syncMods, unplacedMessage, unplacedOf } from '../mods';
 import { done, fail, info, paint, plural, step, warn } from '../out';
 import { paths } from '../paths';
 import { parseModSpec, refineModSpec, specFor, targetInstance } from './context';
@@ -69,6 +69,21 @@ export const sync = async ({ positionals, flags }) => {
 	return failures.length > 0 ? 1 : 0;
 };
 
+/** A mod the game would refuse to load for want of what it requires is not declared; --no-deps declares it alone. */
+export const refuseUnplaced = (resolutions, declared, flags, command) => {
+	if (flags.deps === false) return;
+
+	const missing = unplacedOf(resolutions, declared);
+
+	if (missing.length === 0) return;
+
+	const instance = flags.instance ? ` --instance ${flags.instance}` : '';
+
+	throw new Error(
+		`${unplacedMessage(missing, `${command}${instance}`)}\nNothing was added; --no-deps adds it without what it requires.`,
+	);
+};
+
 export const add = async ({ positionals, flags }) => {
 	const { manifest, config } = await targetInstance(flags.instance);
 
@@ -98,7 +113,9 @@ export const add = async ({ positionals, flags }) => {
 
 	// Resolved before it is written: a name that cannot be found must not enter the manifest, or
 	// every later mod command on this instance fails on a typo nothing will show you.
-	await resolveAll(added, contextFor(manifest, config, flags), { withDependencies: false });
+	const resolutions = await resolveAll(added, contextFor(manifest, config, flags), { withDependencies: false });
+
+	refuseUnplaced(resolutions, [...manifest.mods, ...added], flags, `ender add ${positionals.join(' ')}`);
 
 	manifest.mods.push(...added);
 

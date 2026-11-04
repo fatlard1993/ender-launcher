@@ -13,7 +13,7 @@ import { done, info, paint, plural, step, warn } from '../out';
 import { publishPack } from '../gist';
 import { fileIndexIssue } from '../indexIssues';
 import { paths } from '../paths';
-import { parseModSpec, refineModSpec, syncInstance } from './mods';
+import { parseModSpec, refineModSpec, refuseUnplaced, syncInstance } from './mods';
 import { fetchPack, isRemote, resolveSpecs, sourceOf } from './packSource';
 import { targetInstance, targetName } from './context';
 
@@ -97,7 +97,14 @@ export const create = async ({ positionals, flags }) => {
 		buildMissing: flags.build ?? false,
 	};
 
-	if (mods.length > 0) await resolveAll(mods, context, { withDependencies: false });
+	if (mods.length > 0) {
+		refuseUnplaced(
+			await resolveAll(mods, context, { withDependencies: false }),
+			mods,
+			flags,
+			`ender new ${positionals.join(' ')}`,
+		);
+	}
 
 	const manifest = await instances.create(name, {
 		type: flags.server ? 'server' : 'client',

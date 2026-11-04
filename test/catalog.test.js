@@ -8,7 +8,7 @@ import { ESTABLISHED, fit, forgetLoaded, providerOf, requiredIds } from '../src/
 import { standing } from '../src/mods/rank';
 import { hosted, resolveFromRecord, search } from '../src/mods/indexed';
 import { rank } from '../src/mods/rank';
-import { authorsOf } from '../src/commands/mods';
+import { authorsOf, refuseUnplaced } from '../src/commands/mods';
 
 const mod = (id, extra) => ({
 	loader: 'fabric',
@@ -318,16 +318,12 @@ describe('resolving from an index record', () => {
 		const warned = spyOn(console, 'warn').mockImplementation(() => {});
 
 		try {
-			await resolveFromRecord(record, { source: 'github', id: 'a/m' }, context());
+			const resolved = await resolveFromRecord(record, { source: 'github', id: 'a/m' }, context());
 
-			const lines = warned.mock.calls.map(([line]) => line);
-
-			expect(lines).toContain(
+			expect(warned.mock.calls.map(([line]) => line)).toContain(
 				'!! github:a/m 1.0 m.jar was replaced after it was published; the earlier jar was seen until 2026-10-03',
 			);
-			expect(lines).toContain(
-				'!! github:a/m requires "mystery-lib", which the index does not know; declare it yourself',
-			);
+			expect(resolved.unplaced).toEqual([{ modId: 'mystery-lib', claimants: [] }]);
 		} finally {
 			warned.mockRestore();
 		}
@@ -584,20 +580,14 @@ describe('mods on Codeberg and GitLab', () => {
 		);
 	});
 
-	test('a dependency claimed only by an unvouched repository is said, not installed', async () => {
+	test('a dependency claimed only by an unvouched repository is kept as unplaced, with its claimant, not installed', async () => {
 		const record = { releases: [release('1.0', [asset('m.jar', [mod('m', { depends: ['sodium'] })])])] };
-		const warned = spyOn(console, 'warn').mockImplementation(() => {});
+		const resolved = await resolveFromRecord(record, { source: 'github', id: 'IrisShaders/Iris' }, context());
 
-		try {
-			const resolved = await resolveFromRecord(record, { source: 'github', id: 'IrisShaders/Iris' }, context());
-
-			expect(resolved.dependencies).toEqual([]);
-			expect(warned.mock.calls.map(([line]) => line)).toContain(
-				'!! github:IrisShaders/Iris requires "sodium"; 1 repository in the index claims that id, but any jar can, and none is established enough to install unasked. Declare the one you trust.',
-			);
-		} finally {
-			warned.mockRestore();
-		}
+		expect(resolved.dependencies).toEqual([]);
+		expect(resolved.unplaced.map(({ modId, claimants }) => [modId, claimants.map(claimant => claimant.repo)])).toEqual([
+			['sodium', [expect.any(String)]],
+		]);
 	});
 
 	test('a dependency on a mod hosted elsewhere is declared from that host', async () => {
@@ -647,5 +637,36 @@ describe("the support an instance's authors take", () => {
 			unsupported: ['quiet/three'],
 			elsewhere: ['modrinth:sodium'],
 		});
+	});
+});
+
+describe('a mod whose requirement nothing installs', () => {
+	const resolution = {
+		source: 'github',
+		id: 'IrisShaders/Iris',
+		unplaced: [{ modId: 'sodium', claimants: [{ host: 'github', repo: 'someone/sodium-fork', stars: 3 }] }],
+	};
+
+	test('is refused with a line for each claimant, and nothing declared', () => {
+		expect(() => refuseUnplaced([resolution], [], {}, 'ender add iris')).toThrow(
+			[
+				'github:IrisShaders/Iris requires "sodium", and no repository claiming it is established enough to install unasked. Name the one you trust beside it, or its own source:',
+				'  ender add iris gh:someone/sodium-fork   3 stars',
+				'Nothing was added; --no-deps adds it without what it requires.',
+			].join('\n'),
+		);
+	});
+
+	test('goes in once the requirement is named beside it, by its id or by a claimant', () => {
+		expect(() =>
+			refuseUnplaced([resolution], [{ source: 'modrinth', id: 'sodium' }], {}, 'ender add iris'),
+		).not.toThrow();
+		expect(() =>
+			refuseUnplaced([resolution], [{ source: 'github', id: 'someone/sodium-fork' }], {}, 'ender add iris'),
+		).not.toThrow();
+	});
+
+	test('goes in alone with --no-deps', () => {
+		expect(() => refuseUnplaced([resolution], [], { deps: false }, 'ender add iris')).not.toThrow();
 	});
 });

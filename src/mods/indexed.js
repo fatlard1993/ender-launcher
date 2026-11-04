@@ -13,36 +13,37 @@ export const label = 'Index';
 
 const live = asset => asset.error === undefined && asset.gone === undefined;
 
-/** The repositories a jar's required mods come from, by the index, on whichever host; what it cannot place is said, not dropped. */
+/**
+ * The repositories a jar's required mods come from, by the index, on whichever host. A required id it cannot place is
+ * kept as `unplaced` with whoever claims it, for the caller to refuse or report; never dropped.
+ */
 const dependenciesOf = async (entry, mods, context) => {
 	const required = catalog.requiredIds(mods);
 
-	if (required.length === 0) return [];
+	if (required.length === 0) return { dependencies: [], unplaced: [] };
 
 	const entries = await catalog.listing(context);
 	const found = new Map();
+	const unplaced = [];
 
 	for (const modId of required) {
 		const fits = { minecraft: context.minecraft, loader: context.loader };
 		const provider = catalog.providerOf(modId, entries, { host: entry.source, repo: entry.id }, fits);
-		const claimants = catalog.claimantsOf(modId, entries, fits).length;
 
-		if (provider === undefined && claimants === 0) {
-			warn(`${entry.source}:${entry.id} requires "${modId}", which the index does not know; declare it yourself`);
-		} else if (provider === undefined) {
-			warn(
-				`${entry.source}:${entry.id} requires "${modId}"; ${claimants} ${claimants === 1 ? 'repository' : 'repositories'} in the index ${claimants === 1 ? 'claims' : 'claim'} that id, but any jar can, and none is established enough to install unasked. Declare the one you trust.`,
-			);
-		} else {
-			const host = provider.host ?? 'github';
+		if (provider === undefined) {
+			unplaced.push({ modId, claimants: catalog.claimantsOf(modId, entries, fits) });
 
-			if (host !== entry.source || provider.repo !== entry.id) {
-				found.set(`${host}:${provider.repo}`, { source: host, id: provider.repo });
-			}
+			continue;
+		}
+
+		const host = provider.host ?? 'github';
+
+		if (host !== entry.source || provider.repo !== entry.id) {
+			found.set(`${host}:${provider.repo}`, { source: host, id: provider.repo });
 		}
 	}
 
-	return [...found.values()];
+	return { dependencies: [...found.values()], unplaced };
 };
 
 const declaresMinecraft = record =>
@@ -127,11 +128,11 @@ export const resolveFromRecord = async (record, entry, context) => {
 		name: `${entry.id} ${release.tag}`,
 		version: release.tag,
 		file: { filename: asset.name, url: asset.url, checksum: checksumOf(`sha256:${asset.sha256}`), size: asset.size },
-		dependencies: await dependenciesOf(
+		...(await dependenciesOf(
 			entry,
 			(asset.mods ?? []).filter(mod => catalog.loaderFits(mod.loader, loader)),
 			context,
-		),
+		)),
 	};
 };
 
@@ -168,11 +169,11 @@ export const resolveFromSource = async (record, entry, context) => {
 		name: `${entry.id} ${short}`,
 		version: source.commit,
 		file: { filename: `${entry.id.split('/').at(-1)}-${short}.jar`, localPath: jar },
-		dependencies: await dependenciesOf(
+		...(await dependenciesOf(
 			entry,
 			(source.mods ?? []).filter(mod => catalog.loaderFits(mod.loader, loader)),
 			context,
-		),
+		)),
 	};
 };
 
