@@ -68,20 +68,42 @@ export const add = async ({ clientId, onPrompt, qr } = {}) => {
  * so it is the same player a bare username would have been, just one you can name and switch to.
  */
 export const addOffline = async name => {
-	if (!/^\w{3,16}$/.test(name)) {
-		throw new Error(`"${name}" is not a usable Minecraft name (3 to 16 letters, digits or underscore).`);
-	}
-
 	const store = await readAccounts();
 
 	if (store.accounts[name] !== undefined) throw new Error(`An account named "${name}" already exists`);
 
-	store.accounts[name] = { kind: 'offline', name, uuid: offlineUuid(name) };
-	store.active ??= name;
+	return ensureOffline(name, { activate: true });
+};
+
+/** What Minecraft accepts as a player name. */
+export const NAME = /^\w{3,16}$/;
+
+const assertName = name => {
+	if (!NAME.test(name ?? '')) {
+		throw new Error(`"${name}" is not a usable Minecraft name (3 to 16 letters, digits or underscore).`);
+	}
+};
+
+/** The account of this name, made as an offline one when there is none; `activate` makes it active if none is. */
+export const ensureOffline = async (name, { activate = false } = {}) => {
+	assertName(name);
+
+	const store = await readAccounts();
+
+	store.accounts[name] ??= { kind: 'offline', name, uuid: offlineUuid(name) };
+
+	if (activate) store.active ??= name;
 
 	await writeAccounts(store);
 
 	return store.accounts[name];
+};
+
+/** Refuses a name no account has, so a typo is caught where it is typed rather than at the next launch. */
+export const assertExists = async name => {
+	if ((await readAccounts()).accounts[name] === undefined) {
+		throw new Error(`No account named "${name}". "ender account" lists them.`);
+	}
 };
 
 export const remove = async name => {

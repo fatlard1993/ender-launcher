@@ -1,6 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 
 import { profileFor } from '../auth';
+import { DEFAULT_PLAYER } from '../auth/adopt';
 import { readConfig } from '../config';
 import * as instances from '../instance';
 import { installPlan } from '../install';
@@ -94,11 +95,9 @@ export const play = async ({ positionals, flags }) => {
 	const { accounts } = await import('../auth');
 
 	if ((await accounts.readAccounts()).active === undefined && !settings.account) {
-		if (settings.username === undefined || settings.username === 'Player') {
-			warn(
-				'Launching as "Player". Set a name with "ender config username <name>", or sign in with "ender account add".',
-			);
-		}
+		const signIn = config.clientId ? ', or sign in with "ender account add"' : '';
+
+		warn(`Launching as "${DEFAULT_PLAYER}". Choose a name with "ender account add --offline <name>"${signIn}.`);
 	}
 
 	if (flags.update) await updateBeforeStart(manifest, config, flags);
@@ -118,7 +117,6 @@ export const play = async ({ positionals, flags }) => {
 		...settings,
 		quickPlay: intent.quickPlay,
 		resolution: intent.resolution,
-		username: settings.username ?? 'Player',
 		memory: settings.memory ?? (await readConfig()).memory,
 		extraJvmArgs: [...(manifest.jvmArgs ?? [])],
 		manageJava: config.manageJava !== false,
@@ -144,12 +142,10 @@ export const explain = async ({ positionals, flags }) => {
 	info(`  asset index ${plan.assetIndexId}`);
 	info(`  natives     ${plan.nativesDirectory}`);
 	info(`  game dir    ${manifest.gameDir}`);
-	const profile = await profileFor({ account: settings.account, username: settings.username ?? 'Player' }).catch(
-		() => undefined,
-	);
+	const profile = await profileFor({ account: settings.account }).catch(() => undefined);
 
 	info(
-		`  user        ${profile?.name ?? settings.username ?? 'Player'} ${paint.dim(profile?.online ? '(signed in)' : '(offline)')}`,
+		`  user        ${profile?.name ?? settings.account ?? DEFAULT_PLAYER} ${paint.dim(profile?.online ? '(signed in)' : '(offline)')}`,
 	);
 
 	return 0;

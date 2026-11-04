@@ -1,5 +1,6 @@
 import { offlineProfile } from './offline';
 import { asProfile, resolveAccount } from './accounts';
+import { DEFAULT_PLAYER } from './adopt';
 
 export { offlineProfile, offlineUuid } from './offline';
 export * as accounts from './accounts';
@@ -8,7 +9,7 @@ export * as accounts from './accounts';
  * Who an instance plays as.
  *
  * A named account wins, then whichever account is active, and failing both the offline identity
- * derived from a name. Offline is not a fallback for a broken sign in: a token that cannot be
+ * of the default name. Offline is not a fallback for a broken sign in: a token that cannot be
  * renewed is an error worth hearing, not a silent downgrade into a game that cannot join anything.
  */
 export const profileFor = async ({ account, username } = {}) => {
@@ -16,7 +17,5 @@ export const profileFor = async ({ account, username } = {}) => {
 
 	if (resolved !== undefined) return asProfile(resolved);
 
-	// No account chosen at all: the configured name, which is the identity ender had before accounts
-	// were a thing and is still the shortest way to play.
-	return { ...offlineProfile(username ?? 'Player'), online: false };
+	return { ...offlineProfile(username ?? DEFAULT_PLAYER), online: false };
 };

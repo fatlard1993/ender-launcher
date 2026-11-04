@@ -60,7 +60,7 @@ If you have a Prism instance already, adopt it rather than rebuild it:
 
 ```
 ender import ~/.local/share/PrismLauncher/instances/suite
-ender config username <your-name>
+ender account add --offline <your-name>
 ender launch
 ```
 
@@ -113,7 +113,7 @@ ender account assign <name>      bind one instance to one account
 ender account remove <name>      forget one
 ```
 
-An account is either offline or Microsoft, and the two sit in one list and switch the same way. An offline one is a name and the uuid vanilla derives from it, so it is exactly the player a bare username would have been, only one you can keep several of and move between. That is what makes testing your own multiplayer worth doing locally: two instances, two names, two uuids, one `online-mode=false` server.
+Who plays is always an account, either offline or Microsoft, and the two sit in one list and switch the same way. An offline one is a name and the uuid vanilla derives from it, so it is the player that name has always been, only one you can keep several of and move between. A username set the older way, `ender config username` or `ender set username` on an instance, becomes the offline account of that name the first time ender runs, and setting one still works the same way. `ender web` lists, adds and switches accounts too, and gives each instance its own. That is what makes testing your own multiplayer worth doing locally: two instances, two names, two uuids, one `online-mode=false` server.
 
 Sign in is the Microsoft device code flow: ender shows a short code and a scannable square for a phone (`--no-qr` leaves the square out), you type the code into a browser, and the tokens live in `accounts.json` with owner-only permissions. A Minecraft token lasts a day and is renewed from the Microsoft one when it goes stale, so signing in is a thing you do once.
 
@@ -131,7 +131,7 @@ To register your own: sign in at the Azure portal, create an application under M
 
 `clientId` is configuration and not a default baked into this tool, so whichever id you use stays on your machine. Any approved id works; the flow does not care where it came from.
 
-Without an account, instances launch offline. The player UUID is derived from the name the way vanilla derives it, so worlds and inventories follow the name and a save made under an online account still knows you. A failed sign in is an error rather than a silent downgrade: a token that cannot be renewed is worth hearing about, not quietly swapping you into a game that cannot join anything.
+Without an account, instances launch offline as `Player`. An offline player's UUID is derived from the name the way vanilla derives it, so worlds and inventories follow the name and a save made under an online account still knows you. A failed sign in is an error rather than a silent downgrade: a token that cannot be renewed is worth hearing about, not quietly swapping you into a game that cannot join anything.
 
 An offline client cannot join a server running `online-mode=true`. For a server this tool manages, `ender server offline` turns that off, and a newly provisioned server is set that way from the start.
 

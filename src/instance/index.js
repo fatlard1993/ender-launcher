@@ -56,7 +56,6 @@ export const defaults = name => ({
 	minecraft: 'release',
 	loader: { type: 'fabric', version: undefined },
 	gameDir: join(instanceDir(name), 'game'),
-	username: undefined,
 	memory: undefined,
 	jvmArgs: [],
 	env: {},
@@ -65,10 +64,21 @@ export const defaults = name => ({
 
 export const exists = async name => Bun.file(manifestPath(name)).exists();
 
+const adoptInstanceName = async (manifest, name) => {
+	const { adoptName } = await import('../auth/adopt');
+
+	if (await adoptName(manifest.username, { activate: false, who: name })) manifest.account ??= manifest.username;
+
+	delete manifest.username;
+
+	await writeJson(manifestPath(name), manifest);
+};
+
 export const read = async name => {
 	const manifest = await readJson(manifestPath(name), undefined).catch(() => undefined);
 
 	if (manifest === undefined) throw new Error(`No instance named "${name}"`);
+	if (manifest.username !== undefined) await adoptInstanceName(manifest, name);
 
 	return { ...defaults(name), ...manifest, name };
 };

@@ -225,6 +225,40 @@ describe('account listing for scripts', () => {
 
 		expect(lines.some(line => line.includes('No accounts yet'))).toBe(true);
 	});
+
+	test('says Microsoft sign in needs a registration of your own when ender has none', async () => {
+		const lines = await captured({});
+
+		expect(lines.some(line => line.includes('app registration of your own'))).toBe(true);
+	});
+});
+
+describe('adding an offline account', () => {
+	const added = async name => {
+		const { add } = await import('../src/commands/account');
+		const lines = [];
+		const real = console.log;
+
+		console.log = (...args) => lines.push(args.join(' '));
+
+		try {
+			await add({ positionals: [name], flags: { offline: true } });
+		} finally {
+			console.log = real;
+		}
+
+		return lines.join('\n');
+	};
+
+	test('says the first one is who instances now play as', async () => {
+		expect(await added('Steve')).toContain('instances play as Steve unless given another');
+	});
+
+	test('says a later one changes nothing until chosen', async () => {
+		await added('Steve');
+
+		expect(await added('Alex')).toContain('instances still play as Steve; "ender account use Alex" switches');
+	});
 });
 
 describe('accounts taken over from Prism', () => {
@@ -332,5 +366,98 @@ describe('renewal before a launch', () => {
 		}
 
 		expect(requested[0]).toContain('oauth2/v2.0/token');
+	});
+});
+
+describe('a username from before accounts held who plays', () => {
+	const instanceFile = name => join(home, 'instances', name, 'instance.json');
+
+	test('in config becomes the active offline account, and leaves config', async () => {
+		await Bun.write(join(home, 'config.json'), JSON.stringify({ username: 'Chase', memory: { min: 1, max: 2 } }));
+
+		const { adoptConfiguredName } = await import('../src/auth/adopt');
+
+		await adoptConfiguredName();
+
+		const accounts = await accountsModule();
+
+		expect((await accounts.list()).map(({ name, kind, active }) => [name, kind, active])).toEqual([
+			['Chase', 'offline', true],
+		]);
+		expect(await Bun.file(join(home, 'config.json')).json()).toEqual({ memory: { min: 1, max: 2 } });
+	});
+
+	test('the default name makes no account', async () => {
+		await Bun.write(join(home, 'config.json'), JSON.stringify({ username: 'Player' }));
+
+		const { adoptConfiguredName } = await import('../src/auth/adopt');
+
+		await adoptConfiguredName();
+
+		expect(await (await accountsModule()).list()).toEqual([]);
+	});
+
+	test('on an instance becomes the offline account it is assigned, without taking the active slot', async () => {
+		await Bun.write(
+			instanceFile('old'),
+			JSON.stringify({ name: 'old', minecraft: '26.3', loader: { type: 'fabric' }, username: 'Kid_2', mods: [] }),
+		);
+
+		const instances = await import('../src/instance');
+		const manifest = await instances.read('old');
+
+		expect(manifest.account).toBe('Kid_2');
+		expect(manifest.username).toBeUndefined();
+		expect((await Bun.file(instanceFile('old')).json()).username).toBeUndefined();
+		expect((await (await accountsModule()).readAccounts()).active).toBeUndefined();
+	});
+});
+
+describe('who plays, as a script or a page reads it', () => {
+	test('lists each account as JSON, never its tokens', async () => {
+		const accounts = await accountsModule();
+
+		await accounts.writeAccounts({
+			active: 'player',
+			accounts: { player: { kind: 'microsoft', name: 'player', uuid: 'abc', token: 'secret', refreshToken: 'secret' } },
+		});
+
+		const { ls } = await import('../src/commands/account');
+		const lines = [];
+		const real = console.log;
+
+		console.log = (...args) => lines.push(args.join(' '));
+
+		try {
+			await ls({ flags: { json: true } });
+		} finally {
+			console.log = real;
+		}
+
+		expect(lines.join('')).not.toContain('secret');
+		expect(JSON.parse(lines.join(''))).toEqual({
+			signIn: false,
+			fallback: 'Player',
+			accounts: [{ name: 'player', kind: 'microsoft', uuid: 'abc', active: true }],
+		});
+	});
+
+	test('ender config username names an offline account and plays as it', async () => {
+		const { config } = await import('../src/commands/settings');
+		const real = console.log;
+
+		console.log = () => {};
+
+		try {
+			await config({ positionals: ['username', 'Alex'] });
+		} finally {
+			console.log = real;
+		}
+
+		expect((await (await accountsModule()).list()).map(({ name, active }) => [name, active])).toEqual([['Alex', true]]);
+	});
+
+	test('an instance cannot be given an account nobody has', async () => {
+		await expect((await accountsModule()).assertExists('Nobody')).rejects.toThrow('No account named "Nobody"');
 	});
 });

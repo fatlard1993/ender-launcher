@@ -1,3 +1,5 @@
+import { accounts } from '../auth';
+import { DEFAULT_PLAYER } from '../auth/adopt';
 import { readConfig, updateConfig } from '../config';
 import { installations, managedRuntimes } from '../java';
 import { installRuntime, isInstalled, publishedRuntimes, runtimeBinary } from '../runtime';
@@ -6,6 +8,24 @@ import { done, info, paint, warn } from '../out';
 const NUMERIC = new Set(['memory.min', 'memory.max']);
 
 const BOOLEAN = new Set(['manageJava']);
+
+/** Who plays is an account now; a username set the old way becomes the offline account of that name, and is used. */
+const playAs = async ([name]) => {
+	const { active } = await accounts.readAccounts();
+
+	if (name === undefined) {
+		info(active ?? DEFAULT_PLAYER);
+
+		return 0;
+	}
+
+	await accounts.ensureOffline(name);
+	await accounts.use(name);
+
+	done(`Playing as ${name}, an offline account; "ender account" lists it`);
+
+	return 0;
+};
 
 export const config = async ({ positionals }) => {
 	const [key, ...rest] = positionals;
@@ -20,6 +40,8 @@ export const config = async ({ positionals }) => {
 	}
 
 	const [head, tail] = key.split('.');
+
+	if (key === 'username') return playAs(rest);
 
 	if (!(head in current)) {
 		warn(`"${head}" is not a setting. "ender config" lists them.`);

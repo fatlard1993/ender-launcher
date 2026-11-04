@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 
 import { accounts } from '../auth';
+import { DEFAULT_PLAYER } from '../auth/adopt';
 import * as instances from '../instance';
 import { readConfig } from '../config';
 import { done, info, paint, plural, warn } from '../out';
@@ -21,6 +22,20 @@ const CLIENT_ID_HELP = [
 export const ls = async ({ flags = {} } = {}) => {
 	const found = await accounts.list();
 
+	if (flags.json) {
+		const { clientId } = await readConfig();
+
+		info(
+			JSON.stringify({
+				signIn: Boolean(clientId),
+				fallback: DEFAULT_PLAYER,
+				accounts: found.map(({ name, kind, uuid, active }) => ({ name, kind, uuid, active })),
+			}),
+		);
+
+		return 0;
+	}
+
 	if (flags.names) {
 		for (const account of found) info(account.name);
 
@@ -28,10 +43,18 @@ export const ls = async ({ flags = {} } = {}) => {
 	}
 
 	if (found.length === 0) {
+		const { clientId } = await readConfig();
+
 		info('No accounts yet.');
 		info(paint.dim('  ender account add --offline <name>   an identity that needs no sign in'));
-		info(paint.dim('  ender account add                   sign in to a Microsoft account'));
-		info(paint.dim('  Without either, instances launch offline under the configured username.'));
+		info(
+			paint.dim(
+				clientId
+					? '  ender account add                   sign in to a Microsoft account'
+					: '  ender account add                   sign in to Microsoft, once you have an app registration of your own; it says how',
+			),
+		);
+		info(paint.dim(`  Without either, instances launch offline as ${DEFAULT_PLAYER}.`));
 
 		return 0;
 	}
@@ -55,8 +78,17 @@ export const add = async ({ positionals, flags }) => {
 
 		const account = await accounts.addOffline(name);
 
+		const playing = (await accounts.list()).find(known => known.active)?.name;
+
 		done(`Added offline account ${account.name}`);
 		info(paint.dim(`  ${account.uuid}`));
+		info(
+			paint.dim(
+				playing === account.name
+					? `  instances play as ${account.name} unless given another`
+					: `  instances still play as ${playing}; "ender account use ${account.name}" switches`,
+			),
+		);
 
 		return 0;
 	}
@@ -130,6 +162,8 @@ export const assign = async ({ positionals, flags }) => {
 		return 0;
 	}
 
+	if (name !== 'none') await accounts.assertExists(name);
+
 	manifest.account = name === 'none' ? undefined : name;
 
 	await instances.write(manifest);
@@ -147,7 +181,7 @@ export const status = async () => {
 	info(`  client id   ${config.clientId ?? paint.dim('unset')}`);
 	info(`  accounts    ${plural(found.length, 'account')} (${found.filter(a => a.kind === 'offline').length} offline)`);
 	info(
-		`  active      ${active ? `${active.name} ${paint.dim(`(${active.kind})`)}` : paint.dim(`none, launches offline as ${config.username ?? 'Player'}`)}`,
+		`  active      ${active ? `${active.name} ${paint.dim(`(${active.kind})`)}` : paint.dim(`none, launches offline as ${DEFAULT_PLAYER}`)}`,
 	);
 
 	return 0;

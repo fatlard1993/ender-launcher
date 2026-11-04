@@ -1,6 +1,7 @@
 import { stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
+import { accounts } from '../auth';
 import { readConfig, updateConfig } from '../config';
 import * as instances from '../instance';
 import { fromPrism, identifyMods } from '../instance/import';
@@ -23,6 +24,7 @@ const instanceSummary = (manifest, config) => ({
 	minecraft: manifest.minecraft,
 	loader: manifest.loader,
 	gameDir: manifest.gameDir,
+	account: manifest.account,
 	active: manifest.name === config.activeInstance,
 });
 
@@ -177,7 +179,7 @@ const SETTABLE = new Set([
 	'loader',
 	'loaderVersion',
 	'gameDir',
-	'username',
+	'account',
 	'memory.min',
 	'memory.max',
 	'javaPath',
@@ -201,6 +203,12 @@ export const set = async ({ positionals, flags }) => {
 		return 0;
 	}
 
+	if (key === 'username' && rest.length > 0) {
+		await accounts.ensureOffline(rest[0]);
+
+		return set({ positionals: ['account', rest[0]], flags });
+	}
+
 	if (!SETTABLE.has(key)) throw new Error(`"${key}" is not settable. "ender set" lists what is.`);
 	if (rest.length === 0) throw new Error(`ender set ${key} <value>`);
 
@@ -216,6 +224,10 @@ export const set = async ({ positionals, flags }) => {
 		if (LOADER_SERVICES[type]) manifest.loader.version = await LOADER_SERVICES[type].latestLoader(manifest.minecraft);
 	} else if (key === 'loaderVersion') {
 		manifest.loader = { ...manifest.loader, version: raw };
+	} else if (key === 'account') {
+		if (raw !== 'none') await accounts.assertExists(raw);
+
+		manifest.account = raw === 'none' ? undefined : raw;
 	} else if (key === 'gameDir') {
 		manifest.gameDir = resolve(raw);
 	} else if (NUMERIC.has(key)) {

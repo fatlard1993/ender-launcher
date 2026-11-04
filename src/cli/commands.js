@@ -301,6 +301,7 @@ export const commands = {
 			...instanceFlag,
 			offline: { type: 'boolean', description: 'Add an offline identity, no sign in' },
 			names: { type: 'boolean', description: 'List just the account names, one per line' },
+			json: { type: 'boolean', description: 'List the accounts as JSON, with no tokens' },
 			qr: {
 				type: 'boolean',
 				default: true,

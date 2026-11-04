@@ -3,7 +3,6 @@ import { readJson, writeJson } from './json';
 
 const defaults = {
 	activeInstance: undefined,
-	username: 'Player',
 	curseforgeKey: undefined,
 	githubToken: undefined,
 	index: undefined,

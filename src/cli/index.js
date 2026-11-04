@@ -1,6 +1,7 @@
 import { version } from '../../package.json';
 import { fail, info, paint, setVerbosity } from '../out';
 import { commands } from './commands';
+import { adoptConfiguredName } from '../auth/adopt';
 import * as instances from '../instance';
 import { commandHelp, startHere, usage } from './help';
 import { parseArgv } from './parse';
@@ -43,6 +44,8 @@ export const run = async argv => {
 	}
 
 	const command = commands[name];
+
+	if (command !== undefined) await adoptConfiguredName();
 
 	if (command === undefined) {
 		fail(`Unknown command "${name}".${suggest(name)}`);
