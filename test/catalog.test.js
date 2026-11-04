@@ -180,6 +180,12 @@ describe('the index catalog', () => {
 	});
 });
 
+// Fabric Loader carries mixinextras-fabric in its own jar, as Quilt, Forge and NeoForge carry theirs: lithium's
+// "mixinextras >=0.5.5" is the loader's to answer.
+test('a requirement the loader itself carries is not a mod to fetch', () => {
+	expect(requiredIds([mod('lithium', { depends: ['fabricloader', 'minecraft', 'mixinextras'] })])).toEqual([]);
+});
+
 describe('resolving from an index record', () => {
 	const context = () => ({ minecraft: '26.3', loader: 'fabric', index });
 

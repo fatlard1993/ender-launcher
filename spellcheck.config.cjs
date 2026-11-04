@@ -122,6 +122,7 @@ module.exports = {
 		'mkdtemp',
 		'mmc',
 		'modmenu',
+		'mixinextras',
 		'modpack',
 		'modpacks',
 		'modrinth',

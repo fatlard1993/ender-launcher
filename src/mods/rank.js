@@ -45,9 +45,10 @@ export const authorOf = (entry, entries) => {
 	return vouching && vouching !== entry ? vouching.repo : '';
 };
 
-/** What every mod runs on rather than a mod anyone installs. */
+/** What every mod runs on rather than a mod anyone installs: MixinExtras ships inside every current loader. */
 const PLATFORM = new Set([
 	'minecraft',
+	'mixinextras',
 	'java',
 	'fabricloader',
 	'fabric-loader',
