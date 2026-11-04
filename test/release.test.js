@@ -21,6 +21,10 @@ describe('the Homebrew formula', () => {
 		expect(written).toContain('bin.install Dir["ender-*"].first => "ender"');
 	});
 
+	test('says what to type first once brew has installed it', () => {
+		expect(formula('0.2.0', sums)).toContain('Start with: ender new survival, then ender launch');
+	});
+
 	test('is not written for a release missing a binary', () => {
 		expect(() => formula('0.2.0', sumsOf(`${'0'.repeat(64)}  ender-darwin-arm64`))).toThrow(
 			'No sha256 for ender-darwin-x64',

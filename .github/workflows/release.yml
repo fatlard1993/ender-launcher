@@ -1,14 +1,16 @@
 name: release
 
+# Run by hand, it builds the binaries, disk images and installer to download from the run, and publishes nothing
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -18,6 +20,7 @@ jobs:
           bun-download-url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.0/bun-linux-x64.zip
       - run: bun install
       - name: the tag is the package's version
+        if: startsWith(github.ref, 'refs/tags/v')
         run: |
           version="$(jq -r .version package.json)"
           [ "v$version" = "$GITHUB_REF_NAME" ] || { echo "Tag $GITHUB_REF_NAME, but package.json says $version"; exit 1; }
@@ -46,8 +49,91 @@ jobs:
             suffix=''; [ "${target%%-*}" = windows ] && suffix='.exe'
             bun build --compile --minify --target="bun-$target" index.js --outfile "dist/ender-$target$suffix"
           done
-          (cd dist && sha256sum ender-* > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binaries
+          path: dist/
+      - run: echo "$INDEX_COMMIT" > index-commit
+      - uses: actions/upload-artifact@v4
+        with:
+          name: index-commit
+          path: index-commit
+
+  # A disk image per chip: Ender.app around that chip's binary, signed ad hoc, which a first open asks to allow in
+  # Privacy & Security since no Apple developer id signs it
+  macos:
+    needs: build
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - uses: actions/download-artifact@v4
+        with:
+          name: binaries
+          path: dist/
+      - name: disk images
+        run: |
+          mkdir out
+          for chip in arm64 x64; do
+            bun scripts/bundle.js "dist/ender-darwin-$chip" "stage-$chip/Ender.app"
+            codesign --force --deep --sign - "stage-$chip/Ender.app"
+            ln -s /Applications "stage-$chip/Applications"
+            hdiutil create -volname Ender -srcfolder "stage-$chip" -ov -format UDZO "out/Ender-mac-$chip.dmg"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: out/
+
+  # An installer for this user alone, which SmartScreen warns of since no certificate signs it
+  windows:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: binaries
+          path: dist/
+      - name: installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          & $iscc "/DVersion=$version" "/DSource=$((Resolve-Path dist).Path)" installer\ender.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory out | Out-Null
+          Move-Item dist\Ender-Setup.exe out\Ender-Setup.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: out/
+
+  publish:
+    needs: [build, macos, windows]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-download-url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.0/bun-linux-x64.zip
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+      - name: gather
+        run: |
+          mkdir dist
+          cp artifacts/binaries/* artifacts/macos/* artifacts/windows/* assets/ender.png assets/ender.icns assets/ender.ico dist/
+          (cd dist && sha256sum * > SHA256SUMS)
           cat dist/SHA256SUMS
+          echo "INDEX_COMMIT=$(cat artifacts/index-commit/index-commit)" >> "$GITHUB_ENV"
       - name: publish
         env:
           GH_TOKEN: ${{ github.token }}

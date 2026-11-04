@@ -4,7 +4,8 @@
 #   curl -fsSL https://raw.githubusercontent.com/fatlard1993/ender-launcher/main/install.sh | sh
 #
 # ENDER_INSTALL names the directory it goes in (~/.local/bin by default), ENDER_VERSION a release (the newest by
-# default), and ENDER_RELEASES where a release's files are downloaded from instead of GitHub, such as a mirror.
+# default), and ENDER_RELEASES where a release's files are downloaded from instead of GitHub, such as a mirror. It adds
+# an Ender icon to the app menu unless ENDER_DESKTOP=0.
 set -eu
 
 repo='fatlard1993/ender-launcher'
@@ -69,7 +70,26 @@ mv "$staging/$binary" "$directory/ender"
 
 echo "Installed $("$directory/ender" --version) at $directory/ender"
 
+# ENDER_DESKTOP=0 leaves the app menu as it was
+if [ "${ENDER_DESKTOP:-1}" != 0 ]; then
+	"$directory/ender" desktop || echo "ender: the Ender icon was not added; ender desktop tries again" >&2
+fi
+
 case ":$PATH:" in
-	*":$directory:"*) echo 'Start with: ender new survival, then ender launch' ;;
-	*) echo "$directory is not on your PATH; add it in your shell's profile, or start with: $directory/ender new survival" ;;
+	*":$directory:"*)
+		echo 'Start with: ender new survival, then ender launch'
+		;;
+	*)
+		case "$(basename "${SHELL:-sh}")" in
+			zsh) line="echo 'export PATH=\"$directory:\$PATH\"' >> ~/.zshrc" ;;
+			bash) [ "$system" = darwin ] && profile='~/.bash_profile' || profile='~/.bashrc'; line="echo 'export PATH=\"$directory:\$PATH\"' >> $profile" ;;
+			fish) line="fish_add_path $directory" ;;
+			*) line="echo 'export PATH=\"$directory:\$PATH\"' >> ~/.profile" ;;
+		esac
+		echo "$directory is not on your PATH yet. This puts it there, for terminals opened after it:"
+		echo
+		echo "  $line"
+		echo
+		echo 'Then start with: ender new survival, then ender launch'
+		;;
 esac

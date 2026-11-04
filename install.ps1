@@ -3,6 +3,7 @@
 #   irm https://raw.githubusercontent.com/fatlard1993/ender-launcher/main/install.ps1 | iex
 #
 # $env:ENDER_INSTALL names the folder it goes in (%LOCALAPPDATA%\ender\bin by default), $env:ENDER_VERSION a release.
+# It adds an Ender icon to the Start menu unless $env:ENDER_DESKTOP is 0.
 $ErrorActionPreference = 'Stop'
 
 $repo = 'fatlard1993/ender-launcher'
@@ -35,12 +36,20 @@ try {
 	Remove-Item -Recurse -Force $staging -ErrorAction SilentlyContinue
 }
 
+$exe = Join-Path $directory 'ender.exe'
+Write-Host "Installed $(& $exe --version) at $exe"
+
+# ENDER_DESKTOP=0 leaves the Start menu as it was
+if ($env:ENDER_DESKTOP -ne '0') {
+	& $exe desktop
+	if ($LASTEXITCODE -ne 0) { Write-Warning 'The Ender icon was not added; ender desktop tries again' }
+}
+
 $path = [Environment]::GetEnvironmentVariable('Path', 'User')
 
 if (($path -split ';') -notcontains $directory) {
 	[Environment]::SetEnvironmentVariable('Path', "$path;$directory", 'User')
-	Write-Host "Added $directory to your PATH; open a new terminal for it to take"
+	Write-Host 'Open Ender from the Start menu, or in a new terminal (this one does not see ender yet) start with: ender new survival, then ender launch'
+} else {
+	Write-Host 'Open Ender from the Start menu, or start with: ender new survival, then ender launch'
 }
-
-Write-Host "Installed $(& (Join-Path $directory 'ender.exe') --version) at $directory\ender.exe"
-Write-Host 'Start with: ender new survival, then ender launch'

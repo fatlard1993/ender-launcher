@@ -44,6 +44,13 @@ ${blocks.join('\n\n')}
     bin.install Dir["ender-*"].first => "ender"
   end
 
+  def caveats
+    <<~EOS
+      Start with: ender new survival, then ender launch
+      ender desktop adds an Ender icon to your app menu that opens ender web.
+    EOS
+  end
+
   test do
     assert_match version.to_s, shell_output("#{bin}/ender --version")
   end

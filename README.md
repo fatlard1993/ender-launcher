@@ -19,6 +19,8 @@ Minecraft instances, mods, modpacks and servers from one small program, `ender`.
 
 ender is one file, with nothing else to install: it fetches the Java each game version needs itself.
 
+To skip the terminal, download from the [newest release](https://github.com/fatlard1993/ender-launcher/releases/latest): `Ender-mac-arm64.dmg` (Apple silicon) or `Ender-mac-x64.dmg` (Intel) for macOS, `Ender-Setup.exe` for Windows. Each leaves an Ender icon that opens ender web in your browser, which stops once its page has been closed a while. Neither is signed: macOS asks you to allow Ender once in System Settings, Privacy & Security, and Windows SmartScreen needs More info, then Run anyway.
+
 On Linux or macOS:
 
 ```
@@ -37,7 +39,7 @@ With Homebrew:
 brew install fatlard1993/tap/ender
 ```
 
-Each checks the download against the release's sha256 before installing it. `ender upgrade` brings an installed ender up to the newest release.
+Each checks the download against the release's sha256 before installing it. The two scripts also add an Ender icon to the app menu (`ENDER_DESKTOP=0` skips it; with Homebrew, run `ender desktop`), and `ender desktop remove` takes it away. When the install folder is not on your PATH yet, the script prints the line that puts it there. `ender upgrade` brings an installed ender up to the newest release.
 
 Then make an instance and play it:
 
