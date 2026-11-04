@@ -2,7 +2,7 @@ import { checksumOf, fetchJson } from '../download';
 import { detail } from '../out';
 import * as catalog from './catalog';
 import { resolveFromRecord, resolveFromSource } from './indexed';
-import { chooseAsset, pickBuild } from './pick';
+import { chooseAsset, nameFits, pickBuild } from './pick';
 
 export { chooseAsset } from './pick';
 
@@ -65,7 +65,7 @@ export const newestAsset = async (reference, suffix, configuredToken) => {
 		.find(asset => asset.name.endsWith(suffix));
 };
 
-const releaseFor = async (entry, configuredToken, allowPrerelease) => {
+const releaseFor = async (entry, configuredToken, allowPrerelease, judged) => {
 	const { owner, repository } = parseRepository(entry.id);
 
 	if (entry.version) return request(`/repos/${owner}/${repository}/releases/tags/${entry.version}`, configuredToken);
@@ -74,7 +74,8 @@ const releaseFor = async (entry, configuredToken, allowPrerelease) => {
 	// actually carries a jar is the one wanted.
 	const releases = await request(`/repos/${owner}/${repository}/releases?per_page=30`, configuredToken);
 	const usable = releases
-		.filter(release => !release.draft && release.assets?.some(asset => asset.name.endsWith('.jar')))
+		.filter(release => !release.draft && !judged.has(release.tag_name))
+		.filter(release => release.assets?.some(asset => asset.name.endsWith('.jar')))
 		.map(release => ({
 			...release,
 			channel: release.prerelease ? 'beta' : 'release',
@@ -84,8 +85,21 @@ const releaseFor = async (entry, configuredToken, allowPrerelease) => {
 	return pickBuild(usable, { allowPrerelease });
 };
 
-const resolveFromApi = async (entry, { minecraft, loader, githubToken, allowPrerelease } = {}) => {
-	const release = await releaseFor(entry, githubToken, allowPrerelease);
+/** The way to the same mod elsewhere, for a repository whose own releases have nothing for this instance. */
+const elsewhere = entry => {
+	const slug = parseRepository(entry.id).repository.toLowerCase();
+
+	return `For Modrinth write mr:${slug}, for CurseForge cf:${slug}.`;
+};
+
+const resolveFromApi = async (entry, { minecraft, loader, githubToken, allowPrerelease, judged = new Set() } = {}) => {
+	const release = await releaseFor(entry, githubToken, allowPrerelease, judged);
+
+	if (release === undefined && judged.size > 0) {
+		throw new Error(
+			`github:${entry.id} has no release for Minecraft ${minecraft ?? 'any version'} on ${loader ?? 'any loader'}; the index read the jars of each one. ${elsewhere(entry)}`,
+		);
+	}
 
 	if (release === undefined) throw new Error(`github:${entry.id} has no release carrying a jar`);
 
@@ -96,6 +110,12 @@ const resolveFromApi = async (entry, { minecraft, loader, githubToken, allowPrer
 
 		throw new Error(
 			`github:${entry.id} release ${release.tag_name} has no mod jar. It ships: ${names}. Narrow it with an "asset" pattern.`,
+		);
+	}
+
+	if (entry.version === undefined && nameFits(asset.name, minecraft) === false) {
+		throw new Error(
+			`github:${entry.id} ${release.tag_name} ships ${asset.name}, which its name says is for another Minecraft than ${minecraft}. ${elsewhere(entry)}`,
 		);
 	}
 
@@ -136,6 +156,9 @@ export const resolve = async (entry, context = {}) => {
 	return (
 		(indexed && (await resolveFromRecord(indexed, named, context))) ??
 		(indexed && (await resolveFromSource(indexed, named, context))) ??
-		resolveFromApi(entry, context)
+		resolveFromApi(entry, {
+			...context,
+			judged: new Set(entry.version ? [] : (indexed?.releases ?? []).map(release => release.tag)),
+		})
 	);
 };

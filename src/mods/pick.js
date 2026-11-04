@@ -30,6 +30,18 @@ export const pickBuild = (candidates, { allowPrerelease = false } = {}) => {
 	return byDate.find(candidate => channelRank(candidate.channel) === best);
 };
 
+/** The Minecraft version a jar's file name gives as `mc<version>`, as in `sodium-fabric-0.5.11+mc1.21.jar`. */
+export const minecraftNamed = filename => filename.match(/(?:^|[-_+.])mc[-_]?(\d+\.\d+(?:\.\d+)?)/i)?.[1];
+
+/** Whether a file name's `mc<version>` covers the instance's version; undefined when it names none. */
+export const nameFits = (filename, minecraft) => {
+	const named = minecraftNamed(filename);
+
+	if (named === undefined || minecraft === undefined) return undefined;
+
+	return minecraft === named || minecraft.startsWith(`${named}.`);
+};
+
 /** Gradle publishes these beside the real artifact; none of them is a mod. */
 const NOT_A_MOD = /-(sources|javadoc|dev|api|slim|shadow)\.jar$/i;
 

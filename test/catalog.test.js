@@ -217,6 +217,42 @@ describe('resolving from an index record', () => {
 		expect((await resolveFromRecord(record, { source: 'github', id: 'a/m' }, context())).version).toBe('1.0');
 	});
 
+	test('a jar that declares no game version is judged by the one its name gives', async () => {
+		const record = {
+			releases: [
+				release('mc1.21-0.5.11', [asset('sodium-fabric-0.5.11+mc1.21.jar', [mod('sodium', { minecraft: '1.21.x' })])]),
+				release('mc1.20.3-0.5.5', [
+					asset('sodium-fabric-mc1.20.3-0.5.5.jar', [mod('sodium', { minecraft: undefined })]),
+				]),
+			],
+		};
+
+		expect(await resolveFromRecord(record, { source: 'github', id: 'CaffeineMC/sodium' }, context())).toBeUndefined();
+		expect(
+			(
+				await resolveFromRecord(
+					record,
+					{ source: 'github', id: 'CaffeineMC/sodium' },
+					{ ...context(), minecraft: '1.20.3' },
+				)
+			).version,
+		).toBe('mc1.20.3-0.5.5');
+	});
+
+	test('one with neither range nor name is taken only from a repository that never declares a version', async () => {
+		const undeclared = name => asset(name, [mod('m', { minecraft: undefined })]);
+		const library = { releases: [release('1.0', [undeclared('lib-1.0.jar')])] };
+		const stale = {
+			releases: [
+				release('2.0', [asset('m-2.0.jar', [mod('m', { minecraft: '~26.2' })])]),
+				release('1.0', [undeclared('m-1.0.jar')]),
+			],
+		};
+
+		expect((await resolveFromRecord(library, { source: 'github', id: 'a/lib' }, context())).version).toBe('1.0');
+		expect(await resolveFromRecord(stale, { source: 'github', id: 'a/m' }, context())).toBeUndefined();
+	});
+
 	test('picks the jar for the instance loader out of a multiloader release', async () => {
 		const record = {
 			releases: [

@@ -1,7 +1,7 @@
 import { checksumOf } from '../download';
 import { detail, warn } from '../out';
 import * as catalog from './catalog';
-import { chooseAsset, pickBuild } from './pick';
+import { chooseAsset, nameFits, pickBuild } from './pick';
 import { HOSTS, rank } from './rank';
 import { allowBuilding, buildFromSource } from './source';
 
@@ -45,6 +45,29 @@ const dependenciesOf = async (entry, mods, context) => {
 	return [...found.values()];
 };
 
+const declaresMinecraft = record =>
+	record.releases.some(release =>
+		release.assets.some(asset =>
+			(asset.mods ?? []).some(mod => typeof mod.minecraft === 'string' && mod.minecraft !== ''),
+		),
+	);
+
+/**
+ * A jar whose own range says nothing usable is judged by the `mc<version>` in its file name, and without one is taken
+ * only from a repository that never declares a game version on any jar: a library that runs on every version.
+ */
+export const fitOfAsset = (asset, record, { minecraft, loader }) => {
+	const declared = catalog.fit(asset.mods, { minecraft, loader });
+
+	if (declared !== 1 || minecraft === undefined) return declared;
+
+	const named = nameFits(asset.name, minecraft);
+
+	if (named !== undefined) return named ? 1 : 0;
+
+	return declaresMinecraft(record) ? 0 : 1;
+};
+
 /**
  * Pick a build from the index's record of a repository: the release whose jar declares the instance's
  * loader and game version, read from the jar itself rather than guessed from its name. Undefined when
@@ -53,16 +76,17 @@ const dependenciesOf = async (entry, mods, context) => {
 export const resolveFromRecord = async (record, entry, context) => {
 	const { minecraft, loader, allowPrerelease } = context;
 	const pattern = entry.asset && new RegExp(entry.asset, 'i');
+	const fitOf = asset => fitOfAsset(asset, record, { minecraft, loader });
 	const candidates = record.releases
 		.filter(release => entry.version === undefined || release.tag === entry.version)
 		.map(release => {
 			const assets = release.assets.filter(asset => live(asset) && (!pattern || pattern.test(asset.name)));
-			const best = Math.max(0, ...assets.map(asset => catalog.fit(asset.mods, { minecraft, loader })));
+			const best = Math.max(0, ...assets.map(fitOf));
 
 			return {
 				...release,
 				best,
-				fitting: assets.filter(asset => best > 0 && catalog.fit(asset.mods, { minecraft, loader }) === best),
+				fitting: assets.filter(asset => best > 0 && fitOf(asset) === best),
 				channel: release.prerelease ? 'beta' : 'release',
 				published: Date.parse(release.published),
 			};

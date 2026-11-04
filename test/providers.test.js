@@ -4,6 +4,7 @@ import { parseModSpec } from '../src/commands/context';
 import { checksumOf, checksumText } from '../src/download';
 import { downloadUrl } from '../src/mods/curseforge';
 import { chooseAsset, parseRepository } from '../src/mods/github';
+import { nameFits } from '../src/mods/pick';
 
 describe('checksums', () => {
 	test('reads a bare value as sha1', () => {
@@ -82,6 +83,13 @@ describe('github release assets', () => {
 		expect(chooseAsset([{ name: 'mod.zip' }])).toBeUndefined();
 		expect(chooseAsset([{ name: 'mod-sources.jar' }])).toBeUndefined();
 		expect(chooseAsset([{ name: 'mod.jar' }], { pattern: 'nope' })).toBeUndefined();
+	});
+
+	test('reads the game version a jar names as mc<version>, and only that', () => {
+		expect(nameFits('sodium-fabric-mc1.20.3-0.5.5.jar', '26.3')).toBe(false);
+		expect(nameFits('sodium-fabric-0.5.11+mc1.21.jar', '1.21.4')).toBe(true);
+		expect(nameFits('sodium-fabric-0.9.2+mc26.3.jar', '26.3')).toBe(true);
+		expect(nameFits('lithium-fabric-0.26.3.jar', '26.3')).toBeUndefined();
 	});
 
 	test('rejects a reference that is not owner/repo', () => {
