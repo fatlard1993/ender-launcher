@@ -1,4 +1,5 @@
 import * as accountCommands from '../commands/account';
+import * as desktopCommands from '../commands/desktop';
 import * as instanceCommands from '../commands/instances';
 import * as keptCommands from '../commands/kept';
 import * as modCommands from '../commands/mods';
@@ -326,6 +327,15 @@ export const commands = {
 			status: { summary: 'Show the sign in configuration', run: accountCommands.status },
 		},
 		run: accountCommands.ls,
+	},
+	desktop: {
+		summary: 'Put an Ender icon in the app menu that opens ender web',
+		usage: 'ender desktop [add|remove]',
+		subcommands: {
+			add: { summary: 'Add the icon, or bring it up to date', run: desktopCommands.add },
+			remove: { summary: 'Take the icon away', run: desktopCommands.remove },
+		},
+		run: desktopCommands.add,
 	},
 	upgrade: {
 		summary: 'Replace this ender with the newest release',

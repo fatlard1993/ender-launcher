@@ -1,7 +1,12 @@
+import { mkdir } from 'node:fs/promises';
+import { dirname } from 'node:path';
+
 import { version } from '../../package.json';
 import { fail, info, paint, setVerbosity } from '../out';
 import { commands } from './commands';
 import { adoptConfiguredName } from '../auth/adopt';
+import { ICON_ARGS, iconLog, startedAsApp } from '../desktop';
+import { detach } from '../jobs';
 import * as instances from '../instance';
 import { commandHelp, startHere, usage } from './help';
 import { parseArgv } from './parse';
@@ -22,7 +27,17 @@ const HELP_WORDS = new Set(['help', '--help', '-h', '-?']);
 
 const VERSION_WORDS = new Set(['version', '--version', '-V']);
 
+/** Opened from the app bundle a disk image carries: ender web starts on its own and outlives this, as macLauncher's does. */
+const startFromIcon = async () => {
+	await mkdir(dirname(iconLog()), { recursive: true });
+	detach([process.execPath, ...ICON_ARGS], iconLog());
+
+	return 0;
+};
+
 export const run = async argv => {
+	if (startedAsApp(argv)) return startFromIcon();
+
 	const [name, ...rest] = argv;
 
 	if (name === undefined && (await instances.list()).length === 0) {

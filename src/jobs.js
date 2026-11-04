@@ -12,7 +12,7 @@ export const KEPT_JOBS = 30;
  * web must not reach it, nor an import half done. Answers how it ended.
  */
 export const detach = (argv, log) => {
-	const out = openSync(log, 'w');
+	const out = openSync(log, 'a');
 	const child = spawn(argv[0], argv.slice(1), {
 		detached: true,
 		stdio: ['ignore', out, out],

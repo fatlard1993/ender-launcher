@@ -7,7 +7,7 @@ const GROUPS = [
 	['Mods', ['search', 'add', 'drop', 'sync', 'update', 'scan', 'follow', 'support', 'share', 'submit', 'web']],
 	['Servers', ['server']],
 	['Accounts', ['account']],
-	['Settings', ['config', 'java', 'upgrade']],
+	['Settings', ['config', 'java', 'upgrade', 'desktop']],
 ];
 
 /** The first three things to type, for someone with no instance yet. */
