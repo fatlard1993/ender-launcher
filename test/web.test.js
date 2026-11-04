@@ -4,7 +4,17 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 
 import { siteModule } from '../scripts/embedSite';
-import { INSTANCE, SPEC, allowed, buildSibling, servePage, siteFiles, webApi } from '../src/commands/web';
+import {
+	INSTANCE,
+	SPEC,
+	allowed,
+	buildSibling,
+	enderAt,
+	idleWatch,
+	servePage,
+	siteFiles,
+	webApi,
+} from '../src/commands/web';
 import { KEPT_JOBS, detach, jobRunner } from '../src/jobs';
 
 const ORIGIN = 'http://localhost:7460';
@@ -653,5 +663,64 @@ describe('listing a mod', () => {
 			['mod', 'https://github.com/me/mod'],
 			['mod', 'https://github.com/me/mod'],
 		]);
+	});
+});
+
+describe('opened from a desktop icon', () => {
+	test('a second start finds the ender web already answering, and nothing else passes for one', async () => {
+		const answering = async () => Response.json({ version: '1.0.0' });
+
+		expect(await enderAt(7460, answering)).toBe(true);
+		expect(await enderAt(7460, async () => new Response('<html>someone else</html>'))).toBe(false);
+		expect(await enderAt(7460, async () => new Response('', { status: 404 }))).toBe(false);
+		expect(
+			await enderAt(7460, async () => {
+				throw new Error('refused');
+			}),
+		).toBe(false);
+	});
+
+	test('goes idle only once no page has asked for the whole wait and no job is running', () => {
+		let clock = 0;
+		let busy = false;
+		const watch = idleWatch({ minutes: 15, busy: () => busy, now: () => clock });
+
+		clock = 14 * 60_000;
+		expect(watch.idle()).toBe(false);
+
+		watch.seen();
+		clock += 15 * 60_000 - 1;
+		expect(watch.idle()).toBe(false);
+
+		clock += 1;
+		busy = true;
+		expect(watch.idle()).toBe(false);
+
+		busy = false;
+		expect(watch.idle()).toBe(true);
+	});
+
+	test('a job runner is busy while any job it started runs', async () => {
+		let finish;
+		const directory = await mkdtemp(join(tmpdir(), 'ender-jobs-'));
+
+		scratch.push(directory);
+		const jobs = jobRunner({
+			command: args => args,
+			directory: () => directory,
+			start: () =>
+				new Promise(resolve => {
+					finish = () => resolve({ code: 0 });
+				}),
+		});
+
+		expect(jobs.busy()).toBe(false);
+
+		const job = await jobs.start(['launch'], { title: 'Launching', instance: 'suite' });
+
+		expect(jobs.busy()).toBe(true);
+		finish();
+		await job.finished;
+		expect(jobs.busy()).toBe(false);
 	});
 });

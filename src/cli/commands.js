@@ -228,7 +228,7 @@ export const commands = {
 	},
 	web: {
 		summary: 'Browse the index in your browser and manage your instances there: make, import, update, launch, publish',
-		usage: 'ender web [--port number]',
+		usage: 'ender web [--port number] [--until-idle]',
 		flags: {
 			port: { type: 'number', description: 'Serve on this port rather than 7460' },
 			open: {
@@ -236,6 +236,10 @@ export const commands = {
 				default: true,
 				description: 'Open it in the browser',
 				off: 'Print the address without opening a browser',
+			},
+			untilIdle: {
+				type: 'boolean',
+				description: 'Stop once no page has been open for a while and nothing it started is running',
 			},
 		},
 		run: webCommands.web,

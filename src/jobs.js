@@ -46,6 +46,7 @@ export const jobRunner = ({ command, start = detach, directory = () => join(path
 	};
 
 	return {
+		busy: () => [...jobs.values()].some(job => job.state === 'running'),
 		running: instance =>
 			instance === undefined
 				? undefined

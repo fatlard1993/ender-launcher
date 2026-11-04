@@ -413,6 +413,39 @@ export const servePage = (files, pathname) => {
 	return new Response(bytes, { headers: { 'content-type': typeOf(path), 'cache-control': 'no-cache' } });
 };
 
+/** Whether an ender web already answers on this port, so a second start opens it rather than failing. */
+export const enderAt = async (port, ask = fetch) => {
+	try {
+		const answered = await ask(`http://127.0.0.1:${port}/api/ender`);
+
+		return answered.ok && typeof (await answered.json()).version === 'string';
+	} catch {
+		return false;
+	}
+};
+
+export const IDLE_MINUTES = 15;
+
+/**
+ * Idle once no page has asked anything for `minutes` and no job it started is running. An open page asks at least
+ * every few minutes, so only a closed one lets it go idle.
+ */
+export const idleWatch = ({ minutes = IDLE_MINUTES, busy, now = Date.now }) => {
+	let last = now();
+
+	return {
+		seen: () => {
+			last = now();
+		},
+		idle: () => !busy() && now() - last >= minutes * 60_000,
+	};
+};
+
+const opened = async (url, flags) => {
+	if (flags.open !== false && !(await openInBrowser(url)))
+		info(paint.dim('  No browser opened; open the address above'));
+};
+
 export const web = async ({ flags }) => {
 	const port = Number(flags.port ?? PORT);
 	const files = await siteFiles();
@@ -425,7 +458,9 @@ export const web = async ({ flags }) => {
 		);
 	}
 
-	const answer = webApi();
+	const jobs = jobRunner({ command: selfCommand });
+	const answer = webApi({ jobs });
+	const watch = idleWatch({ busy: jobs.busy });
 	let server;
 
 	try {
@@ -435,6 +470,8 @@ export const web = async ({ flags }) => {
 			fetch: async request => {
 				if (!allowed(request, port)) return new Response(REFUSED, { status: 403 });
 
+				watch.seen();
+
 				return (
 					(await answer(request)) ??
 					servePage(files, new URL(request.url).pathname) ??
@@ -443,6 +480,15 @@ export const web = async ({ flags }) => {
 			},
 		});
 	} catch (error) {
+		if (error.code === 'EADDRINUSE' && (await enderAt(port))) {
+			const url = `http://localhost:${port}/`;
+
+			done(`ender web is already running at ${url}`);
+			await opened(url, flags);
+
+			return 0;
+		}
+
 		if (error.code === 'EADDRINUSE') {
 			throw new Error(
 				`Port ${port} is in use, perhaps by an ender web already running: open http://localhost:${port}/, or pick another port with ender web --port`,
@@ -455,10 +501,21 @@ export const web = async ({ flags }) => {
 	const url = `http://localhost:${server.port}/`;
 
 	done(`The index, managing this machine's instances, is at ${url}`);
-	info(paint.dim('  Ctrl-C stops it'));
+	info(
+		paint.dim(flags.untilIdle ? `  It stops ${IDLE_MINUTES} minutes after its last page closes` : '  Ctrl-C stops it'),
+	);
+	await opened(url, flags);
 
-	if (flags.open !== false && !(await openInBrowser(url)))
-		info(paint.dim('  No browser opened; open the address above'));
+	if (!flags.untilIdle) return new Promise(() => {});
 
-	return new Promise(() => {});
+	return new Promise(resolve => {
+		const timer = setInterval(() => {
+			if (!watch.idle()) return;
+
+			clearInterval(timer);
+			server.stop();
+			info(`No page has asked anything for ${IDLE_MINUTES} minutes; ender web stopped`);
+			resolve(0);
+		}, 60_000);
+	});
 };
