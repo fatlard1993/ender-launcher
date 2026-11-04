@@ -80,8 +80,13 @@ jobs:
           for chip in arm64 x64; do
             bun scripts/bundle.js "dist/ender-darwin-$chip" "stage-$chip/Ender.app"
             codesign --force --deep --sign - "stage-$chip/Ender.app"
+            codesign --verify --deep --strict "stage-$chip/Ender.app"
+            arch "-$([ "$chip" = x64 ] && echo x86_64 || echo arm64)" "stage-$chip/Ender.app/Contents/MacOS/ender" --version
             ln -s /Applications "stage-$chip/Applications"
-            hdiutil create -volname Ender -srcfolder "stage-$chip" -ov -format UDZO "out/Ender-mac-$chip.dmg"
+            # hdiutil's own estimate of the size -srcfolder needs falls short now and then; this gives it room
+            hdiutil create -volname Ender -srcfolder "stage-$chip" -size "$(( $(du -sm "stage-$chip" | cut -f1) + 40 ))m" \
+              -ov -format UDZO "out/Ender-mac-$chip.dmg"
+            hdiutil verify "out/Ender-mac-$chip.dmg"
           done
       - uses: actions/upload-artifact@v4
         with:
