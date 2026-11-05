@@ -113,14 +113,14 @@ const NESTED_LIMIT = 64 * 1024 * 1024;
  * The mod ids of the jars Fabric and Quilt load from inside this one. Fabric API is one release jar
  * holding dozens of modules, and other mods depend on those modules by their own ids.
  */
-const bundledIds = async (jar, entries) => {
+const bundledIds = files => {
 	const ids = [];
 
-	for (const name of entries) {
+	for (const [name, file] of files) {
 		if (!name.startsWith('META-INF/jars/') || !name.endsWith('.jar')) continue;
 
 		try {
-			for (const entry of zipEntries(await readEntry(jar, name))) {
+			for (const entry of zipEntries(file.read())) {
 				if (entry.name === 'fabric.mod.json') ids.push(parseLeniently(entry.read(NESTED_LIMIT).toString('utf8')).id);
 				if (entry.name === 'quilt.mod.json')
 					ids.push(parseLeniently(entry.read(NESTED_LIMIT).toString('utf8')).quilt_loader?.id);
@@ -181,17 +181,22 @@ const toml = (source, loader, manifest) => {
  * build has filled in the version and the game versions it supports.
  */
 export const readMods = async jar => {
-	const entries = new Set(await listEntries(jar));
-	const manifest = entries.has('META-INF/MANIFEST.MF') ? await text(jar, 'META-INF/MANIFEST.MF') : undefined;
-	const bundled = await bundledIds(jar, entries);
+	const files = new Map();
+
+	for (const entry of zipEntries(Buffer.from(await Bun.file(jar).arrayBuffer()))) {
+		if (!files.has(entry.name)) files.set(entry.name, entry);
+	}
+
+	const read = name => files.get(name).read().toString('utf8');
+	const manifest = files.has('META-INF/MANIFEST.MF') ? read('META-INF/MANIFEST.MF') : undefined;
+	const bundled = bundledIds(files);
 	const mods = [];
 
-	if (entries.has('fabric.mod.json'))
-		mods.push(fabric(parseLeniently(await text(jar, 'fabric.mod.json')), 'fabric', bundled));
-	if (entries.has('quilt.mod.json')) mods.push(quilt(parseLeniently(await text(jar, 'quilt.mod.json')), bundled));
-	if (entries.has('META-INF/neoforge.mods.toml'))
-		mods.push(...toml(await text(jar, 'META-INF/neoforge.mods.toml'), 'neoforge', manifest));
-	if (entries.has('META-INF/mods.toml')) mods.push(...toml(await text(jar, 'META-INF/mods.toml'), 'forge', manifest));
+	if (files.has('fabric.mod.json')) mods.push(fabric(parseLeniently(read('fabric.mod.json')), 'fabric', bundled));
+	if (files.has('quilt.mod.json')) mods.push(quilt(parseLeniently(read('quilt.mod.json')), bundled));
+	if (files.has('META-INF/neoforge.mods.toml'))
+		mods.push(...toml(read('META-INF/neoforge.mods.toml'), 'neoforge', manifest));
+	if (files.has('META-INF/mods.toml')) mods.push(...toml(read('META-INF/mods.toml'), 'forge', manifest));
 
 	return mods;
 };

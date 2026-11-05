@@ -19,7 +19,7 @@ export const fabricLike = ({ name, meta, defaultRepository }) => {
 			// These services answer 400, not an empty list, for a game version not ingested yet.
 			// On a release-day snapshot that is the expected answer and has to read like one.
 			if (error.status === 400 || error.status === 404) {
-				throw new Error(`${name} has no loader for Minecraft ${minecraft} yet`);
+				throw new Error(`${name} has no loader for Minecraft ${minecraft} yet`, { cause: error });
 			}
 
 			throw error;

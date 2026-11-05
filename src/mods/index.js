@@ -2,6 +2,7 @@ import { mkdir, readdir, rename, unlink } from 'node:fs/promises';
 import { basename, dirname, join, resolve as resolvePath } from 'node:path';
 
 import { checksumOf, checksumText, ensureFile, pool } from '../download';
+import { version as enderVersion } from '../../package.json';
 import { readJson, writeJson } from '../json';
 import { detail, fail, plural, progress, step, warn } from '../out';
 import { gainedSince, scanJar } from './capabilities';
@@ -123,18 +124,53 @@ export const unplacedMessage = (unplaced, command) =>
 		})
 		.join('\n');
 
+/** How many mods resolve at once: each is a request or two to the index, GitHub or Modrinth. */
+export const RESOLVE_CONCURRENCY = 8;
+
+/**
+ * Resolve the declared list, pulling in required dependencies the declared mods name. The declared mods resolve
+ * together, then the dependencies they name, then theirs, and the result keeps that order: which of two jars with one
+ * mod id is kept is decided by it.
+ */
 export const resolveAll = async (entries, context, { withDependencies = true } = {}) => {
 	const resolved = new Map();
-	const queue = entries.map(entry => ({ entry, requested: true }));
+	let wave = entries.map(entry => ({ entry, requested: true }));
 
-	while (queue.length > 0) {
-		const { entry, requested } = queue.shift();
-		const key = entryKey(entry);
+	while (wave.length > 0) {
+		const pending = new Map();
 
-		if (resolved.has(key)) continue;
+		for (const item of wave) {
+			const key = entryKey(item.entry);
 
-		try {
-			const resolution = await resolveEntry(entry, context);
+			if (!resolved.has(key) && !pending.has(key)) pending.set(key, item);
+		}
+
+		const items = [...pending.entries()];
+		const outcomes = await pool(
+			items,
+			async ([, { entry }]) => {
+				try {
+					return { resolution: await resolveEntry(entry, context) };
+				} catch (error) {
+					return { error };
+				}
+			},
+			{ concurrency: RESOLVE_CONCURRENCY },
+		);
+
+		wave = [];
+
+		for (const [at, { resolution, error }] of outcomes.entries()) {
+			const [key, { requested }] = items[at];
+
+			if (error) {
+				// A dependency we inferred is not worth failing the whole sync over.
+				if (requested) throw error;
+
+				warn(error.message);
+
+				continue;
+			}
 
 			resolved.set(key, { ...resolution, key, requested });
 
@@ -145,13 +181,8 @@ export const resolveAll = async (entries, context, { withDependencies = true } =
 			if (missing.length > 0) warn(unplacedMessage(missing, 'ender add'));
 
 			for (const dependency of resolution.dependencies ?? []) {
-				if (!resolved.has(entryKey(dependency))) queue.push({ entry: dependency, requested: false });
+				if (!resolved.has(entryKey(dependency))) wave.push({ entry: dependency, requested: false });
 			}
-		} catch (error) {
-			// A dependency we inferred is not worth failing the whole sync over.
-			if (requested) throw error;
-
-			warn(error.message);
 		}
 	}
 
@@ -217,10 +248,30 @@ const replaces = (resolution, locked) =>
 		locked.checksum !== checksumText(resolution.file.checksum));
 
 /**
+ * A jar's scan, kept in `scanCache` by the mod it belongs to and the jar's own hash: the jar a replacement was compared
+ * against last time is the baseline the next replacement is compared with, and a large one takes seconds to read.
+ */
+const scanKept = async (path, key, scanCache) => {
+	if (scanCache === undefined) return scanJar(path);
+
+	const sha256 = new Bun.CryptoHasher('sha256').update(await Bun.file(path).arrayBuffer()).digest('hex');
+	const file = join(scanCache, `${new Bun.CryptoHasher('sha1').update(key).digest('hex')}.json`);
+	const kept = await readJson(file, {}).catch(() => ({}));
+
+	if (kept.sha256 === sha256 && kept.version === enderVersion) return kept.scan;
+
+	const scan = await scanJar(path);
+
+	await writeJson(file, { key, sha256, version: enderVersion, scan }).catch(() => {});
+
+	return scan;
+};
+
+/**
  * Scan the jars that downloads are about to replace. This happens before installing, because a
  * replacement under the same file name would overwrite its own baseline.
  */
-const scanBaselines = async (resolved, previous, modsDir) => {
+const scanBaselines = async (resolved, previous, modsDir, scanCache) => {
 	const locked = new Map(previous.map(mod => [mod.key, mod]));
 	const replacing = resolved.filter(
 		resolution =>
@@ -237,7 +288,10 @@ const scanBaselines = async (resolved, previous, modsDir) => {
 		bar.update(`   scanning ${index + 1}/${replacing.length}`);
 
 		try {
-			baselines.set(resolution.key, { from: version, scan: await scanJar(join(modsDir, filename)) });
+			baselines.set(resolution.key, {
+				from: version,
+				scan: await scanKept(join(modsDir, filename), resolution.key, scanCache),
+			});
 		} catch (error) {
 			baselines.set(resolution.key, {
 				from: version,
@@ -253,7 +307,7 @@ const scanBaselines = async (resolved, previous, modsDir) => {
 };
 
 /** What each installed replacement can reach that the jar it replaced could not. */
-const compareReplacements = async (installed, baselines, modsDir) => {
+const compareReplacements = async (installed, baselines, modsDir, scanCache) => {
 	const gained = [];
 	const notCompared = [];
 	const bar = progress();
@@ -269,7 +323,10 @@ const compareReplacements = async (installed, baselines, modsDir) => {
 		try {
 			if (baseline.error) throw baseline.error;
 
-			const found = gainedSince(baseline.scan, await scanJar(join(modsDir, resolution.file.filename)));
+			const found = gainedSince(
+				baseline.scan,
+				await scanKept(join(modsDir, resolution.file.filename), resolution.key, scanCache),
+			);
 
 			if (Object.keys(found.capabilities).length + Object.keys(found.hosts).length + found.unreadable.length > 0) {
 				gained.push({ resolution, from: baseline.from, gained: found });
@@ -315,7 +372,7 @@ const displaceCopies = async (files, installed, modsDir) => {
  * Only files a previous sync recorded in the lock are ever removed, so a jar dropped in by hand
  * stays where it was put, unless it is another copy of a mod this sync installs.
  */
-export const syncMods = async ({ entries, modsDir, lock, context, withDependencies = true, modIdCache }) => {
+export const syncMods = async ({ entries, modsDir, lock, context, withDependencies = true, modIdCache, scanCache }) => {
 	const all = await resolveAll(entries, context, { withDependencies });
 
 	// The same mod can be declared by slug and arrive again by project id. Two keys, one file:
@@ -336,7 +393,7 @@ export const syncMods = async ({ entries, modsDir, lock, context, withDependenci
 	const earlyKeys = new Set(early.map(({ resolution }) => resolution.key));
 	const resolved = [...byFile.values()].filter(resolution => !earlyKeys.has(resolution.key));
 	const previous = lock?.mods ?? [];
-	const baselines = await scanBaselines(resolved, previous, modsDir);
+	const baselines = await scanBaselines(resolved, previous, modsDir, scanCache);
 	const failures = [];
 	let installed = resolved;
 
@@ -365,7 +422,12 @@ export const syncMods = async ({ entries, modsDir, lock, context, withDependenci
 		installed = outcomes.filter(Boolean);
 	}
 
-	const identified = await Promise.all(installed.map(resolution => withModIds(resolution, modsDir)));
+	// An installed jar matched its checksum, so the ids read from that checksum before are its own.
+	const identified = await Promise.all(
+		installed.map(resolution =>
+			idsOf(resolution)?.length > 0 ? { ...resolution, modIds: idsOf(resolution) } : withModIds(resolution, modsDir),
+		),
+	);
 	const { kept, dropped: late } = duplicateMods(identified);
 	const duplicates = [...early, ...late];
 
@@ -388,7 +450,7 @@ export const syncMods = async ({ entries, modsDir, lock, context, withDependenci
 
 	installed = kept;
 
-	const { gained, notCompared } = await compareReplacements(installed, baselines, modsDir);
+	const { gained, notCompared } = await compareReplacements(installed, baselines, modsDir, scanCache);
 	const wanted = new Set(installed.map(resolution => resolution.file.filename));
 	const removed = [];
 

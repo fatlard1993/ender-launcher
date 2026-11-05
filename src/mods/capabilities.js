@@ -58,7 +58,23 @@ const DEFAULT_LIMIT = 512 * 1024 * 1024;
 
 const NESTING = 4;
 
-const grants = (reference, rule) => reference === rule || reference.startsWith(`${rule}.`);
+/** Each rule to the capabilities it grants. */
+const RULES = new Map();
+
+for (const [capability, rules] of Object.entries(CAPABILITIES)) {
+	for (const rule of rules) RULES.set(rule, [...(RULES.get(rule) ?? []), capability]);
+}
+
+/** The capabilities a reference is granted by: a rule naming it whole, or naming what comes before one of its dots. */
+const grantedTo = reference => {
+	const granted = new Set(RULES.get(reference));
+
+	for (let dot = reference.indexOf('.'); dot !== -1; dot = reference.indexOf('.', dot + 1)) {
+		for (const capability of RULES.get(reference.slice(0, dot)) ?? []) granted.add(capability);
+	}
+
+	return granted;
+};
 
 /**
  * Scan a jar for what its code can reach, following jars nested inside it. Findings are evidence,
@@ -96,8 +112,14 @@ export const scanJar = async (path, { limit = DEFAULT_LIMIT } = {}) => {
 	};
 
 	const inspect = (parsed, where) => {
-		for (const [capability, rules] of Object.entries(CAPABILITIES)) {
-			const matched = parsed.references.filter(reference => rules.some(rule => grants(reference, rule)));
+		const granting = {};
+
+		for (const reference of parsed.references) {
+			for (const capability of grantedTo(reference)) (granting[capability] ??= []).push(reference);
+		}
+
+		for (const capability of Object.keys(CAPABILITIES)) {
+			const matched = granting[capability] ?? [];
 
 			for (const reference of matched) {
 				if (!matched.some(other => other.startsWith(`${reference}.`))) {

@@ -602,6 +602,7 @@ export const web = async ({ flags }) => {
 		if (error.code === 'EADDRINUSE') {
 			throw new Error(
 				`Port ${port} is in use, perhaps by an ender web already running: open http://localhost:${port}/, or pick another port with ender web --port`,
+				{ cause: error },
 			);
 		}
 

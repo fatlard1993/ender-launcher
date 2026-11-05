@@ -53,8 +53,7 @@ export const builtJar = async (directory, version) => {
 	return join(libs, wanted[0]);
 };
 
-/** Run the project's own wrapper, so it builds the way it does when built by hand. */
-export const build = async directory => {
+const buildNow = async directory => {
 	step(`Building ${basename(directory)}`);
 
 	const process_ = Bun.spawn(['./gradlew', 'build', '--quiet', '--console=plain'], {
@@ -70,6 +69,20 @@ export const build = async directory => {
 
 		throw new Error(`gradle build failed in ${directory}:\n${said}`);
 	}
+};
+
+let building = Promise.resolve();
+
+/**
+ * Run the project's own wrapper, so it builds the way it does when built by hand. One build at a time: mods resolve
+ * together, and a gradle daemon apiece for each would take the machine.
+ */
+export const build = directory => {
+	const turn = building.then(() => buildNow(directory));
+
+	building = turn.catch(() => {});
+
+	return turn;
 };
 
 export const resolve = async (entry, { minecraft, loader, buildMissing = false, rebuild = false } = {}) => {

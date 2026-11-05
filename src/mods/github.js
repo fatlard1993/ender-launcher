@@ -12,27 +12,37 @@ export const id = 'github';
 
 export const label = 'GitHub';
 
-let cachedToken;
+let asking;
 
-/**
- * Unauthenticated GitHub allows sixty requests an hour, which a sync can exhaust. A configured
- * token is used when there is one, and otherwise the `gh` CLI is asked for its own.
- */
-export const token = async configured => {
-	if (configured) return configured;
-	if (process.env.GITHUB_TOKEN) return process.env.GITHUB_TOKEN;
-	if (cachedToken) return cachedToken;
-
+const askGh = async () => {
 	try {
 		const process_ = Bun.spawn(['gh', 'auth', 'token'], { stdout: 'pipe', stderr: 'ignore' });
 		const output = (await new Response(process_.stdout).text()).trim();
 
-		if ((await process_.exited) === 0 && output) cachedToken = output;
+		if ((await process_.exited) === 0 && output) return output;
 	} catch {
 		// No gh on PATH: asked again next time, as a sign-in since may have put one there
 	}
 
-	return cachedToken || undefined;
+	return undefined;
+};
+
+/**
+ * Unauthenticated GitHub allows sixty requests an hour, which a sync can exhaust. A configured
+ * token is used when there is one, and otherwise the `gh` CLI is asked for its own: once, however
+ * many requests wait on the answer.
+ */
+export const token = async configured => {
+	if (configured) return configured;
+	if (process.env.GITHUB_TOKEN) return process.env.GITHUB_TOKEN;
+
+	asking ??= askGh();
+
+	const found = await asking;
+
+	if (found === undefined) asking = undefined;
+
+	return found;
 };
 
 const request = async (path, configuredToken) => {

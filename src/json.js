@@ -14,11 +14,13 @@ export const readJson = async (path, fallback) => {
 };
 
 /** Write via a temp file and rename, so an interrupted write cannot leave a half-parsed manifest behind. */
-export const writeJson = async (path, value) => {
+export const writeText = async (path, text) => {
 	await mkdir(dirname(path), { recursive: true });
 
 	const temporary = `${path}.${process.pid}.tmp`;
 
-	await writeFile(temporary, `${JSON.stringify(value, undefined, '\t')}\n`);
+	await writeFile(temporary, text);
 	await rename(temporary, path);
 };
+
+export const writeJson = (path, value) => writeText(path, `${JSON.stringify(value, undefined, '\t')}\n`);

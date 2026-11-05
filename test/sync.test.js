@@ -161,6 +161,55 @@ describe('replacing a download', () => {
 		expect(result.notCompared[0].error.message).toContain('mod.jar is gone');
 	});
 
+	test('the jar a replacement was compared with is not read again as the next baseline, unless it changed', async () => {
+		const scanCache = join(root, 'scans');
+		const replaceKept = async (previous, next) => {
+			served = next;
+
+			await writeFile(join(modsDir, 'mod.jar'), previous);
+
+			const lock = {
+				mods: [
+					{
+						key: `url:${url()}`,
+						source: 'url',
+						id: url(),
+						version: 'url',
+						filename: 'mod.jar',
+						checksum: `sha1:${sha1(previous)}`,
+					},
+				],
+			};
+
+			return syncMods({
+				entries: [{ source: 'url', url: url(), sha1: sha1(next) }],
+				modsDir,
+				lock,
+				context: {},
+				withDependencies: false,
+				scanCache,
+			});
+		};
+		const plain = await modJar();
+		const reaching = await modJar({ members: ['java/lang/Runtime.exec'] });
+		const reachingMore = await modJar({ members: ['java/lang/Runtime.exec'], strings: ['more'] });
+
+		expect((await replaceKept(plain, reaching)).gained).toHaveLength(1);
+
+		const [kept] = await readdir(scanCache);
+		const record = await Bun.file(join(scanCache, kept)).json();
+		const keepAsReachingNothing = () =>
+			Bun.write(join(scanCache, kept), JSON.stringify({ ...record, scan: { ...record.scan, capabilities: {} } }));
+
+		await keepAsReachingNothing();
+
+		expect((await replaceKept(reaching, reachingMore)).gained).toHaveLength(1);
+
+		await Bun.write(join(scanCache, kept), JSON.stringify(record));
+
+		expect((await replaceKept(plain, reachingMore)).gained).toHaveLength(1);
+	});
+
 	test('a gain prints as one line naming the mod, the capability and the evidence', async () => {
 		const result = await replace(await modJar(), await modJar({ members: ['java/lang/Runtime.exec'] }));
 		const warned = spyOn(console, 'warn').mockImplementation(() => {});
@@ -265,6 +314,27 @@ describe('mod ids known by checksum', () => {
 
 	afterAll(() => {
 		server.stop();
+	});
+
+	test('an installed jar known by its checksum takes the ids read from that checksum before', async () => {
+		const modIdCache = join(root, 'mod-ids.json');
+		const known = await served('known.jar', 'known');
+		const fresh = await served('fresh.jar', 'shared');
+
+		await Bun.write(modIdCache, JSON.stringify({ [`sha1:${known.sha1}`]: ['shared'] }));
+
+		const result = await syncMods({
+			entries: [known, fresh],
+			modsDir,
+			lock: { mods: [] },
+			context: {},
+			withDependencies: false,
+			modIdCache,
+		});
+
+		expect(result.duplicates.map(({ resolution, id }) => [resolution.file.filename, id])).toEqual([
+			['fresh.jar', 'shared'],
+		]);
 	});
 
 	test('a jar that repeats a known mod id is not downloaded again', async () => {

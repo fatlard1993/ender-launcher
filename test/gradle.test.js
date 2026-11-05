@@ -1,9 +1,9 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 
-import { builtJar, isProject, readProperties, resolve } from '../src/mods/gradle';
+import { build, builtJar, isProject, readProperties, resolve } from '../src/mods/gradle';
 
 let root;
 
@@ -102,5 +102,35 @@ describe('resolving a project', () => {
 		const directory = await project('unbuilt', 'mod_version = 1.0.0\nminecraft_version = 26.3\n');
 
 		await expect(resolve({ path: directory }, { minecraft: '26.3' })).rejects.toThrow('no built jar');
+	});
+});
+
+describe('building', () => {
+	test('runs one build at a time, and one that fails does not hold up the next', async () => {
+		const log = join(root, 'builds.log');
+		const wrapper = async (name, exit) => {
+			const directory = join(root, `build-${name}`);
+
+			await mkdir(directory, { recursive: true });
+			await writeFile(
+				join(directory, 'gradlew'),
+				`#!/bin/sh\necho "${name} start" >> "${log}"\nsleep 0.1\necho "${name} end" >> "${log}"\nexit ${exit}\n`,
+			);
+			await chmod(join(directory, 'gradlew'), 0o755);
+
+			return directory;
+		};
+		const [a, b, c] = await Promise.all([wrapper('a', 0), wrapper('b', 1), wrapper('c', 0)]);
+		const outcomes = await Promise.allSettled([build(a), build(b), build(c)]);
+
+		expect(outcomes.map(({ status }) => status)).toEqual(['fulfilled', 'rejected', 'fulfilled']);
+		expect((await readFile(log, 'utf8')).trim().split('\n')).toEqual([
+			'a start',
+			'a end',
+			'b start',
+			'b end',
+			'c start',
+			'c end',
+		]);
 	});
 });

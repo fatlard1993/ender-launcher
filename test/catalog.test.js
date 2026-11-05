@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 
 import { parseModSpec, refineModSpec } from '../src/commands/context';
-import { ESTABLISHED, fit, forgetLoaded, providerOf, requiredIds } from '../src/mods/catalog';
+import { ESTABLISHED, claimantsOf, fit, forgetLoaded, providerOf, requiredIds } from '../src/mods/catalog';
+import { RESOLVE_CONCURRENCY, resolveAll } from '../src/mods';
 import { standing } from '../src/mods/rank';
 import { hosted, resolveFromRecord, search } from '../src/mods/indexed';
 import { rank } from '../src/mods/rank';
@@ -184,6 +185,17 @@ describe('the index catalog', () => {
 // "mixinextras >=0.5.5" is the loader's to answer.
 test('a requirement the loader itself carries is not a mod to fetch', () => {
 	expect(requiredIds([mod('lithium', { depends: ['fabricloader', 'minecraft', 'mixinextras'] })])).toEqual([]);
+});
+
+describe('claimants of a mod id', () => {
+	test('are worked out once a listing, and each caller has its own list to keep', () => {
+		const first = claimantsOf('fabric-api-base', listing);
+
+		first.length = 0;
+
+		expect(claimantsOf('fabric-api-base', listing).map(({ repo }) => repo)).toEqual(['FabricMC/fabric-api']);
+		expect(claimantsOf('fabric-api-base', listing, { minecraft: '26.1' })).toEqual([]);
+	});
 });
 
 describe('resolving from an index record', () => {
@@ -538,6 +550,24 @@ describe('a published index', () => {
 		expect(again).toEqual(first);
 	});
 
+	test('a copy kept whole, as before its tag was kept apart, is still only asked whether it changed', async () => {
+		const url = `${base('c')}/search.json`;
+		const name = new Bun.CryptoHasher('sha1').update(url).digest('hex');
+
+		await Bun.write(
+			join(home, 'cache', 'index', `${name}.json`),
+			JSON.stringify({ etag: '"v1"', fetched: 'then', body: listing }),
+		);
+		answer = request => (request.headers.get('if-none-match') === '"v1"' ? 304 : 200);
+		served.length = 0;
+		forgetLoaded();
+
+		const hits = await search('menu', { index: base('c') });
+
+		expect(served).toEqual([304]);
+		expect(hits.map(hit => hit.id)).toEqual(['TerraformersMC/ModMenu']);
+	});
+
 	test('unreachable, the kept copy is used and that is said', async () => {
 		answer = () => 200;
 
@@ -588,6 +618,68 @@ describe('mods on Codeberg and GitLab', () => {
 		expect(resolved.unplaced.map(({ modId, claimants }) => [modId, claimants.map(claimant => claimant.repo)])).toEqual([
 			['sodium', [expect.any(String)]],
 		]);
+	});
+
+	test('resolve together, kept in the order declared with what they depend on after them', async () => {
+		const declared = Array.from({ length: RESOLVE_CONCURRENCY * 2 }, (_, at) => `o/m${at}`);
+
+		for (const [at, id] of declared.entries()) {
+			const depends = at === 0 ? ['core-lib'] : [];
+
+			await Bun.write(
+				join(index, 'mods', 'codeberg.org', `${id}.json`),
+				JSON.stringify({ releases: [release('1.0', [asset(`m${at}.jar`, [mod(`m${at}`, { depends })])])] }),
+			);
+		}
+
+		await Bun.write(
+			join(index, 'mods', 'gitlab.com', 'lib', 'core.json'),
+			JSON.stringify({ releases: [release('1.0', [asset('core.jar', [mod('core-lib')])])] }),
+		);
+
+		const resolved = await resolveAll(
+			declared.map(id => ({ source: 'codeberg', id })),
+			context(),
+		);
+
+		expect(resolved.map(({ key, requested }) => [key, requested])).toEqual([
+			...declared.map(id => [`codeberg:${id}`, true]),
+			['gitlab:lib/core', false],
+		]);
+	});
+
+	test('a declared mod that cannot resolve fails the lot, where a dependency that cannot is said', async () => {
+		const elsewhere = join(index, 'without-core');
+		const inElsewhere = { ...context(), index: elsewhere };
+
+		await Bun.write(join(elsewhere, 'search.json'), JSON.stringify(listing));
+		await Bun.write(
+			join(elsewhere, 'mods', 'codeberg.org', 'o', 'd.json'),
+			JSON.stringify({ releases: [release('1.0', [asset('d.jar', [mod('d', { depends: ['core-lib'] })])])] }),
+		);
+
+		await expect(
+			resolveAll(
+				[
+					{ source: 'codeberg', id: 'o/d' },
+					{ source: 'gitlab', id: 'g/missing' },
+				],
+				inElsewhere,
+			),
+		).rejects.toThrow('gitlab:g/missing is not in the index');
+
+		const warned = spyOn(console, 'warn').mockImplementation(() => {});
+
+		try {
+			const resolved = await resolveAll([{ source: 'codeberg', id: 'o/d' }], inElsewhere);
+
+			expect(resolved.map(({ key }) => key)).toEqual(['codeberg:o/d']);
+			expect(warned.mock.calls.map(([line]) => line)).toContain(
+				`!! gitlab:lib/core is not in the index; add "gitlab:lib/core" to ender-index's repos.txt`,
+			);
+		} finally {
+			warned.mockRestore();
+		}
 	});
 
 	test('a dependency on a mod hosted elsewhere is declared from that host', async () => {

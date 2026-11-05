@@ -13,6 +13,9 @@ import { paths } from '../paths';
 import { parseModSpec, refineModSpec, specFor, targetInstance } from './context';
 import { isRemote, refreshFromPack, sourceOf } from './packSource';
 
+/** The sources that resolve through the index. */
+const INDEXED = new Set(['github', 'codeberg', 'gitlab', 'index']);
+
 const contextFor = (manifest, config, flags = {}) => ({
 	minecraft: manifest.minecraft,
 	loader: manifest.loader?.type === 'vanilla' ? undefined : manifest.loader?.type,
@@ -50,6 +53,7 @@ export const syncInstance = async (manifest, config, { withDependencies = true, 
 		context: contextFor(manifest, config, flags),
 		withDependencies,
 		modIdCache: join(paths.cache, 'mod-ids.json'),
+		scanCache: join(paths.cache, 'scans'),
 	});
 
 	await instances.writeLock(manifest.name, result.lock);
@@ -201,6 +205,9 @@ export const releasePins = (manifest, targeted) => {
  */
 export const updateInstance = async (manifest, config, { targeted, flags = {} } = {}) => {
 	let packChanges = 0;
+
+	// Read while the pack is: every mod the index holds needs it, and it is the largest file an update reads.
+	if (manifest.mods.some(entry => INDEXED.has(entry.source))) listing({ index: config.index }).catch(() => {});
 
 	if (manifest.pack) {
 		const { added, dropped, moved } = await refreshFromPack(manifest, config);
