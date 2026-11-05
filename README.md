@@ -19,7 +19,7 @@ Minecraft instances, mods, modpacks and servers from one small program, `ender`.
 
 ender is one file, with nothing else to install: it fetches the Java each game version needs itself.
 
-To skip the terminal, download from the [newest release](https://github.com/fatlard1993/ender-launcher/releases/latest): `Ender-mac-arm64.dmg` (Apple silicon) or `Ender-mac-x64.dmg` (Intel) for macOS, `Ender-Setup.exe` for Windows. Each leaves an Ender icon that opens ender web in your browser, which stops once its page has been closed a while. Neither is signed: macOS asks you to allow Ender once in System Settings, Privacy & Security, and Windows SmartScreen needs More info, then Run anyway.
+To skip the terminal, download from the [newest release](https://github.com/fatlard1993/ender-launcher/releases/latest): `Ender-mac-arm64.dmg` (Apple silicon) or `Ender-mac-x64.dmg` (Intel) for macOS, `Ender-Setup.exe` for Windows. Each leaves an Ender icon that opens ender web in your browser, which stops once its page has been closed a while. Neither is signed: macOS asks you to allow Ender once in System Settings, Privacy & Security, and Windows SmartScreen needs More info, then Run anyway. The Windows installer puts `ender` on your PATH; on a Mac, Settings in ender web has Add ender to Terminal, which links it into `/usr/local/bin` once you give your password.
 
 On Linux or macOS:
 

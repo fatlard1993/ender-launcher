@@ -1,10 +1,20 @@
-import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { mkdtemp, rm, stat, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 
 import { icns, ico } from '../scripts/icons';
-import { addIcon, desktopEntry, infoPlist, macLauncher, removeIcon, stableCommand, startedAsApp } from '../src/desktop';
+import {
+	addIcon,
+	desktopEntry,
+	infoPlist,
+	linkForTerminal,
+	macLauncher,
+	removeIcon,
+	stableCommand,
+	startedAsApp,
+	terminalCommand,
+} from '../src/desktop';
 
 let home;
 
@@ -47,10 +57,14 @@ describe('the desktop icon', () => {
 	});
 
 	test('is told apart from a terminal run by where the binary sits, not by having no arguments', () => {
-		expect(startedAsApp([], '/Applications/Ender.app/Contents/MacOS/ender')).toBe(true);
-		expect(startedAsApp(['-psn_0_12345'], '/Applications/Ender.app/Contents/MacOS/ender')).toBe(true);
-		expect(startedAsApp(['ls'], '/Applications/Ender.app/Contents/MacOS/ender')).toBe(false);
-		expect(startedAsApp([], '/home/me/.local/bin/ender')).toBe(false);
+		expect(startedAsApp([], '/Applications/Ender.app/Contents/MacOS/ender', false)).toBe(true);
+		expect(startedAsApp(['-psn_0_12345'], '/Applications/Ender.app/Contents/MacOS/ender', false)).toBe(true);
+		expect(startedAsApp(['ls'], '/Applications/Ender.app/Contents/MacOS/ender', false)).toBe(false);
+		expect(startedAsApp([], '/home/me/.local/bin/ender', false)).toBe(false);
+	});
+
+	test('a bare ender typed into Terminal through its link prints usage rather than opening the page', () => {
+		expect(startedAsApp([], '/Applications/Ender.app/Contents/MacOS/ender', true)).toBe(false);
 	});
 
 	test('on Linux, an entry in the app menu and its icon, both taken away again', async () => {
@@ -142,5 +156,61 @@ describe('the desktop icons', () => {
 		const offset = written.readUInt32LE(6 + 16 + 12);
 
 		expect(written.subarray(offset).toString()).toBe('two hundred fifty-six');
+	});
+});
+
+describe("a Mac's Terminal", () => {
+	const binary = '/Applications/Ender.app/Contents/MacOS/ender';
+
+	test('is not offered a link for an ender outside an app bundle', async () => {
+		expect(await terminalCommand(undefined)).toBeUndefined();
+	});
+
+	test('says whether its ender is this one, and the line that makes it so', async () => {
+		const own = join(home, 'Ender.app', 'Contents', 'MacOS', 'ender');
+		const link = join(home, 'ender');
+
+		await Bun.write(own, '');
+
+		expect(await terminalCommand(own, link)).toEqual({ linked: false, line: `sudo ln -sf '${own}' ${link}` });
+
+		await symlink(own, link);
+
+		expect((await terminalCommand(own, link)).linked).toBe(true);
+	});
+
+	test('links the binary behind the password prompt, handing its path over as an argument rather than as script', async () => {
+		const ran = [];
+
+		await linkForTerminal(binary, {
+			run: async command => {
+				ran.push(command);
+
+				return { code: 0, stderr: '' };
+			},
+		});
+
+		expect(ran[0][0]).toBe('osascript');
+		expect(ran[0].at(-1)).toBe(binary);
+		expect(ran[0].join(' ')).toContain('with administrator privileges');
+		expect(ran[0].slice(0, -1).join(' ')).not.toContain(binary);
+	});
+
+	test('says a cancelled password prompt linked nothing', async () => {
+		const cancelled = async () => ({ code: 1, stderr: 'execution error: User canceled. (-128)' });
+
+		await expect(linkForTerminal(binary, { run: cancelled })).rejects.toThrow('cancelled');
+	});
+
+	test('refuses to link a copy macOS will discard, before asking for a password', async () => {
+		const run = () => expect.unreachable();
+
+		for (const copy of [
+			'/private/var/folders/x/AppTranslocation/ABC/d/Ender.app/Contents/MacOS/ender',
+			'/Volumes/Ender/Ender.app/Contents/MacOS/ender',
+		]) {
+			await expect(linkForTerminal(copy, { run })).rejects.toThrow('drag Ender into Applications');
+			expect((await terminalCommand(copy)).refused).toContain('drag Ender into Applications');
+		}
 	});
 });

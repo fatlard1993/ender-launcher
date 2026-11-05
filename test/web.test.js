@@ -186,6 +186,40 @@ describe('ender web', () => {
 		});
 	});
 
+	test("links Ender.app's ender into Terminal and answers how Terminal stands, saying why when it cannot", async () => {
+		let linked = false;
+		const api = webApi({
+			run: () => expect.unreachable(),
+			terminal: async () => ({ linked, line: 'sudo ln -sf ...' }),
+			linkTerminal: async () => {
+				linked = true;
+			},
+		});
+		const post = () => api(request('/api/terminal', { method: 'POST', origin: ORIGIN }));
+
+		expect((await (await api(request('/api/ender'))).json()).terminal).toEqual({
+			linked: false,
+			line: 'sudo ln -sf ...',
+		});
+		expect(await (await post()).json()).toEqual({ linked: true, line: 'sudo ln -sf ...' });
+
+		const refused = webApi({
+			run: () => expect.unreachable(),
+			terminal: async () => ({ linked: false, line: '' }),
+			linkTerminal: async () => {
+				throw new Error('The password prompt was cancelled');
+			},
+		});
+		const answer = await refused(request('/api/terminal', { method: 'POST', origin: ORIGIN }));
+
+		expect(answer.status).toBe(409);
+		expect((await answer.json()).error).toContain('cancelled');
+
+		const outside = webApi({ run: () => expect.unreachable(), terminal: async () => undefined });
+
+		expect((await outside(request('/api/terminal', { method: 'POST', origin: ORIGIN }))).status).toBe(409);
+	});
+
 	test('a checkout is installed where its code is, and keeps its data where ENDER_HOME says', async () => {
 		const { installedWhere } = await import('../src/commands/web');
 		const previous = process.env.ENDER_HOME;

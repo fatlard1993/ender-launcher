@@ -93,6 +93,7 @@ module.exports = {
 		'installable',
 		'installertools',
 		'intel',
+		'isatty',
 		'issuehunt',
 		'jarsplitter',
 		'javac',

@@ -4,6 +4,7 @@ import { extname, join, normalize, sep } from 'node:path';
 import { version } from '../../package.json';
 import { NAME as PLAYER } from '../auth/accounts';
 import { openInBrowser } from '../browser';
+import { linkForTerminal, terminalCommand } from '../desktop';
 import { publishPack } from '../gist';
 import { INSTANCE_NAME } from '../instance';
 import { parseEnderPack } from '../instance/enderPack';
@@ -69,6 +70,9 @@ export const installedWhere = () => ({
 	data: dataRoot(),
 });
 
+/** The binary of the app bundle this ender runs as, the one a Mac's Terminal can be given; undefined outside one. */
+const bundledBinary = () => (appBundleOf() ? process.execPath : undefined);
+
 /** An Azure application id: a guid. */
 const CLIENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -128,6 +132,8 @@ export const webApi = ({
 	upgradedBy = whoUpgrades,
 	restart = async () => {},
 	where = installedWhere,
+	terminal = () => terminalCommand(bundledBinary()),
+	linkTerminal = () => linkForTerminal(bundledBinary()),
 } = {}) => {
 	const answerJson = async args => {
 		const { code, stdout, stderr } = await run(args);
@@ -186,7 +192,20 @@ export const webApi = ({
 		const [area, name, verb, ...rest] = segments;
 
 		if (rest.length > 0) return json({ error: 'Not found' }, 404);
-		if (area === 'ender' && method === 'GET') return json({ version, ...where() });
+		if (area === 'ender' && method === 'GET') return json({ version, ...where(), terminal: await terminal() });
+
+		if (area === 'terminal' && name === undefined && method === 'POST') {
+			if (!(await terminal()))
+				return json({ error: 'Only an ender installed as Ender.app is linked into Terminal' }, 409);
+
+			try {
+				await linkTerminal();
+			} catch (error) {
+				return json({ error: error.message }, 409);
+			}
+
+			return json(await terminal());
+		}
 
 		if (area === 'jobs' && method === 'GET') {
 			if (name === undefined) return json(jobs.list().map(shown));

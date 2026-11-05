@@ -1,6 +1,7 @@
-import { chmod, mkdir, rm, stat } from 'node:fs/promises';
+import { chmod, mkdir, realpath, rm, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { isatty } from 'node:tty';
 
 import icnsFile from '../assets/ender.icns' with { type: 'file' };
 import icoFile from '../assets/ender.ico' with { type: 'file' };
@@ -19,9 +20,12 @@ export const iconLog = (home = homedir()) => join(home, 'Library', 'Logs', 'ende
 export const stableCommand = command =>
 	command.map((part, index) => (index === 0 ? part.replace(/\/Cellar\/ender\/[^/]+\/bin\//, '/bin/') : part));
 
-/** A double-click on an app bundle runs its executable with no arguments, or with the process serial number older macOS adds. */
-export const startedAsApp = (argv, execPath = process.execPath) =>
-	/\.app\/Contents\/MacOS\/[^/]+$/.test(execPath) && argv.every(arg => arg.startsWith('-psn_'));
+/**
+ * A double-click on an app bundle runs its executable with no arguments, or with the process serial number older macOS
+ * adds, and with no terminal; `ender` typed into Terminal through its link into the PATH has one.
+ */
+export const startedAsApp = (argv, execPath = process.execPath, interactive = isatty(0)) =>
+	!interactive && /\.app\/Contents\/MacOS\/[^/]+$/.test(execPath) && argv.every(arg => arg.startsWith('-psn_'));
 
 const xml = text => text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 
@@ -53,6 +57,60 @@ export const macLauncher = command => `#!/bin/sh
 mkdir -p "$HOME/Library/Logs"
 ${[...command, ...ICON_ARGS].map(shellQuoted).join(' ')} >> "$HOME/Library/Logs/ender.log" 2>&1 &
 `;
+
+/** Where a Mac's Terminal finds a command with nothing added to its PATH. */
+export const TERMINAL_LINK = '/usr/local/bin/ender';
+
+/** Why a binary cannot be linked where it is: macOS runs a bundle opened from a disk image or Downloads from a copy it discards. */
+const linkRefusal = binary =>
+	binary.includes('/AppTranslocation/') || binary.startsWith('/Volumes/')
+		? 'Ender is running from a copy macOS will discard; drag Ender into Applications, open it from there, and try again'
+		: undefined;
+
+/**
+ * Whether Terminal's `ender` is this binary, the line that makes it so, and why it cannot be linked from where it is;
+ * undefined for a binary outside an app bundle, which an installer or the user already put on the PATH.
+ */
+export const terminalCommand = async (binary, link = TERMINAL_LINK) => {
+	if (!binary) return undefined;
+
+	const real = place => realpath(place).catch(() => undefined);
+	const [target, own] = await Promise.all([real(link), real(binary)]);
+	const refused = linkRefusal(binary);
+
+	return {
+		linked: target !== undefined && target === own,
+		line: `sudo ln -sf ${shellQuoted(binary)} ${link}`,
+		...(refused && { refused }),
+	};
+};
+
+const ADMIN_LINK = [
+	'on run argv',
+	`do shell script "mkdir -p ${dirname(TERMINAL_LINK)} && ln -sf " & quoted form of (item 1 of argv) & " ${TERMINAL_LINK}" with administrator privileges`,
+	'end run',
+];
+
+const spawned = async command => {
+	const child = Bun.spawn(command, { stdout: 'ignore', stderr: 'pipe' });
+	const stderr = await new Response(child.stderr).text();
+
+	return { code: await child.exited, stderr };
+};
+
+/** Links the binary into Terminal's PATH behind macOS's own password prompt, saying why when it does not. */
+export const linkForTerminal = async (binary, { run = spawned } = {}) => {
+	const refused = linkRefusal(binary);
+
+	if (refused) throw new Error(refused);
+
+	const { code, stderr } = await run(['osascript', ...ADMIN_LINK.flatMap(line => ['-e', line]), binary]);
+
+	if (code === 0) return;
+	if (stderr.includes('-128')) throw new Error(`The password prompt was cancelled; ${TERMINAL_LINK} was not linked`);
+
+	throw new Error(`macOS did not link ${TERMINAL_LINK}: ${stderr.trim()}`);
+};
 
 const execQuoted = text => `"${text.replaceAll(/["`$\\]/g, match => `\\${match}`)}"`;
 
