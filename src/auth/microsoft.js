@@ -113,7 +113,7 @@ const defaultPrompt = (start, { qr = true } = {}) => {
 		qrcode.generate(start.verification_uri, { small: true }, rendered => info(rendered));
 	}
 
-	info(`  Scan the code above, or open ${paint.cyan(start.verification_uri)}`);
+	info(`  ${qr ? 'Scan the code above, or open' : 'Open'} ${paint.cyan(start.verification_uri)}`);
 	info(`  and enter ${paint.bold(start.user_code)}`);
 
 	for (const line of signInLines(start)) info(paint.dim(`  ${line}`));
