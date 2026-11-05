@@ -27,4 +27,19 @@ describe('ender upgrade', () => {
 		expect(isBrewed('/home/linuxbrew/.linuxbrew/Cellar/ender/0.1.0/bin/ender')).toBe(true);
 		expect(isBrewed('/home/me/.local/bin/ender')).toBe(false);
 	});
+
+	test('says who brings it up to date, which the web page offers or explains', async () => {
+		const { whoUpgrades } = await import('../src/commands/upgrade');
+
+		expect(whoUpgrades({ compiled: false })).toBe('checkout');
+		expect(whoUpgrades({ compiled: true, path: '/opt/homebrew/Cellar/ender/0.2.0/bin/ender' })).toBe('brew');
+		expect(whoUpgrades({ compiled: true, path: '/Applications/Ender.app/Contents/MacOS/ender' })).toBe('self');
+	});
+
+	test('knows the app bundle it is the executable of, so it can seal the bundle again', async () => {
+		const { appBundleOf } = await import('../src/commands/upgrade');
+
+		expect(appBundleOf('/Applications/Ender.app/Contents/MacOS/ender')).toBe('/Applications/Ender.app');
+		expect(appBundleOf('/home/me/.local/bin/ender')).toBeUndefined();
+	});
 });

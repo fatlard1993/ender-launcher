@@ -1,3 +1,4 @@
+import { mkdir } from 'node:fs/promises';
 import { extname, join, normalize, sep } from 'node:path';
 
 import { version } from '../../package.json';
@@ -6,14 +7,15 @@ import { openInBrowser } from '../browser';
 import { publishPack } from '../gist';
 import { INSTANCE_NAME } from '../instance';
 import { parseEnderPack } from '../instance/enderPack';
-import { jobRunner, shown } from '../jobs';
+import { detach, jobRunner, shown } from '../jobs';
+import { paths } from '../paths';
 import { KNOWN_LOADERS } from '../meta/resolve';
 import { done, info, paint } from '../out';
 import { signedInAs } from '../githubAccount';
 import { fileIndexIssue, modLink } from '../indexIssues';
 import { setStar, starredRepositories } from '../stars';
 import { REPOSITORY, gistOf } from './packSource';
-import { isCompiled } from './upgrade';
+import { isCompiled, latestRelease, whoUpgrades } from './upgrade';
 
 export const PORT = 7460;
 
@@ -64,6 +66,21 @@ const json = (body, status = 200) => Response.json(body, { status });
 /** An Azure application id: a guid. */
 const CLIENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** What `ask` answered within the last `fresh` milliseconds, asked again after; a failure is not kept. */
+export const cached = (ask, fresh, now = Date.now) => {
+	let kept;
+
+	return async () => {
+		if (kept && now() - kept.at < fresh) return kept.value;
+
+		const value = await ask();
+
+		kept = { value, at: now() };
+
+		return value;
+	};
+};
+
 const bodyOf = request => request.json().catch(() => ({}));
 
 /** A pack import fetches: a gist, a GitHub repository, or a link over https; never a file on this machine. */
@@ -98,6 +115,9 @@ export const webApi = ({
 	stars = { list: starredRepositories, set: setStar },
 	account = signedInAs,
 	fileIssue = fileIndexIssue,
+	newest = cached(async () => (await latestRelease()).version, 60 * 60_000),
+	upgradedBy = whoUpgrades,
+	restart = async () => {},
 } = {}) => {
 	const answerJson = async args => {
 		const { code, stdout, stderr } = await run(args);
@@ -243,6 +263,43 @@ export const webApi = ({
 			}
 
 			return changeThen(['config', 'clientId', clientId.trim()], players);
+		}
+
+		if (area === 'upgrade' && name === undefined && method === 'GET') {
+			const how = upgradedBy();
+
+			try {
+				return json({ current: version, latest: await newest(), how });
+			} catch (error) {
+				return json({ current: version, how, error: error.message });
+			}
+		}
+
+		if (area === 'upgrade' && name === undefined && method === 'POST') {
+			const how = upgradedBy();
+
+			if (how !== 'self') {
+				return json(
+					{
+						error:
+							how === 'brew'
+								? 'Homebrew installed this ender; brew upgrade ender brings it up to date'
+								: 'This ender runs from a checkout; git pull brings it up to date',
+					},
+					409,
+				);
+			}
+
+			return startJob(['upgrade'], { title: 'Upgrading ender' });
+		}
+
+		if (area === 'restart' && name === undefined && method === 'POST') {
+			if (jobs.busy())
+				return json({ error: 'ender is still working on something the page started; restart once it ends' }, 409);
+
+			setTimeout(restart, 50);
+
+			return json({ restarting: true });
 		}
 
 		if (area === 'asks' && name === undefined && method === 'POST') {
@@ -475,9 +532,20 @@ export const web = async ({ flags }) => {
 	}
 
 	const jobs = jobRunner({ command: selfCommand });
-	const answer = webApi({ jobs });
-	const watch = idleWatch({ busy: jobs.busy });
 	let server;
+	/**
+	 * The page asks after an upgrade, to be served by the new ender: this one lets go of the port and starts the new
+	 * binary in the background, which stops once its page is closed, since no terminal holds it.
+	 */
+	const restart = async () => {
+		await server.stop(true);
+		await mkdir(paths.cache, { recursive: true });
+		detach(selfCommand(['web', '--port', String(port), '--no-open', '--until-idle']), join(paths.cache, 'web.log'));
+		info(`ender web moved to the background, as the upgraded ender; it stops once its page is closed`);
+		setTimeout(() => process.exit(0), 200);
+	};
+	const answer = webApi({ jobs, restart });
+	const watch = idleWatch({ busy: jobs.busy });
 
 	try {
 		server = Bun.serve({

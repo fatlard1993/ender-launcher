@@ -9,6 +9,7 @@ import {
 	SPEC,
 	allowed,
 	buildSibling,
+	cached,
 	enderAt,
 	idleWatch,
 	servePage,
@@ -722,6 +723,77 @@ describe('opened from a desktop icon', () => {
 		finish();
 		await job.finished;
 		expect(jobs.busy()).toBe(false);
+	});
+});
+
+describe('bringing ender up to date from the page', () => {
+	test('says which ender this is, the newest, and who upgrades it', async () => {
+		const api = webApi({ newest: async () => '9.9.9', upgradedBy: () => 'brew' });
+		const { version } = await import('../package.json');
+
+		expect(await (await api(request('/api/upgrade'))).json()).toEqual({
+			current: version,
+			latest: '9.9.9',
+			how: 'brew',
+		});
+	});
+
+	test('still answers what it knows when GitHub does not', async () => {
+		const api = webApi({
+			newest: async () => {
+				throw new Error('rate limited');
+			},
+			upgradedBy: () => 'self',
+		});
+
+		expect((await (await api(request('/api/upgrade'))).json()).error).toBe('rate limited');
+	});
+
+	test('upgrades itself as a job, and leaves Homebrew and a checkout to their own tools', async () => {
+		const { jobs, started } = await fakeJobs();
+		const self = webApi({ jobs, upgradedBy: () => 'self' });
+		const response = await self(request('/api/upgrade', { method: 'POST', origin: ORIGIN }));
+
+		expect(response.status).toBe(202);
+		await jobs.get((await response.json()).job.id).finished;
+		expect(started).toEqual([['upgrade']]);
+
+		const brewed = webApi({ jobs, upgradedBy: () => 'brew' });
+		const refused = await brewed(request('/api/upgrade', { method: 'POST', origin: ORIGIN }));
+
+		expect(refused.status).toBe(409);
+		expect((await refused.json()).error).toContain('brew upgrade ender');
+	});
+
+	test('restarts as the new ender only once nothing the page started is running', async () => {
+		let restarted = 0;
+		const idle = webApi({ jobs: { busy: () => false }, restart: () => ++restarted });
+
+		expect((await idle(request('/api/restart', { method: 'POST', origin: ORIGIN }))).status).toBe(200);
+		await new Promise(resolve => setTimeout(resolve, 80));
+		expect(restarted).toBe(1);
+
+		const working = webApi({ jobs: { busy: () => true }, restart: () => ++restarted });
+
+		expect((await working(request('/api/restart', { method: 'POST', origin: ORIGIN }))).status).toBe(409);
+	});
+
+	test('asks GitHub for the newest release at most once an hour', async () => {
+		let asked = 0;
+		let clock = 0;
+		const newest = cached(
+			async () => ++asked,
+			60 * 60_000,
+			() => clock,
+		);
+
+		await newest();
+		clock = 59 * 60_000;
+		await newest();
+		expect(asked).toBe(1);
+		clock = 60 * 60_000;
+		await newest();
+		expect(asked).toBe(2);
 	});
 });
 
