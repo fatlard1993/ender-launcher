@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 
+import { signInLines } from '../src/auth/microsoft';
 import { offlineUuid } from '../src/auth/offline';
 
 let home;
@@ -459,5 +460,14 @@ describe('who plays, as a script or a page reads it', () => {
 
 	test('an instance cannot be given an account nobody has', async () => {
 		await expect((await accountsModule()).assertExists('Nobody')).rejects.toThrow('No account named "Nobody"');
+	});
+});
+
+describe('the lines a Microsoft sign in prints', () => {
+	test('hand over the page and the code apart, with no code in the link for Microsoft to refuse', () => {
+		const lines = signInLines({ verification_uri: 'https://www.microsoft.com/link', user_code: 'ABCD1234' });
+
+		expect(lines).toEqual(['link https://www.microsoft.com/link', 'code ABCD1234']);
+		expect(lines.join('\n')).not.toContain('otc');
 	});
 });

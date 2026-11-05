@@ -53,17 +53,13 @@ class NotApprovedError extends Error {
 	}
 }
 
-/** Ask Microsoft for a code the user types into their browser, then wait for them to do it. */
 /**
- * The page the code is meant to be typed into, with the code already in it.
- *
- * Microsoft does not return a pre-filled url of its own for this flow, but its device pages take
- * the code as `otc`, which is what makes a scannable code worth anything: a phone that lands on a
- * blank form still has an eight character code to type by hand.
+ * The lines a script or the page reads the sign in from: Microsoft's page as it gave it, and the code to type there.
+ * Microsoft's link page takes a code as `otc` too, but a code handed over that way is refused for an app not its own.
  */
-export const verificationLink = ({ verification_uri: uri, user_code: code }) =>
-	`${uri}${uri.includes('?') ? '&' : '?'}otc=${encodeURIComponent(code)}`;
+export const signInLines = ({ verification_uri: uri, user_code: code }) => [`link ${uri}`, `code ${code}`];
 
+/** Ask Microsoft for a code the user types into their browser, then wait for them to do it. */
 export const signIn = async ({ clientId, onPrompt, qr = true } = {}) => {
 	if (!clientId) {
 		throw new Error('No Azure client id configured. Set one with "ender config clientId <id>".');
@@ -114,12 +110,13 @@ const defaultPrompt = (start, { qr = true } = {}) => {
 
 	if (qr) {
 		// Rendered before the code, so a phone can be pointed at it without reading anything first.
-		qrcode.generate(verificationLink(start), { small: true }, rendered => info(rendered));
+		qrcode.generate(start.verification_uri, { small: true }, rendered => info(rendered));
 	}
 
 	info(`  Scan the code above, or open ${paint.cyan(start.verification_uri)}`);
 	info(`  and enter ${paint.bold(start.user_code)}`);
-	info(paint.dim(`  link ${verificationLink(start)}`));
+
+	for (const line of signInLines(start)) info(paint.dim(`  ${line}`));
 	info('');
 	info(paint.dim('  Waiting for you to finish. Leave this running: the account is only saved'));
 	info(paint.dim('  once the browser is done and three more exchanges have completed.'));
