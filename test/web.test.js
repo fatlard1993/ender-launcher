@@ -172,11 +172,32 @@ describe('ender web', () => {
 		expect(started).toEqual([['account', 'add', '--no-qr']]);
 	});
 
-	test('answers which ender it is without running anything', async () => {
-		const api = webApi({ run: () => expect.unreachable() });
+	test('answers which ender it is, where it is installed and where it keeps its data, without running anything', async () => {
+		const api = webApi({
+			run: () => expect.unreachable(),
+			where: () => ({ installed: '/Applications/Ender.app', data: '/d' }),
+		});
 		const { version } = await import('../package.json');
 
-		expect(await (await api(request('/api/ender'))).json()).toEqual({ version });
+		expect(await (await api(request('/api/ender'))).json()).toEqual({
+			version,
+			installed: '/Applications/Ender.app',
+			data: '/d',
+		});
+	});
+
+	test('a checkout is installed where its code is, and keeps its data where ENDER_HOME says', async () => {
+		const { installedWhere } = await import('../src/commands/web');
+		const previous = process.env.ENDER_HOME;
+
+		process.env.ENDER_HOME = '/tmp/ender-home';
+
+		try {
+			expect(installedWhere()).toEqual({ installed: join(import.meta.dir, '..'), data: '/tmp/ender-home' });
+		} finally {
+			if (previous === undefined) delete process.env.ENDER_HOME;
+			else process.env.ENDER_HOME = previous;
+		}
 	});
 
 	test('starts what takes a while as a job the page follows, and refuses what it refuses before starting anything', async () => {

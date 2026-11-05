@@ -8,14 +8,14 @@ import { publishPack } from '../gist';
 import { INSTANCE_NAME } from '../instance';
 import { parseEnderPack } from '../instance/enderPack';
 import { detach, jobRunner, shown } from '../jobs';
-import { paths } from '../paths';
+import { dataRoot, paths } from '../paths';
 import { KNOWN_LOADERS } from '../meta/resolve';
 import { done, info, paint } from '../out';
 import { signedInAs } from '../githubAccount';
 import { fileIndexIssue, modLink } from '../indexIssues';
 import { setStar, starredRepositories } from '../stars';
 import { REPOSITORY, gistOf } from './packSource';
-import { isCompiled, latestRelease, whoUpgrades } from './upgrade';
+import { appBundleOf, isCompiled, latestRelease, whoUpgrades } from './upgrade';
 
 export const PORT = 7460;
 
@@ -62,6 +62,12 @@ export const collect = async (argv, options = {}) => {
 };
 
 const json = (body, status = 200) => Response.json(body, { status });
+
+/** Where this ender is, as a person would find it (the app, not the binary inside it), and where it keeps its data. */
+export const installedWhere = () => ({
+	installed: isCompiled() ? (appBundleOf() ?? process.execPath) : join(import.meta.dir, '..', '..'),
+	data: dataRoot(),
+});
 
 /** An Azure application id: a guid. */
 const CLIENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -118,6 +124,7 @@ export const webApi = ({
 	newest = cached(async () => (await latestRelease()).version, 60 * 60_000),
 	upgradedBy = whoUpgrades,
 	restart = async () => {},
+	where = installedWhere,
 } = {}) => {
 	const answerJson = async args => {
 		const { code, stdout, stderr } = await run(args);
@@ -176,7 +183,7 @@ export const webApi = ({
 		const [area, name, verb, ...rest] = segments;
 
 		if (rest.length > 0) return json({ error: 'Not found' }, 404);
-		if (area === 'ender' && method === 'GET') return json({ version });
+		if (area === 'ender' && method === 'GET') return json({ version, ...where() });
 
 		if (area === 'jobs' && method === 'GET') {
 			if (name === undefined) return json(jobs.list().map(shown));
