@@ -66,7 +66,7 @@ const grants = (reference, rule) => reference === rule || reference.startsWith(`
  * jar) to the references that granted it, and hosts map each URL host to the classes naming it.
  */
 export const scanJar = async (path, { limit = DEFAULT_LIMIT } = {}) => {
-	const findings = { classes: 0, jars: [], capabilities: {}, hosts: {}, unreadable: [] };
+	const findings = { classes: 0, jars: [], capabilities: {}, hosts: Object.create(null), unreadable: [] };
 	const named = [];
 	let looksUp = false;
 	let remaining = limit;
@@ -101,13 +101,13 @@ export const scanJar = async (path, { limit = DEFAULT_LIMIT } = {}) => {
 
 			for (const reference of matched) {
 				if (!matched.some(other => other.startsWith(`${reference}.`))) {
-					note((findings.capabilities[capability] ??= {}), where, reference);
+					note((findings.capabilities[capability] ??= Object.create(null)), where, reference);
 				}
 			}
 		}
 
 		if (LOADERS.has(parsed.superName)) {
-			note((findings.capabilities.classloading ??= {}), where, `extends ${parsed.superName}`);
+			note((findings.capabilities.classloading ??= Object.create(null)), where, `extends ${parsed.superName}`);
 		}
 
 		if (parsed.references.some(reference => BY_NAME.includes(reference))) looksUp = true;
@@ -115,7 +115,7 @@ export const scanJar = async (path, { limit = DEFAULT_LIMIT } = {}) => {
 		for (const string of parsed.strings) {
 			for (const [, host] of string.matchAll(URL_HOST)) note(findings.hosts, host.toLowerCase(), where);
 
-			const owner = string.replaceAll('/', '.');
+			const owner = string.replace(/^\[*L(.+);$/, '$1').replaceAll('/', '.');
 
 			if (NAMED.has(owner)) named.push({ owner, where });
 		}
@@ -155,7 +155,7 @@ export const scanJar = async (path, { limit = DEFAULT_LIMIT } = {}) => {
 	if (looksUp) {
 		for (const { owner, where } of named) {
 			for (const capability of NAMED.get(owner))
-				note((findings.capabilities[capability] ??= {}), where, `"${owner}" by name`);
+				note((findings.capabilities[capability] ??= Object.create(null)), where, `"${owner}" by name`);
 		}
 	}
 
@@ -168,7 +168,8 @@ export const scanJar = async (path, { limit = DEFAULT_LIMIT } = {}) => {
  * Unreadable classes count only when the older jar had none.
  */
 export const gainedSince = (before, after) => {
-	const fresh = (record, known) => Object.fromEntries(Object.entries(record).filter(([key]) => !(key in known)));
+	const fresh = (record, known) =>
+		Object.fromEntries(Object.entries(record).filter(([key]) => !Object.hasOwn(known, key)));
 
 	return {
 		capabilities: fresh(after.capabilities, before.capabilities),

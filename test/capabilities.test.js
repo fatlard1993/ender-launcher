@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 
 import { scan } from '../src/commands/mods';
-import { scanJar } from '../src/mods/capabilities';
+import { gainedSince, scanJar } from '../src/mods/capabilities';
 import { readClass } from '../src/mods/classfile';
 import { classFile, jar as jarIn } from './jars';
 
@@ -113,6 +113,38 @@ describe('capabilities', () => {
 		});
 	});
 
+	test('a class named by a lookup counts as every capability that class could grant, as a name says nothing of the method', async () => {
+		const findings = await scanOne({ members: ['java/lang/Class.forName'], strings: ['java.lang.Runtime'] });
+
+		expect(findings.capabilities).toEqual({
+			exec: { 'a/A.class': ['"java.lang.Runtime" by name'] },
+			native: { 'a/A.class': ['"java.lang.Runtime" by name'] },
+		});
+	});
+
+	test('a granting class is found by name in its array and descriptor spellings too', async () => {
+		const findings = await scanOne({
+			members: ['java/lang/Class.forName'],
+			strings: ['[Ljava.lang.ProcessBuilder;', 'Ljava/net/Socket;'],
+		});
+
+		expect(Object.keys(findings.capabilities).sort()).toEqual(['exec', 'network']);
+	});
+
+	test('a lookup inside a nested jar holds the outer jar to the granting classes its strings name', async () => {
+		const inner = await jar({
+			'b/Load.class': classFile({ name: 'b/Load', members: ['java/lang/ClassLoader.loadClass'] }),
+		});
+		const findings = await scanJar(
+			await jar({
+				'a/Names.class': classFile({ name: 'a/Names', strings: ['java/lang/ProcessBuilder'] }),
+				'META-INF/jars/inner.jar': await Bun.file(inner).bytes(),
+			}),
+		);
+
+		expect(findings.capabilities.exec).toEqual({ 'a/Names.class': ['"java.lang.ProcessBuilder" by name'] });
+	});
+
 	test('the name of a granting class is not a finding in a jar that looks nothing up by name', async () => {
 		expect((await scanOne({ strings: ['java.lang.Runtime'] })).capabilities).toEqual({});
 	});
@@ -130,6 +162,24 @@ describe('capabilities', () => {
 		expect(
 			(await scanOne({ members: ['java/lang/Class.forName'], strings: ['com.example.Config'] })).capabilities,
 		).toEqual({});
+	});
+
+	test('a host named like a property every object has is recorded, not taken for one, and the class is still read', async () => {
+		const findings = await scanOne({
+			members: ['java/lang/Runtime.exec'],
+			strings: ['http://__proto__/x', 'http://constructor/y', 'https://evil.example/'],
+		});
+
+		expect(Object.keys(findings.hosts).sort()).toEqual(['__proto__', 'constructor', 'evil.example']);
+		expect(findings.unreadable).toEqual([]);
+		expect(findings.capabilities.exec).toEqual({ 'a/A.class': ['java/lang/Runtime.exec'] });
+	});
+
+	test('an update that names a host like constructor has gained it, whatever an older scan read back from JSON holds', () => {
+		const before = JSON.parse('{"capabilities":{},"hosts":{},"unreadable":[]}');
+		const after = { capabilities: {}, hosts: { constructor: ['a/A.class'] }, unreadable: [] };
+
+		expect(gainedSince(before, after).hosts).toEqual({ constructor: ['a/A.class'] });
 	});
 
 	test('collects the hosts named in string constants', async () => {
