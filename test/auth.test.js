@@ -2,9 +2,10 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { stripVTControlCharacters } from 'node:util';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 
-import { signInLines } from '../src/auth/microsoft';
+import { printSignIn, signInLines } from '../src/auth/microsoft';
 import { offlineUuid } from '../src/auth/offline';
 
 let home;
@@ -464,6 +465,35 @@ describe('who plays, as a script or a page reads it', () => {
 });
 
 describe('the lines a Microsoft sign in prints', () => {
+	const printed = qr => {
+		const lines = [];
+		const real = console.log;
+
+		console.log = (...args) => lines.push(stripVTControlCharacters(args.join(' ')));
+
+		try {
+			printSignIn({ verification_uri: 'https://www.microsoft.com/link', user_code: 'ABCD1234' }, { qr });
+		} finally {
+			console.log = real;
+		}
+
+		return lines.flatMap(line => line.split('\n'));
+	};
+
+	test('prints the link and code lines the page reads, as it reads them', () => {
+		const lines = printed(false);
+		const said = key => lines.map(line => line.match(new RegExp(`^\\s*${key} (\\S+)`))?.[1]).find(Boolean);
+
+		expect(said('link')).toBe('https://www.microsoft.com/link');
+		expect(said('code')).toBe('ABCD1234');
+	});
+
+	test('says to scan only when there is a square to scan', () => {
+		expect(printed(false).join('\n')).toContain('Open https://www.microsoft.com/link');
+		expect(printed(false).join('\n')).not.toContain('Scan');
+		expect(printed(true).join('\n')).toContain('Scan the code above');
+	});
+
 	test('hand over the page and the code apart, with no code in the link for Microsoft to refuse', () => {
 		const lines = signInLines({ verification_uri: 'https://www.microsoft.com/link', user_code: 'ABCD1234' });
 

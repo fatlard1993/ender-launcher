@@ -67,7 +67,7 @@ export const signIn = async ({ clientId, onPrompt, qr = true } = {}) => {
 
 	const start = await (await fetchWithRetry(DEVICE_CODE, form({ client_id: clientId, scope: SCOPE }))).json();
 
-	(onPrompt ?? defaultPrompt)(start, { qr });
+	(onPrompt ?? printSignIn)(start, { qr });
 
 	const deadline = Date.now() + start.expires_in * 1000;
 	let interval = (start.interval ?? 5) * 1000;
@@ -104,7 +104,8 @@ export const signIn = async ({ clientId, onPrompt, qr = true } = {}) => {
 	throw new Error('The sign in code expired before it was used.');
 };
 
-const defaultPrompt = (start, { qr = true } = {}) => {
+/** What a person signing in reads, ending in the link and code lines the page reads. */
+export const printSignIn = (start, { qr = true } = {}) => {
 	step('Sign in to Microsoft');
 	info('');
 
