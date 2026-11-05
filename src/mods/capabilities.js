@@ -34,6 +34,24 @@ export const CAPABILITIES = {
 /** A subclass calls defineClass on itself, so the call names the subclass and only the superclass gives it away. */
 const LOADERS = new Set(['java/lang/ClassLoader', 'java/security/SecureClassLoader', 'java/net/URLClassLoader']);
 
+/** Calls that reach a class by a name given as a string, which hides it from the references above. */
+const BY_NAME = [
+	'java/lang/Class.forName',
+	'java/lang/ClassLoader.loadClass',
+	'java/lang/invoke/MethodHandles$Lookup.findClass',
+];
+
+/** Each granting class as a string would name it, with the capabilities it grants. */
+const NAMED = new Map();
+
+for (const [capability, rules] of Object.entries(CAPABILITIES)) {
+	for (const rule of rules) {
+		const owner = rule.split('.')[0].replaceAll('/', '.');
+
+		NAMED.set(owner, [...new Set([...(NAMED.get(owner) ?? []), capability])]);
+	}
+}
+
 const URL_HOST = /\bhttps?:\/\/([\w.-]+)/gi;
 
 const DEFAULT_LIMIT = 512 * 1024 * 1024;
@@ -49,6 +67,8 @@ const grants = (reference, rule) => reference === rule || reference.startsWith(`
  */
 export const scanJar = async (path, { limit = DEFAULT_LIMIT } = {}) => {
 	const findings = { classes: 0, jars: [], capabilities: {}, hosts: {}, unreadable: [] };
+	const named = [];
+	let looksUp = false;
 	let remaining = limit;
 
 	const read = (entry, where) => {
@@ -90,8 +110,14 @@ export const scanJar = async (path, { limit = DEFAULT_LIMIT } = {}) => {
 			note((findings.capabilities.classloading ??= {}), where, `extends ${parsed.superName}`);
 		}
 
+		if (parsed.references.some(reference => BY_NAME.includes(reference))) looksUp = true;
+
 		for (const string of parsed.strings) {
 			for (const [, host] of string.matchAll(URL_HOST)) note(findings.hosts, host.toLowerCase(), where);
+
+			const owner = string.replaceAll('/', '.');
+
+			if (NAMED.has(owner)) named.push({ owner, where });
 		}
 	};
 
@@ -125,6 +151,13 @@ export const scanJar = async (path, { limit = DEFAULT_LIMIT } = {}) => {
 	};
 
 	walk(Buffer.from(await Bun.file(path).arrayBuffer()), '', 0);
+
+	if (looksUp) {
+		for (const { owner, where } of named) {
+			for (const capability of NAMED.get(owner))
+				note((findings.capabilities[capability] ??= {}), where, `"${owner}" by name`);
+		}
+	}
 
 	return findings;
 };

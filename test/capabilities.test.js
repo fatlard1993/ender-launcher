@@ -96,6 +96,42 @@ describe('capabilities', () => {
 		expect(findings.capabilities).toEqual({});
 	});
 
+	test('a granting class reached by its name is found, wherever in the jar the lookup and the name sit', async () => {
+		const findings = scanJar(
+			await jar({
+				'a/Load.class': classFile({ name: 'a/Load', members: ['java/lang/Class.forName'] }),
+				'a/Names.class': classFile({
+					name: 'a/Names',
+					strings: ['java.lang.ProcessBuilder', 'java/net/URLClassLoader'],
+				}),
+			}),
+		);
+
+		expect((await findings).capabilities).toEqual({
+			exec: { 'a/Names.class': ['"java.lang.ProcessBuilder" by name'] },
+			classloading: { 'a/Names.class': ['"java.net.URLClassLoader" by name'] },
+		});
+	});
+
+	test('the name of a granting class is not a finding in a jar that looks nothing up by name', async () => {
+		expect((await scanOne({ strings: ['java.lang.Runtime'] })).capabilities).toEqual({});
+	});
+
+	test('a string that names a property every object has is not mistaken for a granting class', async () => {
+		const findings = await scanOne({
+			members: ['java/lang/Class.forName'],
+			strings: ['__proto__', 'constructor', 'toString'],
+		});
+
+		expect(findings.capabilities).toEqual({});
+	});
+
+	test('a lookup by name finds nothing when the names it could reach grant nothing', async () => {
+		expect(
+			(await scanOne({ members: ['java/lang/Class.forName'], strings: ['com.example.Config'] })).capabilities,
+		).toEqual({});
+	});
+
 	test('collects the hosts named in string constants', async () => {
 		const findings = await scanOne({ strings: ['see https://API.Modrinth.com/v2/project and http://10.0.0.1:8080/x'] });
 
