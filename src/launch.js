@@ -1,10 +1,11 @@
-import { delimiter } from 'node:path';
+import { readdir, stat } from 'node:fs/promises';
+import { delimiter, join } from 'node:path';
 
 import { version } from '../package.json';
 import { profileFor } from './auth';
 import { selectJava } from './java';
 import { paths } from './paths';
-import { detail, step, warn } from './out';
+import { detail, done, fail, step, warn } from './out';
 
 /**
  * Flags the JVM treats as instructions rather than settings. An argv array closes shell injection,
@@ -93,11 +94,42 @@ export const launch = async (plan, instance, options) => {
 		return 0;
 	}
 
+	const started = Date.now();
 	const child = Bun.spawn(command, {
 		cwd: instance.gameDir,
 		stdio: ['inherit', 'inherit', 'inherit'],
 		env: { ...process.env, ...instance.env },
 	});
+	const code = await child.exited;
 
-	return await child.exited;
+	await sayHowItEnded(instance, code, started);
+
+	return code;
+};
+
+/** The crash report the game wrote since `since`, the newest if several; undefined when it wrote none. */
+export const crashReportSince = async (gameDir, since) => {
+	const directory = join(gameDir, 'crash-reports');
+	const names = await readdir(directory).catch(() => []);
+	const reports = await Promise.all(
+		names.map(async name => ({ path: join(directory, name), at: (await stat(join(directory, name))).mtimeMs })),
+	);
+
+	return reports.filter(report => report.at >= since).sort((a, b) => b.at - a.at)[0]?.path;
+};
+
+const sayHowItEnded = async (instance, code, started) => {
+	if (code === 0) {
+		done(`${instance.name} closed`);
+
+		return;
+	}
+
+	const report = await crashReportSince(instance.gameDir, started);
+
+	fail(
+		report
+			? `${instance.name} crashed (exit ${code}); its crash report is ${report}`
+			: `${instance.name} ended with exit ${code}; its log is ${join(instance.gameDir, 'logs', 'latest.log')}`,
+	);
 };

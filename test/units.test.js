@@ -1,10 +1,15 @@
+import { mkdtemp, rm, utimes } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, test } from 'bun:test';
 
 import { offlineUuid } from '../src/auth';
 import { parseModSpec, specFor } from '../src/commands/context';
 import { parseArgv } from '../src/cli/parse';
 import { coordinateToPath, coordinateToUrl } from '../src/meta/maven';
+import { crashReportSince } from '../src/launch';
 import { allowed, applicableArguments } from '../src/meta/rules';
+import { progress } from '../src/out';
 
 describe('offline identity', () => {
 	// Vanilla's own derivation; if this value moves, existing worlds stop recognizing the player.
@@ -142,5 +147,62 @@ describe('mod specs', () => {
 	test('treats paths and urls as their own sources', () => {
 		expect(parseModSpec('./build/libs/a.jar').source).toBe('local');
 		expect(parseModSpec('https://example.com/a.jar').source).toBe('url');
+	});
+});
+
+describe('progress without a terminal', () => {
+	const watched = () => {
+		const written = [];
+		let clock = 0;
+		const bar = progress({ live: false, now: () => clock, write: text => written.push(text) });
+
+		return { bar, written, at: time => (clock = time) };
+	};
+
+	test('a step done within two seconds says nothing', () => {
+		const { bar, written, at } = watched();
+
+		bar.update('   assets 1/2');
+		at(1999);
+		bar.update('   assets 2/2');
+		bar.clear();
+
+		expect(written).toEqual([]);
+	});
+
+	test('a long one is seen moving every two seconds, and ends on where it finished', () => {
+		const { bar, written, at } = watched();
+
+		at(2000);
+		bar.update('   assets 10/400');
+		at(3000);
+		bar.update('   assets 20/400');
+		at(4000);
+		bar.update('   assets 30/400');
+		bar.update('   assets 400/400');
+		bar.clear();
+
+		expect(written).toEqual(['   assets 10/400\n', '   assets 30/400\n', '   assets 400/400\n']);
+	});
+});
+
+describe('how the game ended', () => {
+	test('finds the crash report written during this run, not an older one', async () => {
+		const gameDir = await mkdtemp(join(tmpdir(), 'ender-crash-'));
+
+		try {
+			const older = join(gameDir, 'crash-reports', 'crash-old.txt');
+			const newer = join(gameDir, 'crash-reports', 'crash-new.txt');
+
+			await Bun.write(older, 'old');
+			await utimes(older, new Date(1000), new Date(1000));
+			expect(await crashReportSince(gameDir, Date.now() - 1000)).toBeUndefined();
+
+			await Bun.write(newer, 'new');
+			expect(await crashReportSince(gameDir, Date.now() - 1000)).toBe(newer);
+			expect(await crashReportSince(join(gameDir, 'nothing'), 0)).toBeUndefined();
+		} finally {
+			await rm(gameDir, { recursive: true, force: true });
+		}
 	});
 });

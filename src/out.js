@@ -42,23 +42,52 @@ export const warn = message => console.warn(`${paint.yellow('!!')} ${message}`);
 
 export const fail = message => console.error(`${paint.red('xx')} ${message}`);
 
-/** A single rewritten line, so a thousand downloads do not become a thousand lines of scrollback. */
-export const progress = () => {
-	const live = Boolean(process.stderr.isTTY);
+export const QUIET_PROGRESS_EVERY = 2000;
+
+/**
+ * A single rewritten line on a terminal, so a thousand downloads do not become a thousand lines of scrollback. Without
+ * one, as when ender web runs it, a line at most every two seconds and a last one at the end, so a long download is
+ * seen moving; a step that finishes sooner says nothing.
+ */
+export const progress = ({
+	live = Boolean(process.stderr.isTTY),
+	now = Date.now,
+	write = text => process.stderr.write(text),
+} = {}) => {
 	let width = 0;
+	let last = now();
+	let latest;
+	let printed;
 
 	return {
 		update(message) {
-			if (!live) return;
+			latest = message;
 
-			process.stderr.write(`\r${message.padEnd(width)}`);
+			if (live) {
+				write(`\r${message.padEnd(width)}`);
+				width = Math.max(width, message.length);
 
-			width = Math.max(width, message.length);
+				return;
+			}
+
+			if (now() - last < QUIET_PROGRESS_EVERY) return;
+
+			write(`${message}\n`);
+			last = now();
+			printed = message;
 		},
 		clear() {
-			if (!live || width === 0) return;
+			if (!live) {
+				if (printed !== undefined && latest !== printed) write(`${latest}\n`);
 
-			process.stderr.write(`\r${' '.repeat(width)}\r`);
+				printed = undefined;
+
+				return;
+			}
+
+			if (width === 0) return;
+
+			write(`\r${' '.repeat(width)}\r`);
 
 			width = 0;
 		},
