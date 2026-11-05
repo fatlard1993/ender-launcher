@@ -799,22 +799,37 @@ describe('bringing ender up to date from the page', () => {
 		expect((await working(request('/api/restart', { method: 'POST', origin: ORIGIN }))).status).toBe(409);
 	});
 
-	test('asks GitHub for the newest release at most once an hour', async () => {
+	test('asks GitHub for the newest release at most every ten minutes, or at once when the page asks again', async () => {
 		let asked = 0;
 		let clock = 0;
 		const newest = cached(
 			async () => ++asked,
-			60 * 60_000,
+			10 * 60_000,
 			() => clock,
 		);
 
 		await newest();
-		clock = 59 * 60_000;
+		clock = 9 * 60_000;
 		await newest();
 		expect(asked).toBe(1);
-		clock = 60 * 60_000;
-		await newest();
+		await newest({ again: true });
 		expect(asked).toBe(2);
+		clock = 20 * 60_000;
+		await newest();
+		expect(asked).toBe(3);
+
+		let again;
+		const api = webApi({
+			newest: async options => {
+				again = options.again;
+
+				return '9.9.9';
+			},
+			upgradedBy: () => 'self',
+		});
+
+		await api(request('/api/upgrade?again'));
+		expect(again).toBe(true);
 	});
 });
 

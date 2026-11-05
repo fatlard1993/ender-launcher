@@ -72,12 +72,15 @@ export const installedWhere = () => ({
 /** An Azure application id: a guid. */
 const CLIENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** What `ask` answered within the last `fresh` milliseconds, asked again after; a failure is not kept. */
+/**
+ * What `ask` answered within the last `fresh` milliseconds, asked again after, or at once when told `again`; a failure
+ * is not kept.
+ */
 export const cached = (ask, fresh, now = Date.now) => {
 	let kept;
 
-	return async () => {
-		if (kept && now() - kept.at < fresh) return kept.value;
+	return async ({ again = false } = {}) => {
+		if (!again && kept && now() - kept.at < fresh) return kept.value;
 
 		const value = await ask();
 
@@ -121,7 +124,7 @@ export const webApi = ({
 	stars = { list: starredRepositories, set: setStar },
 	account = signedInAs,
 	fileIssue = fileIndexIssue,
-	newest = cached(async () => (await latestRelease()).version, 60 * 60_000),
+	newest = cached(async () => (await latestRelease()).version, 10 * 60_000),
 	upgradedBy = whoUpgrades,
 	restart = async () => {},
 	where = installedWhere,
@@ -276,7 +279,7 @@ export const webApi = ({
 			const how = upgradedBy();
 
 			try {
-				return json({ current: version, latest: await newest(), how });
+				return json({ current: version, latest: await newest({ again: searchParams.has('again') }), how });
 			} catch (error) {
 				return json({ current: version, how, error: error.message });
 			}
