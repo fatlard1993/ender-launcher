@@ -1,4 +1,4 @@
-import { chmod, mkdir, realpath, rm, stat } from 'node:fs/promises';
+import { chmod, mkdir, readlink, realpath, rm, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { isatty } from 'node:tty';
@@ -22,10 +22,14 @@ export const stableCommand = command =>
 
 /**
  * A double-click on an app bundle runs its executable with no arguments, or with the process serial number older macOS
- * adds, and with no terminal; `ender` typed into Terminal through its link into the PATH has one.
+ * adds, with no terminal, as a child of launchd, process 1; `ender` run through its link into the PATH, from Terminal,
+ * ssh or cron, has another parent.
  */
-export const startedAsApp = (argv, execPath = process.execPath, interactive = isatty(0)) =>
-	!interactive && /\.app\/Contents\/MacOS\/[^/]+$/.test(execPath) && argv.every(arg => arg.startsWith('-psn_'));
+export const startedAsApp = (argv, execPath = process.execPath, interactive = isatty(0), parent = process.ppid) =>
+	!interactive &&
+	parent === 1 &&
+	/\.app\/Contents\/MacOS\/[^/]+$/.test(execPath) &&
+	argv.every(arg => arg.startsWith('-psn_'));
 
 const xml = text => text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 
@@ -61,33 +65,65 @@ ${[...command, ...ICON_ARGS].map(shellQuoted).join(' ')} >> "$HOME/Library/Logs/
 /** Where a Mac's Terminal finds a command with nothing added to its PATH. */
 export const TERMINAL_LINK = '/usr/local/bin/ender';
 
-/** Why a binary cannot be linked where it is: macOS runs a bundle opened from a disk image or Downloads from a copy it discards. */
+/** A link into some Ender.app, this one or one installed before it elsewhere, which a new link may replace. */
+const ENDER_APP_BINARY = /\.app\/Contents\/MacOS\/ender$/;
+
+/** How osascript ends when the user dismisses the password prompt. */
+const DISMISSED = '(-128)';
+
+/** A link into Terminal that could not be made, and which of the ways it fails, for the page to tell apart. */
+export class TerminalLinkError extends Error {
+	constructor(reason, message) {
+		super(message);
+		this.reason = reason;
+	}
+}
+
+/**
+ * Why a binary cannot be linked from where it is: macOS runs a bundle opened from Downloads from a translocated copy it
+ * discards, and one opened inside the disk image from a volume that goes when the image is ejected.
+ */
 const linkRefusal = binary =>
-	binary.includes('/AppTranslocation/') || binary.startsWith('/Volumes/')
+	binary.includes('/AppTranslocation/') || /^\/Volumes\/Ender(?: \d+)?\/Ender\.app\//.test(binary)
 		? 'Ender is running from a copy macOS will discard; drag Ender into Applications, open it from there, and try again'
 		: undefined;
 
+const pointsAt = async link => {
+	try {
+		return await readlink(link);
+	} catch (error) {
+		if (error.code === 'ENOENT') return undefined;
+		if (error.code === 'EINVAL') return link;
+
+		throw error;
+	}
+};
+
 /**
- * Whether Terminal's `ender` is this binary, the line that makes it so, and why it cannot be linked from where it is;
- * undefined for a binary outside an app bundle, which an installer or the user already put on the PATH.
+ * Whether `link` is this binary, the line that makes it so, why it cannot be linked from where Ender runs, and what
+ * occupies the link when it is something other than an Ender.app's ender; undefined for a binary outside an app bundle,
+ * which an installer or the user put on the PATH already. A different ender earlier on the user's PATH is not seen.
  */
-export const terminalCommand = async (binary, link = TERMINAL_LINK) => {
+export const terminalStatus = async (binary, link = TERMINAL_LINK) => {
 	if (!binary) return undefined;
 
+	const target = await pointsAt(link);
 	const real = place => realpath(place).catch(() => undefined);
-	const [target, own] = await Promise.all([real(link), real(binary)]);
+	const linked = target !== undefined && (await real(link)) === (await real(binary));
+	const occupied = target !== undefined && !linked && !ENDER_APP_BINARY.test(target) ? target : undefined;
 	const refused = linkRefusal(binary);
 
 	return {
-		linked: target !== undefined && target === own,
-		line: `sudo ln -sf ${shellQuoted(binary)} ${link}`,
+		linked,
+		line: `sudo mkdir -p ${dirname(link)} && sudo ln -sfh ${shellQuoted(binary)} ${link}`,
 		...(refused && { refused }),
+		...(occupied && { occupied }),
 	};
 };
 
-const ADMIN_LINK = [
+const adminLink = link => [
 	'on run argv',
-	`do shell script "mkdir -p ${dirname(TERMINAL_LINK)} && ln -sf " & quoted form of (item 1 of argv) & " ${TERMINAL_LINK}" with administrator privileges`,
+	`do shell script "mkdir -p ${dirname(link)} && ln -sfh " & quoted form of (item 1 of argv) & " ${link}" with prompt "Ender is adding the ender command to Terminal." with administrator privileges`,
 	'end run',
 ];
 
@@ -98,18 +134,39 @@ const spawned = async command => {
 	return { code: await child.exited, stderr };
 };
 
-/** Links the binary into Terminal's PATH behind macOS's own password prompt, saying why when it does not. */
-export const linkForTerminal = async (binary, { run = spawned } = {}) => {
-	const refused = linkRefusal(binary);
+let linking = false;
 
-	if (refused) throw new Error(refused);
+/**
+ * Links the binary into Terminal's PATH behind macOS's own password prompt, one prompt at a time, never over a link that
+ * is not an Ender.app's, saying why when it does not.
+ */
+export const linkForTerminal = async (binary, { run = spawned, link = TERMINAL_LINK } = {}) => {
+	const status = await terminalStatus(binary, link);
 
-	const { code, stderr } = await run(['osascript', ...ADMIN_LINK.flatMap(line => ['-e', line]), binary]);
+	if (!status) throw new TerminalLinkError('outside', 'Only an ender installed as Ender.app is linked into Terminal');
+	if (status.refused) throw new TerminalLinkError('refused', status.refused);
+	if (status.occupied) {
+		throw new TerminalLinkError(
+			'occupied',
+			`${link} is already ${status.occupied}; Ender leaves another ender in place, so remove it first to use this one`,
+		);
+	}
+	if (linking) throw new TerminalLinkError('busy', 'macOS is already asking for your password to link it');
 
-	if (code === 0) return;
-	if (stderr.includes('-128')) throw new Error(`The password prompt was cancelled; ${TERMINAL_LINK} was not linked`);
+	linking = true;
 
-	throw new Error(`macOS did not link ${TERMINAL_LINK}: ${stderr.trim()}`);
+	try {
+		const { code, stderr } = await run(['osascript', ...adminLink(link).flatMap(line => ['-e', line]), binary]);
+
+		if (code === 0) return;
+		if (stderr.includes(DISMISSED)) {
+			throw new TerminalLinkError('canceled', `The password prompt was dismissed; ${link} was not linked`);
+		}
+
+		throw new TerminalLinkError('failed', `macOS did not link ${link}: ${stderr.trim()}`);
+	} finally {
+		linking = false;
+	}
 };
 
 const execQuoted = text => `"${text.replaceAll(/["`$\\]/g, match => `\\${match}`)}"`;

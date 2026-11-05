@@ -13,7 +13,7 @@ import {
 	removeIcon,
 	stableCommand,
 	startedAsApp,
-	terminalCommand,
+	terminalStatus,
 } from '../src/desktop';
 
 let home;
@@ -57,14 +57,20 @@ describe('the desktop icon', () => {
 	});
 
 	test('is told apart from a terminal run by where the binary sits, not by having no arguments', () => {
-		expect(startedAsApp([], '/Applications/Ender.app/Contents/MacOS/ender', false)).toBe(true);
-		expect(startedAsApp(['-psn_0_12345'], '/Applications/Ender.app/Contents/MacOS/ender', false)).toBe(true);
-		expect(startedAsApp(['ls'], '/Applications/Ender.app/Contents/MacOS/ender', false)).toBe(false);
-		expect(startedAsApp([], '/home/me/.local/bin/ender', false)).toBe(false);
+		const app = '/Applications/Ender.app/Contents/MacOS/ender';
+
+		expect(startedAsApp([], app, false, 1)).toBe(true);
+		expect(startedAsApp(['-psn_0_12345'], app, false, 1)).toBe(true);
+		expect(startedAsApp(['ls'], app, false, 1)).toBe(false);
+		expect(startedAsApp([], '/home/me/.local/bin/ender', false, 1)).toBe(false);
 	});
 
-	test('a bare ender typed into Terminal through its link prints usage rather than opening the page', () => {
-		expect(startedAsApp([], '/Applications/Ender.app/Contents/MacOS/ender', true)).toBe(false);
+	test('a bare ender through its link runs as a command from Terminal, ssh or cron, whose parent is not launchd', () => {
+		const app = '/Applications/Ender.app/Contents/MacOS/ender';
+
+		expect(startedAsApp([], app, true, 1)).toBe(false);
+		expect(startedAsApp([], app, false, 4242)).toBe(false);
+		expect(startedAsApp([], app)).toBe(false);
 	});
 
 	test('on Linux, an entry in the app menu and its icon, both taken away again', async () => {
@@ -161,28 +167,60 @@ describe('the desktop icons', () => {
 
 describe("a Mac's Terminal", () => {
 	const binary = '/Applications/Ender.app/Contents/MacOS/ender';
+	const linked = async () => ({ code: 0, stderr: '' });
 
 	test('is not offered a link for an ender outside an app bundle', async () => {
-		expect(await terminalCommand(undefined)).toBeUndefined();
+		expect(await terminalStatus(undefined)).toBeUndefined();
+		await expect(linkForTerminal(undefined, { run: linked, link: join(home, 'ender') })).rejects.toMatchObject({
+			reason: 'outside',
+		});
 	});
 
-	test('says whether its ender is this one, and the line that makes it so', async () => {
+	test('says whether its ender is this one, with a line to paste that makes the folder first', async () => {
+		const own = join(home, 'Ender.app', 'Contents', 'MacOS', 'ender');
+		const link = join(home, 'bin', 'ender');
+
+		await Bun.write(own, '');
+
+		expect(await terminalStatus(own, link)).toEqual({
+			linked: false,
+			line: `sudo mkdir -p ${join(home, 'bin')} && sudo ln -sfh '${own}' ${link}`,
+		});
+
+		await Bun.write(join(home, 'bin', '.keep'), '');
+		await symlink(own, link);
+
+		expect((await terminalStatus(own, link)).linked).toBe(true);
+	});
+
+	test('names another ender at the link and never links over it, before asking for a password', async () => {
+		const own = join(home, 'Ender.app', 'Contents', 'MacOS', 'ender');
+		const link = join(home, 'ender');
+		const run = () => expect.unreachable();
+
+		await Bun.write(own, '');
+		await symlink('/usr/local/Cellar/ender/0.2.3/bin/ender', link);
+
+		expect((await terminalStatus(own, link)).occupied).toBe('/usr/local/Cellar/ender/0.2.3/bin/ender');
+		await expect(linkForTerminal(own, { run, link })).rejects.toMatchObject({ reason: 'occupied' });
+	});
+
+	test("replaces a link into another Ender.app, as that one is Ender's own", async () => {
 		const own = join(home, 'Ender.app', 'Contents', 'MacOS', 'ender');
 		const link = join(home, 'ender');
 
 		await Bun.write(own, '');
+		await symlink('/Users/me/Old/Ender.app/Contents/MacOS/ender', link);
 
-		expect(await terminalCommand(own, link)).toEqual({ linked: false, line: `sudo ln -sf '${own}' ${link}` });
-
-		await symlink(own, link);
-
-		expect((await terminalCommand(own, link)).linked).toBe(true);
+		expect(await terminalStatus(own, link)).not.toHaveProperty('occupied');
+		await linkForTerminal(own, { run: linked, link });
 	});
 
-	test('links the binary behind the password prompt, handing its path over as an argument rather than as script', async () => {
+	test('links the binary behind a password prompt that names Ender, handing its path over as an argument rather than as script', async () => {
 		const ran = [];
 
 		await linkForTerminal(binary, {
+			link: join(home, 'ender'),
 			run: async command => {
 				ran.push(command);
 
@@ -192,25 +230,46 @@ describe("a Mac's Terminal", () => {
 
 		expect(ran[0][0]).toBe('osascript');
 		expect(ran[0].at(-1)).toBe(binary);
+		expect(ran[0].join(' ')).toContain('with prompt "Ender is adding the ender command to Terminal."');
 		expect(ran[0].join(' ')).toContain('with administrator privileges');
+		expect(ran[0].join(' ')).toContain('ln -sfh');
 		expect(ran[0].slice(0, -1).join(' ')).not.toContain(binary);
 	});
 
-	test('says a cancelled password prompt linked nothing', async () => {
-		const cancelled = async () => ({ code: 1, stderr: 'execution error: User canceled. (-128)' });
+	test('asks for one password at a time', async () => {
+		let release;
+		const slow = () => new Promise(resolve => (release = () => resolve({ code: 0, stderr: '' })));
+		const link = join(home, 'ender');
+		const first = linkForTerminal(binary, { run: slow, link });
 
-		await expect(linkForTerminal(binary, { run: cancelled })).rejects.toThrow('cancelled');
+		await new Promise(resolve => setTimeout(resolve, 10));
+		await expect(linkForTerminal(binary, { run: linked, link })).rejects.toMatchObject({ reason: 'busy' });
+		release();
+		await first;
 	});
 
-	test('refuses to link a copy macOS will discard, before asking for a password', async () => {
+	test('says a dismissed password prompt linked nothing', async () => {
+		const dismissed = async () => ({ code: 1, stderr: 'execution error: User canceled. (-128)' });
+
+		await expect(linkForTerminal(binary, { run: dismissed, link: join(home, 'ender') })).rejects.toMatchObject({
+			reason: 'canceled',
+		});
+	});
+
+	test('refuses to link a copy macOS will discard, before asking for a password, but not an install on another disk', async () => {
 		const run = () => expect.unreachable();
+		const link = join(home, 'ender');
 
 		for (const copy of [
 			'/private/var/folders/x/AppTranslocation/ABC/d/Ender.app/Contents/MacOS/ender',
 			'/Volumes/Ender/Ender.app/Contents/MacOS/ender',
+			'/Volumes/Ender 1/Ender.app/Contents/MacOS/ender',
 		]) {
-			await expect(linkForTerminal(copy, { run })).rejects.toThrow('drag Ender into Applications');
-			expect((await terminalCommand(copy)).refused).toContain('drag Ender into Applications');
+			await expect(linkForTerminal(copy, { run, link })).rejects.toMatchObject({ reason: 'refused' });
 		}
+
+		expect(await terminalStatus('/Volumes/Games/Applications/Ender.app/Contents/MacOS/ender', link)).not.toHaveProperty(
+			'refused',
+		);
 	});
 });

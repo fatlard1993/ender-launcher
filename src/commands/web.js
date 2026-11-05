@@ -4,7 +4,7 @@ import { extname, join, normalize, sep } from 'node:path';
 import { version } from '../../package.json';
 import { NAME as PLAYER } from '../auth/accounts';
 import { openInBrowser } from '../browser';
-import { linkForTerminal, terminalCommand } from '../desktop';
+import { linkForTerminal, terminalStatus } from '../desktop';
 import { publishPack } from '../gist';
 import { INSTANCE_NAME } from '../instance';
 import { parseEnderPack } from '../instance/enderPack';
@@ -132,7 +132,7 @@ export const webApi = ({
 	upgradedBy = whoUpgrades,
 	restart = async () => {},
 	where = installedWhere,
-	terminal = () => terminalCommand(bundledBinary()),
+	terminal = () => terminalStatus(bundledBinary()),
 	linkTerminal = () => linkForTerminal(bundledBinary()),
 } = {}) => {
 	const answerJson = async args => {
@@ -195,13 +195,10 @@ export const webApi = ({
 		if (area === 'ender' && method === 'GET') return json({ version, ...where(), terminal: await terminal() });
 
 		if (area === 'terminal' && name === undefined && method === 'POST') {
-			if (!(await terminal()))
-				return json({ error: 'Only an ender installed as Ender.app is linked into Terminal' }, 409);
-
 			try {
 				await linkTerminal();
 			} catch (error) {
-				return json({ error: error.message }, 409);
+				return json({ error: error.message, reason: error.reason ?? 'failed' }, 409);
 			}
 
 			return json(await terminal());
