@@ -48,7 +48,7 @@ ender new survival
 ender launch
 ```
 
-With no flags, `ender new` is the newest release on the newest stable Fabric loader, and the first instance you make is the one later commands act on. The game plays offline until you sign in, and signing in to Microsoft needs an app registration of your own: see [Accounts](#accounts) before counting on online servers.
+With no flags, `ender new` is the newest release on the newest stable Fabric loader, and the first instance you make is the one later commands act on. The game plays offline until you sign in with `ender account add`; see [Accounts](#accounts).
 
 If you have a modpack, start from it:
 
@@ -117,21 +117,7 @@ ender account remove <name>      forget one
 
 Who plays is always an account, either offline or Microsoft, and the two sit in one list and switch the same way. An offline one is a name and the uuid vanilla derives from it, so it is the player that name has always been, only one you can keep several of and move between. A username set the older way, `ender config username` or `ender set username` on an instance, becomes the offline account of that name the first time ender runs, and setting one still works the same way. `ender web` lists, adds and switches accounts too, and gives each instance its own. That is what makes testing your own multiplayer worth doing locally: two instances, two names, two uuids, one `online-mode=false` server.
 
-Sign in is the Microsoft device code flow: ender shows a short code and a scannable square for a phone (`--no-qr` leaves the square out), you type the code into a browser, and the tokens live in `accounts.json` with owner-only permissions. A Minecraft token lasts a day and is renewed from the Microsoft one when it goes stale, so signing in is a thing you do once.
-
-### The client id
-
-Signing in needs an OAuth client id that Microsoft has approved for the Minecraft API, and `ender` ships with none:
-
-```
-ender config clientId <application id>
-```
-
-**Getting one approved is the hard part, and worth knowing before you start.** A registration created today cannot call Minecraft Services until Microsoft reviews it; until then the sign in ends in a 403, which `ender` names rather than leaving you to guess at. Registrations that predate the review requirement were grandfathered, which is why established launchers have access without having applied.
-
-To register your own: sign in at the Azure portal, create an application under Microsoft Entra ID with **personal Microsoft accounts only** as the account type, turn on **allow public client flows** under Authentication, and apply at <https://aka.ms/mce-reviewappid> with the Application and Directory ids from its Overview page. Two things that will stop you before you get that far: the app name may not contain Mojang, Minecraft, Microsoft, Live, Xbox, Discord or Hypixel, and creating an application now requires a directory, which in practice means an Azure account with a card on file for identity verification. The review itself has no published criteria or timeline, and the documented route for someone who is not shipping a game points at the Xbox Developer program.
-
-`clientId` is configuration and not a default baked into this tool, so whichever id you use stays on your machine. Any approved id works; the flow does not care where it came from.
+Sign in is the Microsoft device code flow, through ender's own app registration, so there is nothing to set up first. ender shows a short code and a scannable square that opens Microsoft's page on a phone (`--no-qr` leaves the square out); you type the code into that page, and the tokens live in `accounts.json` with owner-only permissions. A Minecraft token lasts a day and is renewed from the Microsoft one when it goes stale, so signing in is a thing you do once.
 
 Without an account, instances launch offline as `Player`. An offline player's UUID is derived from the name the way vanilla derives it, so worlds and inventories follow the name and a save made under an online account still knows you. A failed sign in is an error rather than a silent downgrade: a token that cannot be renewed is worth hearing about, not quietly swapping you into a game that cannot join anything.
 

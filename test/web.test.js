@@ -120,7 +120,7 @@ describe('ender web', () => {
 
 	test('lists, adds, switches and removes players by name, answering each change with the accounts ender then holds', async () => {
 		const ran = [];
-		const listing = { signIn: false, fallback: 'Player', accounts: [] };
+		const listing = { fallback: 'Player', accounts: [] };
 		const api = webApi({
 			run: async args => {
 				ran.push(args);
@@ -410,7 +410,6 @@ describe('every line the page has ender run', () => {
 		await send('DELETE', '/api/players/Steve');
 		await send('PUT', '/api/instances/family/player', { player: 'Steve' });
 		await send('PUT', '/api/instances/family/player', { player: null });
-		await send('PUT', '/api/sign-in/client-id', { clientId: 'c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb' });
 		await send('POST', '/api/instances/family/gist');
 		await send('POST', '/api/instances/family/gist', { fresh: true });
 		await send('POST', '/api/sign-in');
@@ -426,7 +425,7 @@ describe('every line the page has ender run', () => {
 
 		const lines = [...ran, ...started];
 
-		expect(lines.length).toBeGreaterThanOrEqual(21);
+		expect(lines.length).toBe(23);
 
 		for (const argv of lines) {
 			const line = commandLine(argv);
@@ -913,29 +912,5 @@ describe('bringing ender up to date from the page', () => {
 
 		await api(request('/api/upgrade?again'));
 		expect(again).toBe(true);
-	});
-});
-
-describe('signing in to Microsoft from the page', () => {
-	test("takes an Azure app's client id, and nothing that is not one", async () => {
-		const ran = [];
-		const api = webApi({
-			run: async args => {
-				ran.push(args);
-
-				return { code: 0, stdout: JSON.stringify({ signIn: true, fallback: 'Player', accounts: [] }), stderr: '' };
-			},
-		});
-		const put = clientId =>
-			api(request('/api/sign-in/client-id', { method: 'PUT', origin: ORIGIN, body: JSON.stringify({ clientId }) }));
-
-		expect((await put('--offline')).status).toBe(400);
-		expect((await put('not-a-guid')).status).toBe(400);
-		expect(ran).toEqual([]);
-
-		const answered = await put(' C36A9FB6-4F2A-41FF-90BD-AE7CC92031EB ');
-
-		expect((await answered.json()).signIn).toBe(true);
-		expect(ran[0]).toEqual(['config', 'clientId', 'C36A9FB6-4F2A-41FF-90BD-AE7CC92031EB']);
 	});
 });

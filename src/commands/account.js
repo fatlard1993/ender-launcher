@@ -3,31 +3,15 @@ import { join } from 'node:path';
 import { accounts } from '../auth';
 import { DEFAULT_PLAYER } from '../auth/adopt';
 import * as instances from '../instance';
-import { readConfig } from '../config';
 import { done, info, paint, plural, warn } from '../out';
 import { targetInstance } from './context';
-
-const CLIENT_ID_HELP = [
-	'No Azure client id is configured.',
-	'',
-	'  Minecraft sign in needs an app registration of your own:',
-	'    1. Register an application at https://portal.azure.com (Microsoft Entra ID)',
-	'    2. Add a "Mobile and desktop" platform and allow public client flows',
-	'    3. Apply for Minecraft API access at https://aka.ms/mce-reviewappid',
-	'    4. ender config clientId <the application id>',
-	'',
-	'  Until a registration is approved, instances launch offline.',
-].join('\n');
 
 export const ls = async ({ flags = {} } = {}) => {
 	const found = await accounts.list();
 
 	if (flags.json) {
-		const { clientId } = await readConfig();
-
 		info(
 			JSON.stringify({
-				signIn: Boolean(clientId),
 				fallback: DEFAULT_PLAYER,
 				accounts: found.map(({ name, kind, uuid, active }) => ({ name, kind, uuid, active })),
 			}),
@@ -43,17 +27,9 @@ export const ls = async ({ flags = {} } = {}) => {
 	}
 
 	if (found.length === 0) {
-		const { clientId } = await readConfig();
-
 		info('No accounts yet.');
 		info(paint.dim('  ender account add --offline <name>   an identity that needs no sign in'));
-		info(
-			paint.dim(
-				clientId
-					? '  ender account add                   sign in to a Microsoft account'
-					: '  ender account add                   sign in to Microsoft, once you have an app registration of your own; it says how',
-			),
-		);
+		info(paint.dim('  ender account add                   sign in to a Microsoft account'));
 		info(paint.dim(`  Without either, instances launch offline as ${DEFAULT_PLAYER}.`));
 
 		return 0;
@@ -93,17 +69,7 @@ export const add = async ({ positionals, flags }) => {
 		return 0;
 	}
 
-	const { clientId } = await readConfig();
-
-	if (!clientId) {
-		warn('Cannot sign in yet.');
-		info('');
-		info(CLIENT_ID_HELP);
-
-		return 1;
-	}
-
-	const account = await accounts.add({ clientId, qr: flags.qr !== false });
+	const account = await accounts.add({ qr: flags.qr !== false });
 
 	done(`Signed in as ${account.name}`);
 	info(paint.dim(`  ${account.uuid}`));
@@ -174,11 +140,10 @@ export const assign = async ({ positionals, flags }) => {
 };
 
 export const status = async () => {
-	const [found, config] = await Promise.all([accounts.list(), readConfig()]);
+	const found = await accounts.list();
 
 	const active = found.find(account => account.active);
 
-	info(`  client id   ${config.clientId ?? paint.dim('unset')}`);
 	info(`  accounts    ${plural(found.length, 'account')} (${found.filter(a => a.kind === 'offline').length} offline)`);
 	info(
 		`  active      ${active ? `${active.name} ${paint.dim(`(${active.kind})`)}` : paint.dim(`none, launches offline as ${DEFAULT_PLAYER}`)}`,

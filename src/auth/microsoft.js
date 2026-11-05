@@ -34,20 +34,20 @@ const json = body => ({
 	body: JSON.stringify(body),
 });
 
+/** ender's own Azure app registration, approved by Mojang for Minecraft sign in. */
+export const CLIENT_ID = '9e6c7319-cc03-4540-822c-1ed114a056bc';
+
 /**
- * Minecraft refuses a token from an app registration it does not know, which is the state every
- * new registration starts in. The failure is a bare 403, so it is named here rather than left to
- * read as a network problem.
+ * Minecraft refuses a token from an app registration it has not approved with a bare 403, so it is named here rather
+ * than left to read as a network problem.
  */
 class NotApprovedError extends Error {
 	constructor(clientId) {
 		super(
 			[
-				'Minecraft refused this app registration.',
+				'Minecraft refused this sign in: its Azure app is not approved for Minecraft.',
 				`  Azure app: ${clientId}`,
-				'  A new registration cannot use the Minecraft API until it is reviewed.',
-				'  Apply at https://aka.ms/mce-reviewappid, then try again.',
-				'  Until then, instances launch offline.',
+				'  Instances still launch offline.',
 			].join('\n'),
 		);
 	}
@@ -60,11 +60,7 @@ class NotApprovedError extends Error {
 export const signInLines = ({ verification_uri: uri, user_code: code }) => [`link ${uri}`, `code ${code}`];
 
 /** Ask Microsoft for a code the user types into their browser, then wait for them to do it. */
-export const signIn = async ({ clientId, onPrompt, qr = true } = {}) => {
-	if (!clientId) {
-		throw new Error('No Azure client id configured. Set one with "ender config clientId <id>".');
-	}
-
+export const signIn = async ({ clientId = CLIENT_ID, onPrompt, qr = true } = {}) => {
 	const start = await (await fetchWithRetry(DEVICE_CODE, form({ client_id: clientId, scope: SCOPE }))).json();
 
 	(onPrompt ?? printSignIn)(start, { qr });

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 
-import { printSignIn, signInLines } from '../src/auth/microsoft';
+import { CLIENT_ID, printSignIn, signIn, signInLines } from '../src/auth/microsoft';
 import { offlineUuid } from '../src/auth/offline';
 
 let home;
@@ -225,10 +225,12 @@ describe('account listing for scripts', () => {
 		expect(lines.some(line => line.includes('No accounts yet'))).toBe(true);
 	});
 
-	test('says Microsoft sign in needs a registration of your own when ender has none', async () => {
+	test('offers Microsoft sign in with no setup first', async () => {
 		const lines = await captured({});
 
-		expect(lines.some(line => line.includes('app registration of your own'))).toBe(true);
+		expect(
+			lines.some(line => line.includes('ender account add ') && line.includes('sign in to a Microsoft account')),
+		).toBe(true);
 	});
 });
 
@@ -435,7 +437,6 @@ describe('who plays, as a script or a page reads it', () => {
 
 		expect(lines.join('')).not.toContain('secret');
 		expect(JSON.parse(lines.join(''))).toEqual({
-			signIn: false,
 			fallback: 'Player',
 			accounts: [{ name: 'player', kind: 'microsoft', uuid: 'abc', active: true }],
 		});
@@ -496,5 +497,44 @@ describe('the lines a Microsoft sign in prints', () => {
 
 		expect(lines).toEqual(['link https://www.microsoft.com/link', 'code ABCD1234']);
 		expect(lines.join('\n')).not.toContain('otc');
+	});
+});
+
+describe("ender's own app registration", () => {
+	test('is the one every sign in asks Microsoft with', async () => {
+		const real = globalThis.fetch;
+		const asked = [];
+
+		globalThis.fetch = async (url, options) => {
+			asked.push(new URLSearchParams(options.body).get('client_id'));
+
+			throw new Error('stop here');
+		};
+
+		try {
+			await signIn({ onPrompt: () => {} }).catch(() => {});
+		} finally {
+			globalThis.fetch = real;
+		}
+
+		expect(asked[0]).toBe(CLIENT_ID);
+	});
+
+	test('leaves no client id to configure, even one an older config still holds', async () => {
+		await Bun.write(join(home, 'config.json'), JSON.stringify({ clientId: 'someone-elses' }));
+
+		const { readConfig } = await import('../src/config');
+		const { config } = await import('../src/commands/settings');
+		const real = console.log;
+
+		console.log = () => {};
+
+		try {
+			expect(await config({ positionals: ['clientId', 'another'] })).toBe(1);
+		} finally {
+			console.log = real;
+		}
+
+		expect(await readConfig()).not.toHaveProperty('clientId');
 	});
 });

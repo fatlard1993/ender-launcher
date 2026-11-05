@@ -79,9 +79,9 @@ export const play = async ({ positionals, flags }) => {
 	const settings = settingsFor(manifest, config);
 
 	if ((await accounts.readAccounts()).active === undefined && !settings.account) {
-		const signIn = config.clientId ? ', or sign in with "ender account add"' : '';
-
-		warn(`Launching as "${DEFAULT_PLAYER}". Choose a name with "ender account add --offline <name>"${signIn}.`);
+		warn(
+			`Launching as "${DEFAULT_PLAYER}". Choose a name with "ender account add --offline <name>", or sign in with "ender account add".`,
+		);
 	}
 
 	if (flags.update) await updateBeforeStart(manifest, config, flags);

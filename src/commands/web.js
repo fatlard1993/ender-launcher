@@ -73,9 +73,6 @@ export const installedWhere = () => ({
 /** The binary of the app bundle this ender runs as, the one a Mac's Terminal can be given; undefined outside one. */
 const bundledBinary = () => (appBundleOf() ? process.execPath : undefined);
 
-/** An Azure application id: a guid. */
-const CLIENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /**
  * What `ask` answered within the last `fresh` milliseconds, asked again after, or at once when told `again`; a failure
  * is not kept.
@@ -274,19 +271,6 @@ export const webApi = ({
 
 		if (area === 'sign-in' && name === undefined && method === 'POST') {
 			return startJob(['account', 'add', '--no-qr'], { title: 'Signing in to Microsoft' });
-		}
-
-		if (area === 'sign-in' && name === 'client-id' && method === 'PUT') {
-			const { clientId } = await bodyOf(request);
-
-			if (typeof clientId !== 'string' || !CLIENT_ID.test(clientId.trim())) {
-				return json(
-					{ error: "A client id is the Application (client) ID on the app's Azure page, like 1a2b3c4d-..." },
-					400,
-				);
-			}
-
-			return changeThen(['config', 'clientId', clientId.trim()], players);
 		}
 
 		if (area === 'upgrade' && name === undefined && method === 'GET') {
