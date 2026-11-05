@@ -119,6 +119,7 @@ const defaultPrompt = (start, { qr = true } = {}) => {
 
 	info(`  Scan the code above, or open ${paint.cyan(start.verification_uri)}`);
 	info(`  and enter ${paint.bold(start.user_code)}`);
+	info(paint.dim(`  link ${verificationLink(start)}`));
 	info('');
 	info(paint.dim('  Waiting for you to finish. Leave this running: the account is only saved'));
 	info(paint.dim('  once the browser is done and three more exchanges have completed.'));

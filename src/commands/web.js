@@ -61,6 +61,9 @@ export const collect = async (argv, options = {}) => {
 
 const json = (body, status = 200) => Response.json(body, { status });
 
+/** An Azure application id: a guid. */
+const CLIENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const bodyOf = request => request.json().catch(() => ({}));
 
 /** A pack import fetches: a gist, a GitHub repository, or a link over https; never a file on this machine. */
@@ -227,6 +230,19 @@ export const webApi = ({
 
 		if (area === 'sign-in' && name === undefined && method === 'POST') {
 			return startJob(['account', 'add', '--no-qr'], { title: 'Signing in to Microsoft' });
+		}
+
+		if (area === 'sign-in' && name === 'client-id' && method === 'PUT') {
+			const { clientId } = await bodyOf(request);
+
+			if (typeof clientId !== 'string' || !CLIENT_ID.test(clientId.trim())) {
+				return json(
+					{ error: "A client id is the Application (client) ID on the app's Azure page, like 1a2b3c4d-..." },
+					400,
+				);
+			}
+
+			return changeThen(['config', 'clientId', clientId.trim()], players);
 		}
 
 		if (area === 'asks' && name === undefined && method === 'POST') {

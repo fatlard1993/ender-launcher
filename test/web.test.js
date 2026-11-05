@@ -724,3 +724,27 @@ describe('opened from a desktop icon', () => {
 		expect(jobs.busy()).toBe(false);
 	});
 });
+
+describe('signing in to Microsoft from the page', () => {
+	test("takes an Azure app's client id, and nothing that is not one", async () => {
+		const ran = [];
+		const api = webApi({
+			run: async args => {
+				ran.push(args);
+
+				return { code: 0, stdout: JSON.stringify({ signIn: true, fallback: 'Player', accounts: [] }), stderr: '' };
+			},
+		});
+		const put = clientId =>
+			api(request('/api/sign-in/client-id', { method: 'PUT', origin: ORIGIN, body: JSON.stringify({ clientId }) }));
+
+		expect((await put('--offline')).status).toBe(400);
+		expect((await put('not-a-guid')).status).toBe(400);
+		expect(ran).toEqual([]);
+
+		const answered = await put(' C36A9FB6-4F2A-41FF-90BD-AE7CC92031EB ');
+
+		expect((await answered.json()).signIn).toBe(true);
+		expect(ran[0]).toEqual(['config', 'clientId', 'C36A9FB6-4F2A-41FF-90BD-AE7CC92031EB']);
+	});
+});
