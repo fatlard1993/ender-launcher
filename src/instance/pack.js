@@ -282,7 +282,11 @@ export const unpackInto = async (path, pack, gameDir) => {
 
 		const jars = (await listEntries(path)).filter(entry => entry.endsWith('.jar'));
 
-		for (const jar of jars) await extractArchive(path, target, { prefix: jar.replace(/[^/]+$/, '') });
+		for (const jar of jars) {
+			const name = basename(jar);
+
+			await extractArchive(path, target, { prefix: jar.slice(0, -name.length), keep: inner => inner === name });
+		}
 
 		return jars.map(jar => basename(jar));
 	}

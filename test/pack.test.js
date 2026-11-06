@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
@@ -368,5 +368,24 @@ describe('a packwiz pack', () => {
 		});
 
 		expect((await readPack(path, {})).manifest.mods).toEqual([{ source: 'curseforge', id: '328085', version: '1' }]);
+	});
+});
+
+describe('a bare mods archive', () => {
+	test('lays only its jars into mods/, wherever they sat, and nothing beside them', async () => {
+		const path = await zip('jars-only', async staging => {
+			await mkdir(join(staging, 'extra', 'deeper'), { recursive: true });
+			await writeFile(join(staging, 'a.jar'), 'a');
+			await writeFile(join(staging, 'readme.txt'), 'read me');
+			await writeFile(join(staging, 'extra', 'b.jar'), 'b');
+			await writeFile(join(staging, 'extra', 'notes.md'), 'notes');
+			await writeFile(join(staging, 'extra', 'deeper', 'c.jar'), 'c');
+		});
+		const pack = await readPack(path, { minecraft: '26.3' });
+		const gameDir = join(directory, 'jars-only-game');
+
+		expect((await unpackInto(path, pack, gameDir)).sort()).toEqual(['a.jar', 'b.jar', 'c.jar']);
+		expect((await readdir(join(gameDir, 'mods'))).sort()).toEqual(['a.jar', 'b.jar', 'c.jar']);
+		expect(await readdir(gameDir)).toEqual(['mods']);
 	});
 });
