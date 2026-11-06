@@ -16,6 +16,7 @@ import {
 	siteFiles,
 	webApi,
 } from '../src/commands/web';
+import { commandLine } from '../src/cli/index';
 import { KEPT_JOBS, detach, jobRunner } from '../src/jobs';
 
 const ORIGIN = 'http://localhost:7460';
@@ -382,6 +383,58 @@ describe('ender web', () => {
 			await expect(siteModule(empty)).rejects.toThrow('has no index.html');
 		} finally {
 			await rm(empty, { recursive: true, force: true });
+		}
+	});
+});
+
+describe('every line the page has ender run', () => {
+	test('is a command ender declares, with flags its own parser takes, so a renamed flag cannot break the page alone', async () => {
+		const ran = [];
+		const { jobs, started } = await fakeJobs();
+		const api = webApi({
+			jobs,
+			run: async args => {
+				ran.push(args);
+
+				return { code: 0, stdout: '{}', stderr: '' };
+			},
+		});
+		const send = (method, path, body) =>
+			api(request(path, { method, origin: ORIGIN, body: body === undefined ? undefined : JSON.stringify(body) }));
+
+		await api(request('/api/instances'));
+		await api(request('/api/instances/family'));
+		await api(request('/api/players'));
+		await send('POST', '/api/players', { name: 'Steve' });
+		await send('POST', '/api/players/Steve/use');
+		await send('DELETE', '/api/players/Steve');
+		await send('PUT', '/api/instances/family/player', { player: 'Steve' });
+		await send('PUT', '/api/instances/family/player', { player: null });
+		await send('PUT', '/api/sign-in/client-id', { clientId: 'c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb' });
+		await send('POST', '/api/instances/family/gist');
+		await send('POST', '/api/instances/family/gist', { fresh: true });
+		await send('POST', '/api/sign-in');
+		await send('POST', '/api/import', { source: 'gh:me/pack' });
+		await send('POST', '/api/instances', { name: 'family', minecraft: '26.3', loader: 'fabric', specs: ['mr:sodium'] });
+		await send('POST', '/api/instances/family/add', { specs: ['gh:me/mod'], build: true });
+		await send('POST', '/api/instances/family/drop', { specs: ['gh:me/mod'] });
+		await send('POST', '/api/instances/family/update');
+		await send('POST', '/api/instances/family/launch', { update: true });
+		await send('DELETE', '/api/instances/family');
+		await send('POST', '/api/upgrade');
+		await Promise.all(jobs.list().map(job => job.finished));
+
+		const lines = [...ran, ...started];
+
+		expect(lines.length).toBeGreaterThanOrEqual(21);
+
+		for (const argv of lines) {
+			const line = commandLine(argv);
+
+			expect(line.command, `ender ${argv.join(' ')} names no command`).toBeDefined();
+			expect(line.unknownSubcommand, `ender ${argv.join(' ')} names no subcommand`).toBeUndefined();
+			expect(typeof line.definition.run, `ender ${argv.join(' ')} has nothing to run`).toBe('function');
+			expect(() => line.parse(), `ender ${argv.join(' ')} does not parse`).not.toThrow();
 		}
 	});
 });

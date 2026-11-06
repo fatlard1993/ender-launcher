@@ -35,6 +35,41 @@ const startFromIcon = async () => {
 	return 0;
 };
 
+/**
+ * The command a line names and the flags it may carry: a subcommand's own definition under the name actually typed,
+ * with the parent's usage replaced; `unknownSubcommand` when a parent with subcommands was given a word that is none.
+ */
+export const commandLine = argv => {
+	const [name, ...rest] = argv;
+	const command = Object.hasOwn(commands, name) ? commands[name] : undefined;
+
+	if (command === undefined) return { name, command };
+
+	let definition = command;
+	let args = rest;
+	let title = name;
+	let unknownSubcommand;
+
+	if (command.subcommands) {
+		const [sub, ...subRest] = rest;
+
+		if (sub !== undefined && Object.hasOwn(command.subcommands, sub)) {
+			definition = { ...command, usage: `ender ${name} ${sub}`, subcommands: undefined, ...command.subcommands[sub] };
+			args = subRest;
+			title = `${name} ${sub}`;
+		} else if (sub !== undefined && !sub.startsWith('-')) unknownSubcommand = sub;
+	}
+
+	return {
+		name,
+		command,
+		definition,
+		title,
+		unknownSubcommand,
+		parse: () => parseArgv(args, { ...GLOBAL_FLAGS, ...definition.flags }),
+	};
+};
+
 export const run = async argv => {
 	if (startedAsApp(argv)) return startFromIcon();
 
@@ -58,7 +93,7 @@ export const run = async argv => {
 		return 0;
 	}
 
-	const command = Object.hasOwn(commands, name) ? commands[name] : undefined;
+	const { command, definition, title, unknownSubcommand, parse } = commandLine(argv);
 
 	if (command !== undefined) await adoptConfiguredName();
 
@@ -68,32 +103,20 @@ export const run = async argv => {
 		return 1;
 	}
 
-	let definition = command;
-	let argumentsForCommand = rest;
-	let title = name;
+	if (unknownSubcommand !== undefined) {
+		fail(`"${name}" has no subcommand "${unknownSubcommand}"`);
+		commandHelp(name, command);
 
-	if (command.subcommands) {
-		const [sub, ...subRest] = rest;
-
-		if (sub !== undefined && Object.hasOwn(command.subcommands, sub)) {
-			// The child's own usage, under the name actually typed, rather than the parent's page.
-			definition = { ...command, usage: `ender ${name} ${sub}`, subcommands: undefined, ...command.subcommands[sub] };
-			argumentsForCommand = subRest;
-			title = `${name} ${sub}`;
-		} else if (sub !== undefined && !sub.startsWith('-')) {
-			fail(`"${name}" has no subcommand "${sub}"`);
-			commandHelp(name, command);
-
-			return 1;
-		} else if (command.run === undefined && !rest.includes('--help') && !rest.includes('-h')) {
-			commandHelp(name, command);
-
-			return 1;
-		}
+		return 1;
 	}
 
-	const spec = { ...GLOBAL_FLAGS, ...definition.flags };
-	const parsed = parseArgv(argumentsForCommand, spec);
+	if (definition.run === undefined && !rest.includes('--help') && !rest.includes('-h')) {
+		commandHelp(name, command);
+
+		return 1;
+	}
+
+	const parsed = parse();
 
 	if (parsed.flags.help) {
 		commandHelp(title, definition);
