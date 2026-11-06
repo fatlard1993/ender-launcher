@@ -86,6 +86,17 @@ describe('a repository with only its source', () => {
 		expect(await allowBuilding('github:a/b', false)).toBe(false);
 	});
 
+	test('with releases for other versions says so, rather than that it has none', async () => {
+		const released = { ...record, releases: [{ tag: 'v1', assets: [] }] };
+
+		await expect(
+			resolveFromSource(released, entry, { minecraft: '1.21.4', loader: 'fabric', buildMissing: false }),
+		).rejects.toThrow('github:a/b has no release for Minecraft 1.21.4 on fabric, only its source');
+		await expect(
+			resolveFromSource(record, entry, { minecraft: '1.21.4', loader: 'fabric', buildMissing: false }),
+		).rejects.toThrow('github:a/b has no built release, only its source');
+	});
+
 	test('is no source at all when the index knows none', async () => {
 		expect(await resolveFromSource({ releases: [] }, entry, {})).toBeUndefined();
 	});

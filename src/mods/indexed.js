@@ -148,16 +148,21 @@ export const resolveFromSource = async (record, entry, context) => {
 
 	const key = `${entry.source}:${entry.id}`;
 	const { minecraft, loader } = context;
+	// Reached once no release fit: a repository with releases has them for other versions, one without has none at all.
+	const lacks =
+		record.releases.length > 0
+			? `has no release for Minecraft ${minecraft ?? 'any version'} on ${loader ?? 'any loader'}`
+			: 'has no built release';
 
 	if ((source.mods ?? []).length > 0 && catalog.fit(source.mods, { minecraft, loader }) === 0) {
 		throw new Error(
-			`${key} has no built release, and its source builds for Minecraft ${source.minecraft ?? 'another version'} on ${source.loader ?? 'another loader'}`,
+			`${key} ${lacks}, and its source builds for Minecraft ${source.minecraft ?? 'another version'} on ${source.loader ?? 'another loader'}`,
 		);
 	}
 
 	if (!(await allowBuilding(key, context.buildMissing))) {
 		throw new Error(
-			`${key} has no built release, only its source. Building it runs its gradle scripts on this machine with your permissions; ender add ${key} --build allows that for it from now on.`,
+			`${key} ${lacks}, only its source. Building it runs its gradle scripts on this machine with your permissions; ender add ${key} --build allows that for it from now on.`,
 		);
 	}
 
