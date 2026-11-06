@@ -30,9 +30,7 @@ const defaultOnBooleans = Object.entries(commands).flatMap(([name, command]) =>
 );
 
 describe('flag help', () => {
-	// Help renders a boolean that defaults on as its negation, so the sentence beside it has
-	// to describe the negation too. It used to print the positive one, which made every such
-	// row say the opposite of what typing it does.
+	// Help renders a boolean that defaults on as its negation, so the sentence beside it describes the negation.
 	test('every default-on boolean carries the description of its negation', () => {
 		expect(defaultOnBooleans.length).toBeGreaterThan(0);
 
@@ -41,8 +39,6 @@ describe('flag help', () => {
 		}
 	});
 
-	// The invariant the renderer actually has to keep, asserted against its output rather than
-	// its inputs: no --no- row may print the sentence describing the positive action.
 	test('no --no- row prints its positive description', () => {
 		for (const [name, command] of Object.entries(commands)) {
 			for (const line of rendered(name, command)) {

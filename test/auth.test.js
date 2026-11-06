@@ -189,10 +189,7 @@ describe('who an instance plays as', () => {
 });
 
 describe('account listing for scripts', () => {
-	// A provisioning script decides whether to add an offline identity by looking at this
-	// output. Reading the human listing meant matching "a marker, a space, a word", which
-	// the indented help under "No accounts yet." also satisfies - so a machine with no
-	// account at all read as already set up, and never got one.
+	// A provisioning script branches on this output, so it is a line to test, not prose to match by shape.
 	const captured = async flags => {
 		const { ls } = await import('../src/commands/account');
 		const lines = [];

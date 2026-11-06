@@ -181,8 +181,6 @@ describe('launch intent gates the version’s optional arguments', () => {
 		},
 	];
 
-	// A plan built without features drops every optional argument, which is how joining a server
-	// on launch silently did nothing.
 	test('asking for nothing yields only the unconditional arguments', () => {
 		expect(applicableArguments(gameArgs)).toEqual(['--username', '${auth_player_name}']);
 	});
