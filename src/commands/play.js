@@ -1,16 +1,15 @@
 import { mkdir } from 'node:fs/promises';
 
-import { profileFor } from '../auth';
+import { accounts, profileFor } from '../auth';
 import { DEFAULT_PLAYER } from '../auth/adopt';
-import { readConfig } from '../config';
 import * as instances from '../instance';
 import { installPlan } from '../install';
 import { launch } from '../launch';
 import { resolvePlan } from '../meta/resolve';
 import { done, info, paint, step, warn } from '../out';
-import * as server from '../server';
 import { settingsFor, targetInstance } from './context';
 import { updateBeforeStart } from './mods';
+import { provisionServer, startServer } from './serve';
 
 const planFor = async (manifest, side, features) =>
 	resolvePlan({
@@ -55,7 +54,7 @@ export const install = async ({ positionals, flags }) => {
 	const { manifest } = await targetInstance(flags.instance ?? positionals[0]);
 
 	if (manifest.type === 'server') {
-		await server.provision(manifest);
+		await provisionServer(manifest);
 
 		done(`${manifest.name} is provisioned`);
 
@@ -75,11 +74,9 @@ export const install = async ({ positionals, flags }) => {
 export const play = async ({ positionals, flags }) => {
 	const { manifest, config } = await targetInstance(flags.instance ?? positionals[0]);
 
-	if (manifest.type === 'server') return server.run(manifest, settingsFor(manifest, config));
+	if (manifest.type === 'server') return startServer(manifest, config, flags);
 
 	const settings = settingsFor(manifest, config);
-
-	const { accounts } = await import('../auth');
 
 	if ((await accounts.readAccounts()).active === undefined && !settings.account) {
 		const signIn = config.clientId ? ', or sign in with "ender account add"' : '';
@@ -104,7 +101,6 @@ export const play = async ({ positionals, flags }) => {
 		...settings,
 		quickPlay: intent.quickPlay,
 		resolution: intent.resolution,
-		memory: settings.memory ?? (await readConfig()).memory,
 		extraJvmArgs: [...(manifest.jvmArgs ?? [])],
 		manageJava: config.manageJava !== false,
 		dryRun: flags.dryRun,

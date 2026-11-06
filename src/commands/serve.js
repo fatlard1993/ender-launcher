@@ -4,15 +4,30 @@ import * as server from '../server';
 import { settingsFor, targetInstance } from './context';
 import { updateBeforeStart } from './mods';
 
+/** Everything a server instance needs on disk, the EULA accepted as running it would. */
+export const provisionServer = async manifest => {
+	await server.acceptEula(manifest);
+	await server.provision(manifest);
+};
+
 export const provision = async ({ positionals, flags }) => {
 	const { manifest } = await targetInstance(flags.instance ?? positionals[0]);
 
-	await server.acceptEula(manifest);
-	await server.provision(manifest);
+	await provisionServer(manifest);
 
 	done(`${manifest.name} is provisioned`);
 
 	return 0;
+};
+
+/** Start a server instance, from ender server start or ender launch alike: EULA accepted, warned of online-mode, updated when asked. */
+export const startServer = async (manifest, config, flags) => {
+	await server.acceptEula(manifest);
+	await server.warnIfUnreachableOffline(manifest);
+
+	if (flags.update) await updateBeforeStart(manifest, config, flags);
+
+	return server.run(manifest, settingsFor(manifest, config));
 };
 
 export const start = async ({ positionals, flags }) => {
@@ -20,12 +35,7 @@ export const start = async ({ positionals, flags }) => {
 
 	if (manifest.type !== 'server') throw new Error(`${manifest.name} is a client instance`);
 
-	await server.acceptEula(manifest);
-	await server.warnIfUnreachableOffline(manifest);
-
-	if (flags.update) await updateBeforeStart(manifest, config, flags);
-
-	return server.run(manifest, settingsFor(manifest, config));
+	return startServer(manifest, config, flags);
 };
 
 export const offline = async ({ positionals, flags }) => {
