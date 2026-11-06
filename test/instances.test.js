@@ -130,3 +130,36 @@ describe('what deleting kept', () => {
 		expect(await kept.keptFolders()).toEqual([]);
 	});
 });
+
+describe('settings', () => {
+	test('a window size set on an instance is kept where the launch reads it, as numbers', async () => {
+		const { set } = await import('../src/commands/instances');
+
+		await instances.create('sized');
+		await quietly(() => set({ positionals: ['window.width', '1280'], flags: { instance: 'sized' } }));
+		await quietly(() => set({ positionals: ['window.height', '720'], flags: { instance: 'sized' } }));
+		await quietly(() => set({ positionals: ['memory.max', '8192'], flags: { instance: 'sized' } }));
+
+		const manifest = await instances.read('sized');
+
+		expect(manifest.window).toEqual({ width: 1280, height: 720 });
+		expect(manifest.memory).toEqual({ min: 512, max: 8192 });
+		expect(manifest['window.width']).toBeUndefined();
+		await expect(set({ positionals: ['window.width', 'wide'], flags: { instance: 'sized' } })).rejects.toThrow(
+			'needs a number',
+		);
+	});
+
+	test('a global switch is kept as a boolean, so "false" turns it off', async () => {
+		const { config } = await import('../src/commands/settings');
+		const { readConfig } = await import('../src/config');
+
+		await quietly(() => config({ positionals: ['prerelease', 'true'] }));
+		expect((await readConfig()).prerelease).toBe(true);
+		await quietly(() => config({ positionals: ['prerelease', 'false'] }));
+		expect((await readConfig()).prerelease).toBe(false);
+		await quietly(() => config({ positionals: ['manageJava', 'false'] }));
+		expect((await readConfig()).manageJava).toBe(false);
+		await expect(config({ positionals: ['manageJava', 'off'] })).rejects.toThrow('true or false');
+	});
+});

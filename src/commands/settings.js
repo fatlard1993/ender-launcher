@@ -7,7 +7,7 @@ import { done, info, paint, warn } from '../out';
 
 const NUMERIC = new Set(['memory.min', 'memory.max']);
 
-const BOOLEAN = new Set(['manageJava']);
+const BOOLEAN = new Set(['manageJava', 'prerelease']);
 
 /** Who plays is an account now; a username set the old way becomes the offline account of that name, and is used. */
 const playAs = async ([name]) => {
@@ -74,7 +74,11 @@ export const config = async ({ positionals }) => {
 
 		// Stored unchecked, this becomes the literal flag -XmxNaNM at the next launch.
 		if (!Number.isFinite(value)) throw new Error(`${key} needs a number, not "${raw}"`);
-	} else if (BOOLEAN.has(key)) value = raw !== 'false';
+	} else if (BOOLEAN.has(key)) {
+		if (raw !== 'true' && raw !== 'false') throw new Error(`${key} is true or false, not "${raw}"`);
+
+		value = raw === 'true';
+	}
 
 	await updateConfig(tail ? { [head]: { ...current[head], [tail]: value } } : { [key]: value });
 

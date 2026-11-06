@@ -172,7 +172,13 @@ export const info_ = async ({ positionals, flags }) => {
 	return 0;
 };
 
-const NUMERIC = new Set(['memory.min', 'memory.max']);
+/** Settings kept as a number in a group of the manifest, and what the rest of the group is when it is first set. */
+const NUMERIC = {
+	'memory.min': { min: 512, max: 4096 },
+	'memory.max': { min: 512, max: 4096 },
+	'window.width': {},
+	'window.height': {},
+};
 
 const SETTABLE = new Set([
 	'minecraft',
@@ -230,13 +236,13 @@ export const set = async ({ positionals, flags }) => {
 		manifest.account = raw === 'none' ? undefined : raw;
 	} else if (key === 'gameDir') {
 		manifest.gameDir = resolve(raw);
-	} else if (NUMERIC.has(key)) {
-		const [, field] = key.split('.');
+	} else if (NUMERIC[key]) {
+		const [group, field] = key.split('.');
 		const value = Number(raw);
 
 		if (!Number.isFinite(value)) throw new Error(`${key} needs a number, not "${raw}"`);
 
-		manifest.memory = { ...(manifest.memory ?? { min: 512, max: 4096 }), [field]: value };
+		manifest[group] = { ...(manifest[group] ?? NUMERIC[key]), [field]: value };
 	} else manifest[key] = raw;
 
 	await instances.write(manifest);
