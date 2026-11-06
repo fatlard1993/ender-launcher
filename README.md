@@ -82,7 +82,7 @@ Deleting an instance keeps its game directory, worlds included: one inside the i
 | CurseForge `.zip` | `manifest.json` + `overrides/` | version, loader, and each mod by project and file id |
 | A plain zip of jars | jars, and nothing else | lays them in `mods/`; needs `--minecraft`, because nothing in it says |
 
-Whatever a pack carries as loose files is unpacked into the game directory, then offered to Modrinth by hash. A bundled jar that turns out to be a published mod becomes a declared, updatable entry; one that does not is listed and left alone, the same as any jar you dropped in yourself. A pack's `client`/`server` markings are honored, so importing a pack into a server instance leaves out what it says is client-only.
+Whatever a pack carries as loose files is unpacked into the game directory, then offered to Modrinth by hash. A bundled jar that turns out to be a published mod becomes a declared, updatable entry; one that does not is listed and left alone, the same as any jar you dropped in yourself. A pack's `client`/`server` markings are honored: `ender import pack.mrpack --server` makes a server instance and leaves out what the pack says is client-only.
 
 ### Keeping clients on a pack
 

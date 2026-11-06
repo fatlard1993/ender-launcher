@@ -354,10 +354,12 @@ const activateIfFirst = async name => {
 };
 
 const importPack = async (path, flags, target = path) => {
+	const side = flags.server ? 'server' : 'client';
 	const pack = await readPack(path, {
 		name: flags.name,
 		minecraft: flags.minecraft,
 		loader: flags.loader ? { type: flags.loader } : undefined,
+		side,
 	});
 
 	assertKnownLoader(pack.manifest.loader);
@@ -378,6 +380,7 @@ const importPack = async (path, flags, target = path) => {
 
 	const manifest = await instances.create(pack.manifest.name, {
 		...pack.manifest,
+		type: side,
 		...(pack.kind === 'ender' ? { pack: { source: sourceOf(target), mods: pack.manifest.mods.map(entryKey) } } : {}),
 		...(flags.gameDir ? { gameDir: resolve(flags.gameDir) } : {}),
 	});
@@ -422,6 +425,8 @@ const importPack = async (path, flags, target = path) => {
 };
 
 const importPrismInstance = async (directory, flags) => {
+	if (flags.server) throw new Error('A Prism instance is a client; ender new <name> --server makes a server');
+
 	step(`Reading ${directory}`);
 
 	const { manifest, unmatched } = await fromPrism(directory, { name: flags.name });

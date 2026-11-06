@@ -110,6 +110,10 @@ export const commands = {
 			gameDir: { description: 'Use an existing directory as the game directory' },
 			minecraft: { alias: 'm', description: 'Game version, for an archive that names none' },
 			loader: { alias: 'l', description: 'Loader, for an archive that names none' },
+			server: {
+				type: 'boolean',
+				description: 'Make it a server instance, leaving out what the pack marks client-only',
+			},
 			sync: { type: 'boolean', description: 'Fetch the mods it names straight away, as ender sync does' },
 		},
 		run: instanceCommands.importAny,

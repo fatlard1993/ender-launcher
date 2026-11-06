@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
@@ -7,6 +7,7 @@ import { clone } from '../src/commands/instances';
 import * as kept from '../src/commands/kept';
 import * as instances from '../src/instance';
 import { paths } from '../src/paths';
+import { rawZip } from './jars';
 
 let home;
 let previous;
@@ -161,5 +162,40 @@ describe('settings', () => {
 		await quietly(() => config({ positionals: ['manageJava', 'false'] }));
 		expect((await readConfig()).manageJava).toBe(false);
 		await expect(config({ positionals: ['manageJava', 'off'] })).rejects.toThrow('true or false');
+	});
+});
+
+describe('importing a pack', () => {
+	const mrpack = () =>
+		rawZip({
+			'modrinth.index.json': JSON.stringify({
+				name: 'Both Sides',
+				dependencies: { minecraft: '26.3', 'fabric-loader': '0.19.5' },
+				files: [
+					{ path: 'mods/c.jar', downloads: ['https://e/c.jar'], env: { client: 'required', server: 'unsupported' } },
+					{ path: 'mods/s.jar', downloads: ['https://e/s.jar'], env: { client: 'unsupported', server: 'required' } },
+					{ path: 'mods/b.jar', downloads: ['https://e/b.jar'] },
+				],
+			}),
+		});
+
+	test('as a server takes the server side of it, and is a server instance; a client import takes the other', async () => {
+		const { importAny } = await import('../src/commands/instances');
+		const path = join(home, 'both.mrpack');
+
+		await writeFile(path, mrpack());
+		await quietly(() => importAny({ positionals: [path], flags: { server: true } }));
+
+		const server = await instances.read('both-sides');
+
+		expect(server.type).toBe('server');
+		expect(server.mods.map(mod => mod.file).sort()).toEqual(['b.jar', 's.jar']);
+
+		await quietly(() => importAny({ positionals: [path], flags: { name: 'client' } }));
+
+		const client = await instances.read('client');
+
+		expect(client.type).toBe('client');
+		expect(client.mods.map(mod => mod.file).sort()).toEqual(['b.jar', 'c.jar']);
 	});
 });
