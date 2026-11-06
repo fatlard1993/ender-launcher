@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { listEntries, readEntryJson } from '../src/archive';
 import { packFrom, parseEnderPack } from '../src/instance/enderPack';
 import { detectPack, readPack, unpackInto } from '../src/instance/pack';
+import { zipped } from './jars';
 
 let directory;
 
@@ -16,9 +17,8 @@ const zip = async (name, build) => {
 	await build(staging);
 
 	const archive = join(directory, `${name}.zip`);
-	const process_ = Bun.spawn(['zip', '-qr', archive, '.'], { cwd: staging, stdout: 'ignore', stderr: 'ignore' });
 
-	await process_.exited;
+	await zipped(staging, archive);
 
 	return archive;
 };

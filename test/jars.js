@@ -63,11 +63,20 @@ export const jar = async (directory, files) => {
 	}
 
 	const archive = join(directory, `jar-${counter}.jar`);
-	const process_ = Bun.spawn(['zip', '-qr', archive, '.'], { cwd: staging, stdout: 'ignore', stderr: 'ignore' });
 
-	await process_.exited;
+	await zipped(staging, archive);
 
 	return archive;
+};
+
+/** Zip a directory's contents with the system zip, deflated as published jars are, or say what is missing. */
+export const zipped = async (directory, archive) => {
+	if (Bun.which('zip') === null) throw new Error('These tests build jars with the system zip; install zip to run them');
+
+	const child = Bun.spawn(['zip', '-qr', archive, '.'], { cwd: directory, stdout: 'ignore', stderr: 'pipe' });
+	const said = await new Response(child.stderr).text();
+
+	if ((await child.exited) !== 0) throw new Error(`zip could not write ${archive}: ${said.trim()}`);
 };
 
 const u4 = value => {
