@@ -115,6 +115,23 @@ describe('a first run, with no instance yet', () => {
 		expect(lines.some(line => line.includes('Instances'))).toBe(false);
 	});
 
+	test('a command or subcommand is one ender declares, not a property every object has', async () => {
+		const lines = [];
+		const real = console.error;
+
+		console.error = (...parts) => lines.push(parts.join(' '));
+
+		try {
+			expect(await run(['constructor'])).toBe(1);
+			expect(await run(['account', 'constructor'])).toBe(1);
+		} finally {
+			console.error = real;
+		}
+
+		expect(lines[0]).toContain('Unknown command "constructor"');
+		expect(lines[1]).toContain('no subcommand "constructor"');
+	});
+
 	test('ender help still lists every command with no instance yet', async () => {
 		const lines = [];
 		const real = console.log;

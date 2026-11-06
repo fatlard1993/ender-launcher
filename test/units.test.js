@@ -92,9 +92,17 @@ describe('argument parsing', () => {
 		expect(parseArgv(['--no-dry-run'], spec).flags.dryRun).toBe(false);
 	});
 
-	test('reads a value inline or as the next token', () => {
+	test('reads a value inline or as the next token, an inline one whole past its first =', () => {
 		expect(parseArgv(['--limit=3'], spec).flags.limit).toBe(3);
 		expect(parseArgv(['--limit', '3'], spec).flags.limit).toBe(3);
+		expect(parseArgv(['--instance=a=b'], spec).flags.instance).toBe('a=b');
+		expect(() => parseArgv(['--verbose=yes'], spec)).toThrow('takes no value');
+	});
+
+	test('a flag that wants a number refuses a word, rather than carrying NaN into the command', () => {
+		expect(() => parseArgv(['--limit', 'many'], spec)).toThrow('--limit wants a number, not "many"');
+		expect(() => parseArgv(['--limit='], spec)).toThrow('wants a number');
+		expect(() => parseArgv(['-n', 'x'], spec)).toThrow('-n wants a number');
 	});
 
 	test('groups short booleans and lets the last one take a value', () => {

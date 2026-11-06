@@ -58,7 +58,7 @@ export const run = async argv => {
 		return 0;
 	}
 
-	const command = commands[name];
+	const command = Object.hasOwn(commands, name) ? commands[name] : undefined;
 
 	if (command !== undefined) await adoptConfiguredName();
 
@@ -75,7 +75,7 @@ export const run = async argv => {
 	if (command.subcommands) {
 		const [sub, ...subRest] = rest;
 
-		if (sub !== undefined && command.subcommands[sub]) {
+		if (sub !== undefined && Object.hasOwn(command.subcommands, sub)) {
 			// The child's own usage, under the name actually typed, rather than the parent's page.
 			definition = { ...command, usage: `ender ${name} ${sub}`, subcommands: undefined, ...command.subcommands[sub] };
 			argumentsForCommand = subRest;

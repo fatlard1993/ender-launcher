@@ -28,27 +28,14 @@ const planFor = async (manifest, side, features) =>
  * hides behind a rule, so asking for it means turning the rule on and supplying the value it
  * names. Without both, the arguments are dropped and the game opens at the title screen.
  */
-const intentOf = (manifest, flags) => {
+export const intentOf = (manifest, flags) => {
 	const asked = flags.server;
 	const server = asked ?? manifest.server;
 	const world = flags.world;
-
-	// A flag that wants a number and got a word arrives here as NaN, which is falsy, so the
-	// resolution was dropped and the game opened at whatever size it liked.
-	for (const [name, value] of [
-		['--width', flags.width],
-		['--height', flags.height],
-	]) {
-		if (value !== undefined && !Number.isFinite(value)) throw new Error(`${name} wants a number.`);
-	}
-
 	const width = flags.width ?? manifest.window?.width;
 	const height = flags.height ?? manifest.window?.height;
 	const resolution = width && height ? { width, height } : undefined;
 
-	// Asked for, not merged: `server` also carries the address the instance stores, so
-	// testing that made `--world` on its own fail with a message naming a flag nobody typed
-	// - and made single-player impossible on any instance with a server set.
 	if (asked && world) throw new Error('Pick one: --server joins a server, --world opens a save.');
 
 	return {

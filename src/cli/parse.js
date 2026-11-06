@@ -31,6 +31,16 @@ export const parseArgv = (argv, flagSpec = {}) => {
 		return flagSpec[camel(bare)] ? camel(bare) : undefined;
 	};
 
+	const typed = (name, token, value) => {
+		if (flagSpec[name].type !== 'number') return value;
+
+		const number = Number(value);
+
+		if (value.trim() === '' || !Number.isFinite(number)) throw new Error(`${token} wants a number, not "${value}"`);
+
+		return number;
+	};
+
 	const assign = (name, token) => {
 		const spec = flagSpec[name];
 
@@ -46,7 +56,7 @@ export const parseArgv = (argv, flagSpec = {}) => {
 
 		if (value === undefined) throw new Error(`${token} needs a value`);
 
-		flags[name] = spec.type === 'number' ? Number(value) : value;
+		flags[name] = typed(name, token, value);
 	};
 
 	for (; index < argv.length; ++index) {
@@ -69,13 +79,15 @@ export const parseArgv = (argv, flagSpec = {}) => {
 		}
 
 		if (token.startsWith('--')) {
-			const [head, inline] = token.split('=');
+			const equals = token.indexOf('=');
+			const head = equals === -1 ? token : token.slice(0, equals);
 			const name = nameOf(head);
 
 			if (name === undefined) throw new Error(`Unknown flag "${head}"`);
 
-			if (inline === undefined) assign(name, head);
-			else flags[name] = flagSpec[name].type === 'number' ? Number(inline) : inline;
+			if (equals === -1) assign(name, head);
+			else if (flagSpec[name].type === 'boolean') throw new Error(`${head} takes no value`);
+			else flags[name] = typed(name, head, token.slice(equals + 1));
 
 			continue;
 		}

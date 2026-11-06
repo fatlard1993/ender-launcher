@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 
 import { ensureFile } from '../src/download';
 import { coordinateToPath } from '../src/meta/maven';
+import { intentOf } from '../src/commands/play';
 import { applicableArguments } from '../src/meta/rules';
 import { LOADER_SERVICES, assertKnownLoader } from '../src/meta/resolve';
 import { chooseAsset } from '../src/mods/github';
@@ -200,5 +201,24 @@ describe('launch intent gates the version’s optional arguments', () => {
 		expect(both).toContain('--demo');
 		expect(both).toContain('--width');
 		expect(both).not.toContain('--quickPlayMultiplayer');
+	});
+});
+
+describe('what the game does once it is up', () => {
+	test('a stored server address is joined, and --world alone opens a save instead, on an instance that stores one', () => {
+		const stored = { server: 'play.example.net', window: { width: 1280, height: 720 } };
+
+		expect(intentOf(stored, {}).quickPlay.server).toBe('play.example.net');
+		expect(intentOf(stored, { world: 'Home' })).toMatchObject({
+			quickPlay: { server: 'play.example.net', world: 'Home' },
+			features: { is_quick_play_multiplayer: true, is_quick_play_singleplayer: true },
+		});
+		expect(() => intentOf(stored, { server: 'other', world: 'Home' })).toThrow('Pick one');
+	});
+
+	test('a window size needs both sides, from the flags or the instance', () => {
+		expect(intentOf({ window: { width: 1280 } }, {}).resolution).toBeUndefined();
+		expect(intentOf({ window: { width: 1280 } }, { height: 720 }).resolution).toEqual({ width: 1280, height: 720 });
+		expect(intentOf({}, { width: 800, height: 600 }).features.has_custom_resolution).toBe(true);
 	});
 });
