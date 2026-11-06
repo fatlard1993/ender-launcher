@@ -63,16 +63,19 @@ const sha256 = bytes => new Bun.CryptoHasher('sha256').update(bytes).digest('hex
  * Replace this ender with the newest release's, checked against the sha256 the release lists. A running binary can be
  * renamed over everywhere but Windows, which can only have it moved aside first.
  */
-export const upgrade = async ({ flags }) => {
-	if (!isCompiled()) {
+export const upgrade = async (
+	{ flags },
+	{ compiled = isCompiled(), execPath = process.execPath, platform = process.platform, arch = process.arch } = {},
+) => {
+	if (!compiled) {
 		throw new Error(
 			'This ender runs from a checkout, which git pull brings up to date; upgrade replaces a released binary',
 		);
 	}
 
-	if (isBrewed()) throw new Error('Homebrew installed this ender; brew upgrade ender brings it up to date');
+	if (isBrewed(execPath)) throw new Error('Homebrew installed this ender; brew upgrade ender brings it up to date');
 
-	const app = appBundleOf();
+	const app = appBundleOf(execPath);
 
 	if (app?.includes('/AppTranslocation/')) {
 		throw new Error(
@@ -89,7 +92,7 @@ export const upgrade = async ({ flags }) => {
 		return 0;
 	}
 
-	const binary = binaryFor();
+	const binary = binaryFor(platform, arch);
 	const asset = name => release.assets.find(found => found.name === name)?.browser_download_url;
 
 	if (!asset(binary) || !asset('SHA256SUMS')) throw new Error(`ender ${latest} has no ${binary} to upgrade to`);
@@ -106,13 +109,13 @@ export const upgrade = async ({ flags }) => {
 	if (expected !== sha256(bytes))
 		throw new Error(`${binary} is not the file ender ${latest} lists; nothing was changed`);
 
-	const current = process.execPath;
+	const current = execPath;
 	const incoming = `${current}.new`;
 
 	await Bun.write(incoming, bytes);
 	await chmod(incoming, 0o755);
 
-	if (process.platform === 'win32') {
+	if (platform === 'win32') {
 		await rm(`${current}.old`, { force: true });
 		await rename(current, `${current}.old`);
 	}
