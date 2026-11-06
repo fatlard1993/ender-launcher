@@ -16,7 +16,7 @@ import { fileIndexIssue } from '../indexIssues';
 import { paths } from '../paths';
 import { parseModSpec, refineModSpec, refuseUnplaced, syncInstance } from './mods';
 import { fetchPack, isRemote, resolveSpecs, sourceOf } from './packSource';
-import { NO_INSTANCES, targetInstance, targetName } from './context';
+import { NO_INSTANCES, targetInstance } from './context';
 
 const instanceSummary = (manifest, config) => ({
 	name: manifest.name,
@@ -305,8 +305,12 @@ export const clone = async ({ positionals, flags }) => {
 	return 0;
 };
 
+/** Deleting takes the instance by name: the active one is never deleted for being the one in hand. */
 export const remove = async ({ positionals, flags }) => {
-	const name = await targetName(flags.instance ?? positionals[0]);
+	const name = flags.instance ?? positionals[0];
+
+	if (name === undefined) throw new Error('ender delete <name> [--purge] [--yes]');
+
 	const manifest = await instances.read(name);
 
 	if (!flags.yes) {

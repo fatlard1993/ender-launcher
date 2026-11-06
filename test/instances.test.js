@@ -199,3 +199,16 @@ describe('importing a pack', () => {
 		expect(client.mods.map(mod => mod.file).sort()).toEqual(['b.jar', 'c.jar']);
 	});
 });
+
+test('deleting takes a name, and never the active instance for being in hand', async () => {
+	const { remove } = await import('../src/commands/instances');
+	const { updateConfig } = await import('../src/config');
+
+	await instances.create('active');
+	await updateConfig({ activeInstance: 'active' });
+
+	await expect(remove({ positionals: [], flags: { yes: true } })).rejects.toThrow('ender delete <name>');
+	expect(await instances.exists('active')).toBe(true);
+	expect(await quietly(() => remove({ positionals: ['active'], flags: { yes: true } }))).toBe(0);
+	expect(await instances.exists('active')).toBe(false);
+});
