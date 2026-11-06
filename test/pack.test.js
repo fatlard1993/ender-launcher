@@ -389,3 +389,14 @@ describe('a bare mods archive', () => {
 		expect(await readdir(gameDir)).toEqual(['mods']);
 	});
 });
+
+test('a modrinth pack that gives a file no download is refused by that file, not by a link that is not one', async () => {
+	const path = await zip('no-download', async staging => {
+		await writeFile(
+			join(staging, 'modrinth.index.json'),
+			JSON.stringify({ dependencies: { minecraft: '26.3' }, files: [{ path: 'mods/x.jar', downloads: [] }] }),
+		);
+	});
+
+	await expect(readPack(path, {})).rejects.toThrow('gives no download for mods/x.jar');
+});

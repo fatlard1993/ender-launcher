@@ -78,7 +78,9 @@ export const newestAsset = async (reference, suffix, configuredToken) => {
 const releaseFor = async (entry, configuredToken, allowPrerelease, judged) => {
 	const { owner, repository } = parseRepository(entry.id);
 
-	if (entry.version) return request(`/repos/${owner}/${repository}/releases/tags/${entry.version}`, configuredToken);
+	if (entry.version) {
+		return request(`/repos/${owner}/${repository}/releases/tags/${encodeURIComponent(entry.version)}`, configuredToken);
+	}
 
 	// Not /releases/latest: mod authors publish prereleases constantly, and the newest release that
 	// actually carries a jar is the one wanted.

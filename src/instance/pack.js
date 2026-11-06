@@ -69,6 +69,9 @@ const fromMrpack = async (path, { name, side = 'client' }) => {
 	if (minecraft === undefined) throw new Error(`${basename(path)} names no Minecraft version`);
 
 	const wanted = (index.files ?? []).filter(file => (file.env?.[side] ?? 'required') !== 'unsupported');
+	const unreachable = wanted.find(file => typeof file.downloads?.[0] !== 'string');
+
+	if (unreachable) throw new Error(`${basename(path)} gives no download for ${unreachable.path}`);
 
 	return {
 		manifest: {
