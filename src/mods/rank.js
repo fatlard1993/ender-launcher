@@ -170,12 +170,6 @@ const named = (entry, terms) => {
 	return (entry.latest?.mods ?? []).find(mod => slugs.has(words(mod.id)) || words(mod.name) === terms.join(' '));
 };
 
-/**
- * Index entries that answer a query and fit the loader and game version, best first, each with what it
- * shares with an established mod, and, when the query names its mod and no established repository
- * declares that mod, that nothing vouches for the name. An empty query answers with everything that
- * fits, by stars.
- */
 const YEAR = 365 * 24 * 60 * 60 * 1000;
 
 /**
@@ -191,6 +185,12 @@ export const standing = (entry, now = Date.now()) => {
 	return Math.log1p(entry.stars ?? 0) + 2 * Math.log1p(entry.usedBy ?? 0) + recent;
 };
 
+/**
+ * Index entries that answer a query and fit the loader and game version, best first, each with what it
+ * shares with an established mod, and, when the query names its mod and no established repository
+ * declares that mod, that nothing vouches for the name. An empty query answers with everything that
+ * fits, by standing.
+ */
 export const rank = (entries, query, { minecraft, loader } = {}) => {
 	const terms = words(query).split(/\s+/).filter(Boolean);
 	const vouched = terms.length > 0 && entries.some(entry => (entry.stars ?? 0) >= ESTABLISHED && named(entry, terms));

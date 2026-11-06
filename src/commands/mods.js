@@ -182,7 +182,6 @@ export const drop = async ({ positionals, flags }) => {
 	return 0;
 };
 
-/** Unpin everything (or the named mods) so the next resolve picks up newer builds. */
 /** The pins an update releases: those set beside a pack, never the pack's own, and of `targeted` alone when given. */
 export const releasePins = (manifest, targeted) => {
 	const packed = new Set(manifest.pack?.mods ?? []);

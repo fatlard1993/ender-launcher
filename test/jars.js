@@ -87,8 +87,8 @@ export const rawZip = entries => {
 	for (const [name, text] of Object.entries(entries)) {
 		const nameBytes = Buffer.from(name);
 		const data = Buffer.from(text);
-		const crc = u4(Bun.hash.crc32(data));
-		const fixed = Buffer.concat([u2(0).reverse(), u2(0), u2(0), u2(0), u2(0), crc, u4(data.length), u4(data.length)]);
+		const check = u4(Bun.hash.crc32(data));
+		const fixed = Buffer.concat([u2(0).reverse(), u2(0), u2(0), u2(0), u2(0), check, u4(data.length), u4(data.length)]);
 
 		locals.push(Buffer.concat([u4(0x04_03_4b_50), fixed, u2(nameBytes.length).reverse(), u2(0), nameBytes, data]));
 		central.push(

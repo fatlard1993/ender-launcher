@@ -11,7 +11,7 @@ import { parseEnderPack } from '../instance/enderPack';
 import { detach, jobRunner, shown } from '../jobs';
 import { dataRoot, paths } from '../paths';
 import { KNOWN_LOADERS } from '../meta/resolve';
-import { done, info, paint } from '../out';
+import { done, info, paint, plural } from '../out';
 import { signedInAs } from '../githubAccount';
 import { fileIndexIssue, modLink } from '../indexIssues';
 import { setStar, starredRepositories } from '../stars';
@@ -112,8 +112,6 @@ const MOD_KEY = /^(github|codeberg|gitlab):(?!\.+\/)[\w.-]+(\/(?!\.+(\/|$))[\w.-
 const BAD_SPECS = 'Each mod has to be a spec search writes, such as gh:owner/repo';
 
 const allSpecs = specs => Array.isArray(specs) && specs.every(spec => SPEC.test(spec));
-
-const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
 /**
  * The page's questions of this machine's instances, each answered by running ender as `command` builds it. What takes

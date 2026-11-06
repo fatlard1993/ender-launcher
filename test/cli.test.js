@@ -132,6 +132,44 @@ describe('a first run, with no instance yet', () => {
 		expect(lines[1]).toContain('no subcommand "constructor"');
 	});
 
+	test('a failure prints the stack behind it only when ENDER_DEBUG is set', async () => {
+		const { main } = await import('../src/cli/index');
+		const printed = async () => {
+			const lines = [];
+			const real = console.error;
+
+			console.error = (...parts) => lines.push(parts.join(' '));
+
+			try {
+				expect(await main(['use'])).toBe(1);
+			} finally {
+				console.error = real;
+			}
+
+			return lines;
+		};
+		const was = process.env.ENDER_DEBUG;
+
+		try {
+			delete process.env.ENDER_DEBUG;
+
+			const quiet = await printed();
+
+			expect(quiet).toHaveLength(1);
+			expect(quiet[0]).toContain('ender use <name>');
+
+			process.env.ENDER_DEBUG = '1';
+
+			const traced = await printed();
+
+			expect(traced).toHaveLength(2);
+			expect(traced[1]).toContain('at ');
+		} finally {
+			if (was === undefined) delete process.env.ENDER_DEBUG;
+			else process.env.ENDER_DEBUG = was;
+		}
+	});
+
 	test('ender help still lists every command with no instance yet', async () => {
 		const lines = [];
 		const real = console.log;

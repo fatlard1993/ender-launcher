@@ -109,5 +109,3 @@ const DIRECTORIES = { github: '', codeberg: 'codeberg.org/', gitlab: 'gitlab.com
 
 export const record = (fullName, context, host = 'github') =>
 	load(indexBase(context), `mods/${DIRECTORIES[host]}${fullName}.json`);
-
-/** Quilt loads Fabric mods as its own. */

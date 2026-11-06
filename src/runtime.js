@@ -1,8 +1,7 @@
 import { chmod, mkdir, symlink, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { ensureFile, fetchJson, pool } from './download';
-import { checksumOf } from './download';
+import { checksumOf, ensureFile, fetchJson, pool } from './download';
 import { detail, plural, progress, step } from './out';
 import { paths } from './paths';
 

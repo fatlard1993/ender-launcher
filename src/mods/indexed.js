@@ -161,7 +161,12 @@ export const resolveFromSource = async (record, entry, context) => {
 		);
 	}
 
-	const jar = await buildFromSource({ host: entry.source, name: entry.id, commit: source.commit, minecraft: source.minecraft });
+	const jar = await buildFromSource({
+		host: entry.source,
+		name: entry.id,
+		commit: source.commit,
+		minecraft: source.minecraft,
+	});
 	const short = source.commit.slice(0, 7);
 
 	return {

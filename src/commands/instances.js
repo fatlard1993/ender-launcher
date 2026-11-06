@@ -51,10 +51,7 @@ export const ls = async ({ flags = {} } = {}) => {
 
 	for (const manifest of found) {
 		const active = manifest.name === config.activeInstance;
-		const loader =
-			manifest.loader?.type === 'vanilla'
-				? 'vanilla'
-				: `${manifest.loader.type}${manifest.loader.version ? ` ${manifest.loader.version}` : ''}`;
+		const loader = `${manifest.loader?.type ?? 'vanilla'}${manifest.loader?.version ? ` ${manifest.loader.version}` : ''}`;
 
 		info(
 			`${active ? paint.green('*') : ' '} ${paint.bold(manifest.name.padEnd(16))} ${manifest.minecraft.padEnd(10)} ${loader.padEnd(18)} ${paint.dim(`${plural(manifest.mods.length, 'mod')}, ${manifest.type}`)}`,

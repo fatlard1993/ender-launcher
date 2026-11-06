@@ -208,9 +208,6 @@ export const provision = async (manifest, options) => {
 	// server that cannot be joined by the only clients around, so the default is set before the
 	// game writes its own. An existing properties file is left alone.
 	if (await Bun.file(propertiesPath(manifest)).exists()) {
-		// Said here too, not only on start: leaving an existing file alone is right, but doing
-		// it silently let a server sit on online-mode=true under a comment promising the
-		// offline client on the same machine could reach it.
 		await warnIfUnreachableOffline(manifest);
 	} else {
 		await writeProperties(manifest, { 'online-mode': 'false' });
@@ -233,8 +230,7 @@ export const warnIfUnreachableOffline = async manifest => {
 	return true;
 };
 
-const requiredJava = async manifest =>
-	(await versionMeta(manifest.minecraft)).meta.javaVersion?.majorVersion ?? 8;
+const requiredJava = async manifest => (await versionMeta(manifest.minecraft)).meta.javaVersion?.majorVersion ?? 8;
 
 const javaComponentFor = async manifest => (await versionMeta(manifest.minecraft)).meta.javaVersion?.component;
 

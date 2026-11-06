@@ -3,11 +3,11 @@ import { dirname } from 'node:path';
 
 import { version } from '../../package.json';
 import { fail, info, paint, setVerbosity } from '../out';
-import { commands } from './commands';
 import { adoptConfiguredName } from '../auth/adopt';
 import { ICON_ARGS, iconLog, startedAsApp } from '../desktop';
 import { detach } from '../jobs';
 import * as instances from '../instance';
+import { commands } from './commands';
 import { commandHelp, startHere, usage } from './help';
 import { parseArgv } from './parse';
 
@@ -112,7 +112,7 @@ export const main = async argv => {
 	} catch (error) {
 		fail(error.message);
 
-		if (process.env.MCM_DEBUG) console.error(paint.dim(error.stack));
+		if (process.env.ENDER_DEBUG) console.error(paint.dim(error.stack));
 		if (error instanceof AggregateError) {
 			for (const nested of error.errors.slice(0, 5)) info(paint.dim(`  ${nested.message}`));
 		}

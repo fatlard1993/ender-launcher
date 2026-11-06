@@ -172,10 +172,6 @@ const fromEnder = async (path, { name }) => {
 };
 
 /**
- * A packwiz pack keeps a file per mod beside its pack.toml, listed by its index: each becomes an entry, a Modrinth or
- * CurseForge one where it names one. As for an ender pack, the game's own files beside it are its overrides.
- */
-/**
  * CurseForge mods a pack names by checksum, taken from Modrinth where it has the very same file: CurseForge serves its
  * files only to a client with a key of its own. A lookup that fails leaves them as they were. Answers how many moved.
  */
@@ -205,6 +201,10 @@ export const preferModrinth = async (mods, { byHash = versionsByHash } = {}) => 
 	return moved;
 };
 
+/**
+ * A packwiz pack keeps a file per mod beside its pack.toml, listed by its index: each becomes an entry, a Modrinth or
+ * CurseForge one where it names one. As for an ender pack, the game's own files beside it are its overrides.
+ */
 const fromPackwiz = async (path, { name, side = 'client', byHash }) => {
 	const file = atTop(await listEntries(path), 'pack.toml');
 	const folder = file.slice(0, -'pack.toml'.length);

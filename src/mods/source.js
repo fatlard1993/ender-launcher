@@ -52,7 +52,9 @@ export const allowBuilding = async (key, allowing) => {
 };
 
 const javaFor = async minecraft =>
-	minecraft ? ((await versionMeta(minecraft).catch(() => undefined))?.meta.javaVersion?.majorVersion ?? DEFAULT_JAVA) : DEFAULT_JAVA;
+	minecraft
+		? ((await versionMeta(minecraft).catch(() => undefined))?.meta.javaVersion?.majorVersion ?? DEFAULT_JAVA)
+		: DEFAULT_JAVA;
 
 const fetchSource = async (host, name, commit, directory) => {
 	const archive = join(paths.cache, 'sources', `${host}-${name.replaceAll('/', '-')}-${commit}.zip`);

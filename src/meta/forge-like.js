@@ -26,10 +26,6 @@ export const forgeLike = ({ name, versionsFor, installerUrl, profileId }) => {
 	const isInstalled = async (minecraft, loaderVersion) => Bun.file(profilePath(minecraft, loaderVersion)).exists();
 
 	/**
-	 * Run the vendor installer into a staging directory, then keep only what a launch needs: the
-	 * profile it wrote, and the libraries it fetched, merged into the shared library tree.
-	 */
-	/**
 	 * Fetch the vendor installer and run it headless in `directory`.
 	 *
 	 * Forge's installer takes --installClient / --installServer; NeoForge's newer one accepts those
@@ -40,9 +36,7 @@ export const forgeLike = ({ name, versionsFor, installerUrl, profileId }) => {
 		const installer = join(directory, 'installer.jar');
 
 		await mkdir(directory, { recursive: true });
-		// Said before the wait, not after: this is a headless vendor installer patching the game
-		// jar, and a minute of no output is indistinguishable from a hang. The notice existed as
-		// an exported function nothing ever called.
+		// Said before the wait: a headless installer patching the game jar prints nothing for a minute.
 		warn('Forge and NeoForge are installed by running their own installer, which takes a minute the first time.');
 
 		await ensureFile({ url: installerUrl(minecraft, loaderVersion), path: installer });
@@ -84,6 +78,10 @@ export const forgeLike = ({ name, versionsFor, installerUrl, profileId }) => {
 		detail(name, `server ${loaderVersion} installed into ${directory}`);
 	};
 
+	/**
+	 * Run the vendor installer into a staging directory, then keep only what a launch needs: the
+	 * profile it wrote, and the libraries it fetched, merged into the shared library tree.
+	 */
 	const install = async (minecraft, loaderVersion, { javaPath } = {}) => {
 		const staging = join(paths.cache, `${name.toLowerCase()}-install-${loaderVersion}`);
 
@@ -223,4 +221,3 @@ export const neoforge = forgeLike({
 		`https://maven.neoforged.net/releases/net/neoforged/neoforge/${loaderVersion}/neoforge-${loaderVersion}-installer.jar`,
 	profileId: (minecraft, loaderVersion) => `neoforge-${loaderVersion}`,
 });
-

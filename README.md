@@ -334,7 +334,7 @@ bun link            # puts `ender` on your PATH
 bun test
 ```
 
-`bun run compile` builds the single binary the releases carry.
+`bun run compile` builds the single binary the releases carry. When a command fails, `ENDER_DEBUG=1` prints the stack behind the error under it.
 
 ## License
 
