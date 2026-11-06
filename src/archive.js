@@ -1,6 +1,6 @@
 import { inflateRawSync } from 'node:zlib';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { dirname, join, normalize } from 'node:path';
+import { dirname, isAbsolute, join, normalize, relative } from 'node:path';
 
 const END_OF_CENTRAL_DIRECTORY = 0x06_05_4b_50;
 
@@ -144,20 +144,21 @@ export const extractArchive = async (
 		if (entry.name.endsWith('/') || excluded(entry.name, exclude)) continue;
 		if (prefix !== undefined && !entry.name.startsWith(prefix)) continue;
 
-		const relative = prefix === undefined ? entry.name : entry.name.slice(prefix.length);
+		const inner = prefix === undefined ? entry.name : entry.name.slice(prefix.length);
 
-		if (relative === '' || !keep(relative)) continue;
+		if (inner === '' || !keep(inner)) continue;
 
-		const destination = join(targetDirectory, normalize(relative));
+		const destination = join(targetDirectory, normalize(inner));
+		const below = relative(targetDirectory, destination);
 
-		if (!destination.startsWith(`${targetDirectory}/`)) {
+		if (below === '' || below.startsWith('..') || isAbsolute(below)) {
 			throw new Error(`Archive entry escapes its directory: ${entry.name}`);
 		}
 
 		await mkdir(dirname(destination), { recursive: true });
 		await writeFile(destination, contentOf(buffer, entry));
 
-		written.push(relative);
+		written.push(inner);
 	}
 
 	return written;

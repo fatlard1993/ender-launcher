@@ -69,3 +69,59 @@ export const jar = async (directory, files) => {
 
 	return archive;
 };
+
+const u4 = value => {
+	const bytes = Buffer.alloc(4);
+
+	bytes.writeUInt32LE(value);
+
+	return bytes;
+};
+
+/** A zip written byte by byte, stored, so an entry can carry a name the system zip would refuse, such as `../x`. */
+export const rawZip = entries => {
+	const locals = [];
+	const central = [];
+	let offset = 0;
+
+	for (const [name, text] of Object.entries(entries)) {
+		const nameBytes = Buffer.from(name);
+		const data = Buffer.from(text);
+		const crc = u4(Bun.hash.crc32(data));
+		const fixed = Buffer.concat([u2(0).reverse(), u2(0), u2(0), u2(0), u2(0), crc, u4(data.length), u4(data.length)]);
+
+		locals.push(Buffer.concat([u4(0x04_03_4b_50), fixed, u2(nameBytes.length).reverse(), u2(0), nameBytes, data]));
+		central.push(
+			Buffer.concat([
+				u4(0x02_01_4b_50),
+				u2(0),
+				fixed,
+				u2(nameBytes.length).reverse(),
+				u2(0),
+				u2(0),
+				u2(0),
+				u2(0),
+				u4(0),
+				u4(offset),
+				nameBytes,
+			]),
+		);
+		offset += locals.at(-1).length;
+	}
+
+	const directory = Buffer.concat(central);
+	const count = u2(central.length).reverse();
+
+	return Buffer.concat([
+		...locals,
+		directory,
+		u4(0x06_05_4b_50),
+		u2(0),
+		u2(0),
+		count,
+		count,
+		u4(directory.length),
+		u4(offset),
+		u2(0),
+	]);
+};

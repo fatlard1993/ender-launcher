@@ -11,6 +11,7 @@ import { LOADER_SERVICES, assertKnownLoader } from '../src/meta/resolve';
 import { chooseAsset } from '../src/mods/github';
 import { strategyFor } from '../src/server';
 import { extractArchive } from '../src/archive';
+import { rawZip } from './jars';
 
 describe('maven coordinates cannot leave the repository root', () => {
 	test('an extension segment cannot climb out', () => {
@@ -220,5 +221,31 @@ describe('what the game does once it is up', () => {
 		expect(intentOf({ window: { width: 1280 } }, {}).resolution).toBeUndefined();
 		expect(intentOf({ window: { width: 1280 } }, { height: 720 }).resolution).toEqual({ width: 1280, height: 720 });
 		expect(intentOf({}, { width: 800, height: 600 }).features.has_custom_resolution).toBe(true);
+	});
+});
+
+describe('an archive entry', () => {
+	test('cannot escape the directory it is unpacked into, by any spelling of the way out', async () => {
+		const directory = await mkdtemp(join(tmpdir(), 'ender-escape-'));
+
+		try {
+			for (const name of ['../escape.txt', 'a/../../escape.txt']) {
+				const path = join(directory, 'hostile.zip');
+
+				await writeFile(path, rawZip({ 'fine.txt': 'ok', [name]: 'out' }));
+
+				await expect(extractArchive(path, join(directory, 'out'))).rejects.toThrow('escapes its directory');
+			}
+
+			const path = join(directory, 'tame.zip');
+
+			await writeFile(path, rawZip({ 'nested/fine.txt': 'ok', '/rooted.txt': 'in' }));
+
+			// A rooted name has nowhere to go but inside: it lands there, under its own path.
+			expect(await extractArchive(path, join(directory, 'out'))).toEqual(['nested/fine.txt', '/rooted.txt']);
+			expect(await Bun.file(join(directory, 'out', 'rooted.txt')).text()).toBe('in');
+		} finally {
+			await rm(directory, { recursive: true, force: true });
+		}
 	});
 });
