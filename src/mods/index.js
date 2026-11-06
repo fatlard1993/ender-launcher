@@ -1,4 +1,4 @@
-import { mkdir, readdir, rename, unlink } from 'node:fs/promises';
+import { mkdir, readdir, realpath, rename, unlink } from 'node:fs/promises';
 import { basename, dirname, join, resolve as resolvePath } from 'node:path';
 
 import { checksumOf, checksumText, ensureFile, pool } from '../download';
@@ -189,11 +189,15 @@ export const resolveAll = async (entries, context, { withDependencies = true } =
 	return [...resolved.values()];
 };
 
+const samePlace = async (a, b) =>
+	(await realpath(a).catch(() => resolvePath(a))) === (await realpath(b).catch(() => resolvePath(b)));
+
 const install = async (resolution, modsDir) => {
 	const path = join(modsDir, resolution.file.filename);
 
 	if (resolution.file.localPath) {
-		await Bun.write(path, Bun.file(resolution.file.localPath));
+		// A jar declared from inside mods/ itself is already in place; written onto itself it would be emptied.
+		if (!(await samePlace(resolution.file.localPath, path))) await Bun.write(path, Bun.file(resolution.file.localPath));
 
 		return path;
 	}

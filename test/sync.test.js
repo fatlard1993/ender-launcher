@@ -79,6 +79,17 @@ describe('syncMods', () => {
 		expect(result.unmanaged).toEqual(['mine.jar']);
 	});
 
+	test('a jar declared from inside mods/ itself stays as it is, not written onto itself', async () => {
+		const path = join(modsDir, 'mine.jar');
+
+		await writeFile(path, 'the whole jar');
+
+		const result = await sync([{ source: 'local', path }], { mods: [] });
+
+		expect(await Bun.file(path).text()).toBe('the whole jar');
+		expect(result.lock.mods.map(mod => mod.filename)).toEqual(['mine.jar']);
+	});
+
 	test('survives a locked file that someone already deleted', async () => {
 		const first = await sync([await jar('alpha.jar')], { mods: [] });
 
