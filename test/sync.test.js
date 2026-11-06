@@ -123,11 +123,42 @@ describe('replacing a download', () => {
 	};
 
 	beforeAll(() => {
-		server = Bun.serve({ port: 0, fetch: () => new Response(served) });
+		server = Bun.serve({ port: 0, fetch: () => (typeof served === 'function' ? served() : new Response(served)) });
 	});
 
 	afterAll(() => {
 		server.stop();
+	});
+
+	test('a new build that does not arrive leaves the old one installed and in the lock, and says so', async () => {
+		await writeFile(join(modsDir, 'mod-1.jar'), 'the old build');
+
+		const lock = {
+			mods: [
+				{ key: `url:${url()}`, source: 'url', id: url(), version: '1', filename: 'mod-1.jar', checksum: 'sha1:aa' },
+			],
+		};
+
+		served = () => new Response('gone', { status: 404 });
+
+		const result = await sync([{ source: 'url', url: url(), file: 'mod-2.jar', sha1: 'bb' }], lock);
+
+		expect(result.failures).toHaveLength(1);
+		expect(result.removed).toEqual([]);
+		expect(await readdir(modsDir)).toEqual(['mod-1.jar']);
+		expect(result.lock.mods).toEqual(lock.mods);
+
+		const failed = spyOn(console, 'error').mockImplementation(() => {});
+		const logged = spyOn(console, 'log').mockImplementation(() => {});
+
+		try {
+			reportSync(result);
+
+			expect(failed.mock.calls[0][0]).toEndWith('; 1 stays installed');
+		} finally {
+			failed.mockRestore();
+			logged.mockRestore();
+		}
 	});
 
 	test('says what the new jar can reach that the old one could not, under the same file name', async () => {

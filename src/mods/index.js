@@ -452,10 +452,21 @@ export const syncMods = async ({ entries, modsDir, lock, context, withDependenci
 
 	const { gained, notCompared } = await compareReplacements(installed, baselines, modsDir, scanCache);
 	const wanted = new Set(installed.map(resolution => resolution.file.filename));
+	const failedKeys = new Set(failures.map(({ resolution }) => resolution.key));
+	const held = [];
 	const removed = [];
 
 	for (const stale of previous) {
 		if (wanted.has(stale.filename)) continue;
+
+		// A mod whose new build did not arrive keeps the build it had: the game starts with the mod a day behind rather
+		// than without it.
+		if (failedKeys.has(stale.key) && (await Bun.file(join(modsDir, stale.filename)).exists())) {
+			held.push(stale);
+			wanted.add(stale.filename);
+
+			continue;
+		}
 
 		try {
 			await unlink(join(modsDir, stale.filename));
@@ -475,6 +486,7 @@ export const syncMods = async ({ entries, modsDir, lock, context, withDependenci
 	return {
 		resolved: installed,
 		failures,
+		held,
 		gained,
 		notCompared,
 		duplicates,
@@ -482,17 +494,20 @@ export const syncMods = async ({ entries, modsDir, lock, context, withDependenci
 		unmanaged,
 		displaced,
 		lock: {
-			mods: installed.map(resolution => ({
-				key: resolution.key,
-				source: resolution.source,
-				id: resolution.id,
-				name: resolution.name,
-				version: resolution.version,
-				filename: resolution.file.filename,
-				checksum: checksumText(resolution.file.checksum),
-				url: resolution.file.url,
-				requested: resolution.requested,
-			})),
+			mods: [
+				...installed.map(resolution => ({
+					key: resolution.key,
+					source: resolution.source,
+					id: resolution.id,
+					name: resolution.name,
+					version: resolution.version,
+					filename: resolution.file.filename,
+					checksum: checksumText(resolution.file.checksum),
+					url: resolution.file.url,
+					requested: resolution.requested,
+				})),
+				...held,
+			],
 		},
 	};
 };
@@ -506,6 +521,7 @@ export const evidence = classes => {
 export const reportSync = ({
 	resolved,
 	failures = [],
+	held = [],
 	gained = [],
 	notCompared = [],
 	duplicates = [],
@@ -552,7 +568,15 @@ export const reportSync = ({
 		warn(`${resolution.source}:${resolution.id} ${resolution.version} was not compared with ${from}: ${error.message}`);
 	}
 
-	for (const { resolution, error } of failures) fail(`${resolution.source}:${resolution.id} :: ${error.message}`);
+	const kept = new Map(held.map(mod => [mod.key, mod]));
+
+	for (const { resolution, error } of failures) {
+		const previous = kept.get(resolution.key);
+
+		fail(
+			`${resolution.source}:${resolution.id} :: ${error.message}${previous ? `; ${previous.version} stays installed` : ''}`,
+		);
+	}
 
 	return failures.length;
 };
