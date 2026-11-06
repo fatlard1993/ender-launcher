@@ -606,7 +606,7 @@ describe('mods on Codeberg and GitLab', () => {
 
 	test('one the index has not crawled says how to get it crawled', async () => {
 		await expect(hosted('gitlab').resolve({ source: 'gitlab', id: 'g/missing' }, context())).rejects.toThrow(
-			`gitlab:g/missing is not in the index; add "gitlab:g/missing" to ender-index's repos.txt`,
+			'gitlab:g/missing is not in the index; "ender submit gl:g/missing" has it listed within minutes',
 		);
 	});
 
@@ -675,7 +675,7 @@ describe('mods on Codeberg and GitLab', () => {
 
 			expect(resolved.map(({ key }) => key)).toEqual(['codeberg:o/d']);
 			expect(warned.mock.calls.map(([line]) => line)).toContain(
-				`!! gitlab:lib/core is not in the index; add "gitlab:lib/core" to ender-index's repos.txt`,
+				'!! gitlab:lib/core is not in the index; "ender submit gl:lib/core" has it listed within minutes',
 			);
 		} finally {
 			warned.mockRestore();

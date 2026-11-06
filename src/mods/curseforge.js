@@ -86,15 +86,30 @@ const matchesInstance = (versions, minecraft, loader) => {
 	return !tag || !versions.some(entry => Object.values(LOADER_TAGS).includes(entry)) || versions.includes(tag);
 };
 
+/** The mirror's own file listing, in the shape the site API's is read into, for when the site API does not answer. */
+const widgetFiles = project =>
+	(project.files ?? []).map(file => ({
+		id: file.id,
+		name: file.name,
+		display: file.display,
+		size: file.filesize,
+		versions: file.versions ?? [],
+		channel: file.type?.toLowerCase(),
+		published: Date.parse(file.uploaded_at ?? 0),
+	}));
+
+const noBuild = (entry, minecraft, loader) =>
+	new Error(
+		`curseforge:${entry.id} has no build for Minecraft ${minecraft ?? 'any version'} on ${loader ?? 'any loader'}`,
+	);
+
 const resolveKeyless = async (entry, { minecraft, loader, allowPrerelease }) => {
 	const project = await widgetProject(entry.id);
-	const files = (await siteFiles(project.id)) ?? project.files.map(file => ({ ...file, versions: file.versions }));
+	const files = (await siteFiles(project.id)) ?? widgetFiles(project);
 
 	const usable = files.filter(file => matchesInstance(file.versions, minecraft, loader));
 
-	if (usable.length === 0) {
-		throw new Error(`curseforge:${entry.id} has no build for Minecraft ${minecraft} on ${loader}`);
-	}
+	if (usable.length === 0) throw noBuild(entry, minecraft, loader);
 
 	const picked = entry.version
 		? usable.find(file => file.display === entry.version || String(file.id) === String(entry.version))
@@ -142,9 +157,7 @@ const resolveKeyed = async (entry, { minecraft, loader, key, allowPrerelease }) 
 
 	const { data } = await keyed(`/mods/${project.id}/files?${parameters}`, key);
 
-	if (data.length === 0) {
-		throw new Error(`curseforge:${entry.id} has no build for Minecraft ${minecraft} on ${loader}`);
-	}
+	if (data.length === 0) throw noBuild(entry, minecraft, loader);
 
 	const picked = entry.version
 		? data.find(file => file.displayName === entry.version || String(file.id) === String(entry.version))

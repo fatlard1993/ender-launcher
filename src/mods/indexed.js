@@ -4,6 +4,7 @@ import * as catalog from './catalog';
 import { chooseAsset, nameFits, pickBuild } from './pick';
 import { HOSTS, rank } from './rank';
 import { allowBuilding, buildFromSource } from './source';
+import { specFor } from './spec';
 
 export { HOSTS } from './rank';
 
@@ -211,7 +212,9 @@ export const hosted = host => ({
 		const record = await catalog.record(entry.id, context, host);
 
 		if (record === undefined) {
-			throw new Error(`${host}:${entry.id} is not in the index; add "${host}:${entry.id}" to ender-index's repos.txt`);
+			throw new Error(
+				`${host}:${entry.id} is not in the index; "ender submit ${specFor(host, entry.id)}" has it listed within minutes`,
+			);
 		}
 
 		const resolved =

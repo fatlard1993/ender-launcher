@@ -66,7 +66,9 @@ export const resolve = async (entry, { minecraft, loader, allowPrerelease }) => 
 	});
 
 	if (versions.length === 0) {
-		throw new Error(`modrinth:${entry.id} has no build for Minecraft ${minecraft} on ${loader}`);
+		throw new Error(
+			`modrinth:${entry.id} has no build for Minecraft ${minecraft ?? 'any version'} on ${loader ?? 'any loader'}`,
+		);
 	}
 
 	const picked = entry.version
