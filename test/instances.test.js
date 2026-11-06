@@ -200,6 +200,17 @@ describe('importing a pack', () => {
 	});
 });
 
+test('export refuses a gist flag given without --gist, rather than ignoring it', async () => {
+	const { exportPack } = await import('../src/commands/instances');
+
+	await instances.create('shared');
+
+	await expect(exportPack({ positionals: ['shared'], flags: { list: true } })).rejects.toThrow(
+		'--list goes with --gist',
+	);
+	await expect(exportPack({ positionals: ['shared'], flags: { new: true } })).rejects.toThrow('--new goes with --gist');
+});
+
 test('deleting takes a name, and never the active instance for being in hand', async () => {
 	const { remove } = await import('../src/commands/instances');
 	const { updateConfig } = await import('../src/config');

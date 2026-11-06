@@ -477,6 +477,11 @@ const UNSHAREABLE = { local: 'a jar on this disk', url: 'a link', gradle: 'a bui
  */
 export const exportPack = async ({ positionals, flags }) => {
 	const { manifest } = await targetInstance(flags.instance ?? positionals[0]);
+	const only = ['new', 'list'].filter(flag => flags[flag]);
+
+	if (only.length > 0 && !flags.gist)
+		throw new Error(`--${only[0]} goes with --gist: ender export --gist --${only[0]}`);
+
 	const { pack, left } = packFrom(manifest);
 	const text = `${JSON.stringify(pack, null, '\t')}\n`;
 
