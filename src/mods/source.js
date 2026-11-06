@@ -1,4 +1,4 @@
-import { chmod, copyFile, mkdir, readdir, rename, rm, stat } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, rename, rm, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 import { extractArchive } from '../archive';
@@ -8,7 +8,7 @@ import { provideJdk } from '../jdk';
 import { versionMeta } from '../meta/mojang';
 import { step } from '../out';
 import { paths } from '../paths';
-import { builtJar, readProperties } from './gradle';
+import { builtJar, readProperties, runGradle } from './gradle';
 
 /** Where each host serves a repository's files at one commit, as a zip. */
 export const SOURCE_ZIPS = {
@@ -70,22 +70,6 @@ const fetchSource = async (host, name, commit, directory) => {
 	await rm(archive, { force: true });
 };
 
-const runGradle = async (directory, javaHome, label) => {
-	const windows = process.platform === 'win32';
-
-	if (!windows) await chmod(join(directory, 'gradlew'), 0o755);
-
-	const child = Bun.spawn(
-		[...(windows ? ['cmd', '/c', 'gradlew.bat'] : ['./gradlew']), 'build', '-x', 'test', '--quiet', '--console=plain'],
-		{ cwd: directory, env: { ...process.env, JAVA_HOME: javaHome }, stdout: 'pipe', stderr: 'pipe' },
-	);
-	const [out, error] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()]);
-
-	if ((await child.exited) !== 0) {
-		throw new Error(`${label} did not build:\n${(error || out).trim().split('\n').slice(-12).join('\n')}`);
-	}
-};
-
 /**
  * A jar built from a repository's source at one commit, built once and kept: the zip of that commit from its host,
  * built by its own gradle wrapper with a JDK of the Java its game version runs on.
@@ -105,7 +89,7 @@ export const buildFromSource = async ({ host, name, commit, minecraft }) => {
 	step(
 		`Building ${label} at ${commit.slice(0, 7)}; a first build fetches gradle and the game's code, and takes minutes`,
 	);
-	await runGradle(directory, javaHome, label);
+	await runGradle(directory, { javaHome, label, skipTests: true });
 
 	const jar = await pickBuiltJar(directory, (await readProperties(directory))?.mod_version);
 

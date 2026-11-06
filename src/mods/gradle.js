@@ -1,4 +1,4 @@
-import { readdir } from 'node:fs/promises';
+import { chmod, readdir } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 
 import { detail, step } from '../out';
@@ -53,36 +53,55 @@ export const builtJar = async (directory, version) => {
 	return join(libs, wanted[0]);
 };
 
-const buildNow = async directory => {
-	step(`Building ${basename(directory)}`);
+/**
+ * Run a project's own gradle wrapper, so it builds the way it does when built by hand: `gradlew.bat` through cmd on
+ * Windows, `./gradlew` made executable elsewhere, with the JDK given as JAVA_HOME when one is.
+ */
+const runNow = async (directory, { javaHome, label, skipTests }) => {
+	const windows = process.platform === 'win32';
 
-	const process_ = Bun.spawn(['./gradlew', 'build', '--quiet', '--console=plain'], {
-		cwd: directory,
-		stdout: 'pipe',
-		stderr: 'pipe',
-	});
+	if (!windows) await chmod(join(directory, 'gradlew'), 0o755).catch(() => {});
 
-	const [out, error] = await Promise.all([new Response(process_.stdout).text(), new Response(process_.stderr).text()]);
+	const child = Bun.spawn(
+		[
+			...(windows ? ['cmd', '/c', 'gradlew.bat'] : ['./gradlew']),
+			'build',
+			...(skipTests ? ['-x', 'test'] : []),
+			'--quiet',
+			'--console=plain',
+		],
+		{
+			cwd: directory,
+			env: javaHome ? { ...process.env, JAVA_HOME: javaHome } : process.env,
+			stdout: 'pipe',
+			stderr: 'pipe',
+		},
+	);
+	const [out, error] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()]);
 
-	if ((await process_.exited) !== 0) {
-		const said = (error || out).trim().split('\n').slice(-12).join('\n');
-
-		throw new Error(`gradle build failed in ${directory}:\n${said}`);
+	if ((await child.exited) !== 0) {
+		throw new Error(`${label} did not build:\n${(error || out).trim().split('\n').slice(-12).join('\n')}`);
 	}
 };
 
 let building = Promise.resolve();
 
 /**
- * Run the project's own wrapper, so it builds the way it does when built by hand. One build at a time: mods resolve
- * together, and a gradle daemon apiece for each would take the machine.
+ * One gradle run at a time, for a project on disk or a repository's source alike: mods resolve together, and a gradle
+ * daemon apiece for each would take the machine.
  */
-export const build = directory => {
-	const turn = building.then(() => buildNow(directory));
+export const runGradle = (directory, { javaHome, label = basename(directory), skipTests = false } = {}) => {
+	const turn = building.then(() => runNow(directory, { javaHome, label, skipTests }));
 
 	building = turn.catch(() => {});
 
 	return turn;
+};
+
+export const build = async directory => {
+	step(`Building ${basename(directory)}`);
+
+	await runGradle(directory);
 };
 
 export const resolve = async (entry, { minecraft, loader, buildMissing = false, rebuild = false } = {}) => {
