@@ -238,16 +238,20 @@ const fromPackwiz = async (path, { name, side = 'client', byHash }) => {
 		);
 
 	const mods = [];
+	let optional = 0;
 
 	for (const metafile of metafiles) {
 		const source = await text(metafile);
 
 		if (source === undefined) throw new Error(`${basename(path)} has no ${metafile}, which its index lists`);
 
-		const entry = packwizMod(source, { side });
+		const { entry, leftOut } = packwizMod(source, { side });
 
 		if (entry) mods.push(entry);
+		if (leftOut === 'optional') optional++;
 	}
+
+	if (optional > 0) detail('packwiz', `${plural(optional, 'optional mod')} left out, as packwiz-installer does`);
 
 	const moved = await preferModrinth(mods, { byHash });
 

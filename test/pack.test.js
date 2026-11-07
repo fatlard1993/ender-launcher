@@ -337,6 +337,73 @@ describe('a packwiz pack', () => {
 		expect(await unpackInto(path, read, join(directory, 'packwiz-game'))).toEqual(['config/sodium.json']);
 	});
 
+	test('leaves out a mod whose [option] is an opt-in defaulting to off, as packwiz-installer leaves it out', async () => {
+		const path = await zip('packwiz-optional', async staging => {
+			const root = join(staging, 'opt-pack');
+
+			await mkdir(join(root, 'mods'), { recursive: true });
+			await writeFile(
+				join(root, 'pack.toml'),
+				toml([
+					'name = "Opt"',
+					'[index]',
+					'file = "index.toml"',
+					'[versions]',
+					'minecraft = "1.21.1"',
+					'fabric = "0.16.5"',
+				]),
+			);
+			await writeFile(
+				join(root, 'index.toml'),
+				toml(
+					['shaders', 'minimap', 'sodium'].flatMap(mod => [
+						'[[files]]',
+						`file = "mods/${mod}.pw.toml"`,
+						'metafile = true',
+					]),
+				),
+			);
+			await writeFile(
+				join(root, 'mods', 'shaders.pw.toml'),
+				toml([
+					'name = "Shaders"',
+					'[option]',
+					'optional = true',
+					'default = false',
+					'description = "Pretty, if your card can"',
+					'[update.modrinth]',
+					'mod-id = "shd"',
+					'version = "1"',
+				]),
+			);
+			await writeFile(
+				join(root, 'mods', 'minimap.pw.toml'),
+				toml([
+					'name = "Minimap"',
+					'[option]',
+					'optional = true',
+					'default = true',
+					'[update.modrinth]',
+					'mod-id = "map"',
+					'version = "1"',
+				]),
+			);
+			await writeFile(
+				join(root, 'mods', 'sodium.pw.toml'),
+				toml([
+					'name = "Sodium"',
+					'[option]',
+					'optional = false',
+					'[update.modrinth]',
+					'mod-id = "AANobbMI"',
+					'version = "2"',
+				]),
+			);
+		});
+
+		expect((await readPack(path, {})).manifest.mods.map(mod => mod.id)).toEqual(['map', 'AANobbMI']);
+	});
+
 	test('takes a CurseForge mod from Modrinth where Modrinth has the very same file, and says how many', async () => {
 		const { preferModrinth } = await import('../src/instance/pack');
 		const mods = [

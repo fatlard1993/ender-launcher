@@ -28,34 +28,45 @@ export const packwizMetafiles = source =>
 	(Bun.TOML.parse(source).files ?? []).filter(entry => entry.metafile).map(entry => entry.file);
 
 /**
- * One packwiz mod as the entry ender keeps for it, or undefined when it is not for this side. A Modrinth or CurseForge
- * mod stays one, so it can be updated; any other is its link, checked by its hash where that can be.
+ * One packwiz mod as `{ entry }`, the entry ender keeps for it, or as `{ leftOut }` naming why there is none: `side`
+ * when it is not for this side, `optional` when its `[option]` is an opt-in whose default is off, which
+ * packwiz-installer installs only when a player chooses it. A Modrinth or CurseForge mod stays one, so it can be
+ * updated; any other is its link, checked by its hash where that can be.
  */
 export const packwizMod = (source, { side = 'client' } = {}) => {
 	const mod = Bun.TOML.parse(source);
 
-	if (mod.side && mod.side !== 'both' && mod.side !== side) return undefined;
+	if (mod.side && mod.side !== 'both' && mod.side !== side) return { leftOut: 'side' };
+	if (mod.option?.optional === true && mod.option.default !== true) return { leftOut: 'optional' };
 
 	const modrinth = mod.update?.modrinth;
 	const curseforge = mod.update?.curseforge;
 
-	if (modrinth?.['mod-id']) return { source: 'modrinth', id: modrinth['mod-id'], version: modrinth.version };
+	if (modrinth?.['mod-id']) {
+		return { entry: { source: 'modrinth', id: modrinth['mod-id'], version: modrinth.version } };
+	}
+
 	const { url, hash, 'hash-format': format } = mod.download ?? {};
 
-	if (curseforge?.['project-id'])
+	if (curseforge?.['project-id']) {
 		return {
-			source: 'curseforge',
-			id: String(curseforge['project-id']),
-			version: String(curseforge['file-id']),
-			...(hash && format === 'sha1' ? { checksum: `sha1:${hash.toLowerCase()}` } : {}),
+			entry: {
+				source: 'curseforge',
+				id: String(curseforge['project-id']),
+				version: String(curseforge['file-id']),
+				...(hash && format === 'sha1' ? { checksum: `sha1:${hash.toLowerCase()}` } : {}),
+			},
 		};
+	}
 
 	if (!url) throw new Error(`${mod.name ?? 'a mod'} has neither a link nor a Modrinth or CurseForge id`);
 
 	return {
-		source: 'url',
-		url,
-		file: mod.filename ?? basename(new URL(url).pathname),
-		...(hash && CHECKABLE.has(format) ? { checksum: `${format}:${hash}` } : {}),
+		entry: {
+			source: 'url',
+			url,
+			file: mod.filename ?? basename(new URL(url).pathname),
+			...(hash && CHECKABLE.has(format) ? { checksum: `${format}:${hash}` } : {}),
+		},
 	};
 };
