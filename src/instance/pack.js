@@ -108,6 +108,15 @@ const fromCurseForge = async (path, { name }) => {
 	const split = identifier.indexOf('-');
 	const loaderName = split === -1 ? identifier : identifier.slice(0, split);
 	const loaderVersion = split === -1 ? undefined : identifier.slice(split + 1);
+	const files = manifest.files ?? [];
+	const wanted = files.filter(file => file.required !== false);
+
+	if (wanted.length < files.length) {
+		detail(
+			'curseforge',
+			`${plural(files.length - wanted.length, 'optional mod')} left out, as the CurseForge app does`,
+		);
+	}
 
 	return {
 		manifest: {
@@ -116,11 +125,7 @@ const fromCurseForge = async (path, { name }) => {
 			loader: CURSEFORGE_LOADERS[loaderName]
 				? { type: CURSEFORGE_LOADERS[loaderName], version: loaderVersion }
 				: { type: 'vanilla' },
-			mods: (manifest.files ?? []).map(file => ({
-				source: 'curseforge',
-				id: String(file.projectID),
-				version: String(file.fileID),
-			})),
+			mods: wanted.map(file => ({ source: 'curseforge', id: String(file.projectID), version: String(file.fileID) })),
 		},
 		overridePrefixes: [`${manifest.overrides ?? 'overrides'}/`],
 	};

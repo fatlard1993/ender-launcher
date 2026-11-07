@@ -130,6 +130,24 @@ describe('curseforge packs', () => {
 		expect(pack.manifest.loader).toEqual({ type: 'neoforge', version: '21.1.5-beta' });
 		expect(pack.manifest.mods).toEqual([{ source: 'curseforge', id: '238222', version: '555' }]);
 	});
+
+	test('a file marked required: false is left out, as the CurseForge app leaves it out', async () => {
+		const path = await zip('cf-optional', async staging => {
+			await writeFile(
+				join(staging, 'manifest.json'),
+				JSON.stringify({
+					minecraft: { version: '1.21.1', modLoaders: [{ id: 'fabric-0.16.9', primary: true }] },
+					files: [
+						{ projectID: 238222, fileID: 555, required: true },
+						{ projectID: 306612, fileID: 777, required: false },
+						{ projectID: 419699, fileID: 888 },
+					],
+				}),
+			);
+		});
+
+		expect((await readPack(path, {})).manifest.mods.map(mod => mod.id)).toEqual(['238222', '419699']);
+	});
 });
 
 describe('a bare mods archive cannot invent a version', () => {
