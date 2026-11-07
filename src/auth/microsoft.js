@@ -55,7 +55,8 @@ class NotApprovedError extends Error {
 
 /**
  * The lines a script or the page reads the sign in from: Microsoft's page as it gave it, and the code to type there.
- * Microsoft's link page takes a code as `otc` too, but a code handed over that way is refused for an app not its own.
+ * Microsoft's link page takes a code as `otc` too, but a code handed over that way is refused for an app not its own,
+ * and Mojang's approval of the app for the Minecraft API does not lift that refusal: the two are separate gates.
  */
 export const signInLines = ({ verification_uri: uri, user_code: code }) => [`link ${uri}`, `code ${code}`];
 
