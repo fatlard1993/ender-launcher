@@ -17,4 +17,5 @@ module.exports = [
 			'compat/compat': 'off',
 		},
 	},
+	...require('@vanilla-bean/components/eslint.usage.config.cjs'),
 ];
