@@ -28,6 +28,12 @@ case "$(uname -m)" in
 	*) fail "no build for a $(uname -m) processor" ;;
 esac
 
+# Bun's macOS runtime, which the binary is, will not load before macOS 13
+if [ "$system" = darwin ]; then
+	macos="$(sw_vers -productVersion)"
+	[ "${macos%%.*}" -ge 13 ] || fail "needs macOS 13 or later, and this Mac has $macos; nothing was installed"
+fi
+
 if [ -n "${ENDER_RELEASES:-}" ]; then
 	base="$ENDER_RELEASES"
 elif [ -n "${ENDER_VERSION:-}" ]; then

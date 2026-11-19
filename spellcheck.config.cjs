@@ -238,6 +238,7 @@ module.exports = {
 		'utf16le',
 		'uuid',
 		'uuids',
+		'ventura',
 		'versioned',
 		'vnd',
 		'webp',

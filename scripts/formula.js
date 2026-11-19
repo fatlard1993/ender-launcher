@@ -6,6 +6,12 @@ const PLATFORMS = {
 	on_linux: { on_arm: 'linux-arm64', on_intel: 'linux-x64' },
 };
 
+/** What a system must already be before its binary runs, by the same blocks. */
+const REQUIREMENTS = {
+	// Bun's macOS runtime, which the binary is, will not load before Ventura
+	on_macos: ['depends_on macos: :ventura'],
+};
+
 /** Each binary's sha256, by its name, from a sha256sum listing. */
 export const sumsOf = listing =>
 	new Map(
@@ -27,7 +33,7 @@ export const formula = (version, sums) => {
 	};
 	const blocks = Object.entries(PLATFORMS).map(
 		([system, chips]) =>
-			`  ${system} do\n${Object.entries(chips)
+			`  ${system} do\n${(REQUIREMENTS[system] ?? []).map(line => `    ${line}\n\n`).join('')}${Object.entries(chips)
 				.map(([chip, target]) => `    ${chip} do\n${binary(target)}\n    end`)
 				.join('\n')}\n  end`,
 	);
