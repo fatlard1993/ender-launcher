@@ -54,6 +54,8 @@ describe('the desktop icon', () => {
 		expect(plist).toContain('<key>CFBundleIconFile</key><string>ender</string>');
 		expect(plist).toContain('<key>CFBundleShortVersionString</key><string>1.2.3</string>');
 		expect(plist).toContain('<key>LSUIElement</key><true/>');
+		// Bun's macOS runtime, which the bundle's executable is, will not load before 13
+		expect(plist).toContain('<key>LSMinimumSystemVersion</key><string>13.0</string>');
 	});
 
 	test('is told apart from a terminal run by where the binary sits, not by having no arguments', () => {

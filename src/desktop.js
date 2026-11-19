@@ -45,7 +45,7 @@ export const infoPlist = ({ executable, release = version }) => `<?xml version="
 	<key>CFBundlePackageType</key><string>APPL</string>
 	<key>CFBundleShortVersionString</key><string>${xml(release)}</string>
 	<key>CFBundleVersion</key><string>${xml(release)}</string>
-	<key>LSMinimumSystemVersion</key><string>11.0</string>
+	<key>LSMinimumSystemVersion</key><string>13.0</string>
 	<key>LSUIElement</key><true/>
 </dict>
 </plist>
