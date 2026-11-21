@@ -14,6 +14,7 @@
 		"./metadata": "./src/mods/metadata.js",
 		"./packwiz": "./src/instance/packwiz.js",
 		"./scan": "./src/mods/capabilities.js",
+		"./scannerVersion": "./src/mods/scannerVersion.js",
 		"./range": "./src/mods/range.js",
 		"./rank": "./src/mods/rank.js",
 		"./spec": "./src/mods/spec.js",
