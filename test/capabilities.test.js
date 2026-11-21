@@ -4,9 +4,9 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 
 import { scan } from '../src/commands/mods';
-import { SCANNER_VERSION, gainedSince, scanJar } from '../src/mods/capabilities';
+import { SCANNER_VERSION, entryClasses, gainedSince, scanJar } from '../src/mods/capabilities';
 import { readClass } from '../src/mods/classfile';
-import { classFile, jar as jarIn } from './jars';
+import { classFile, jar as jarIn, rawZip } from './jars';
 
 let directory;
 
@@ -316,10 +316,14 @@ describe('the scan, as versioned', () => {
 		expect(findings.secrets).toEqual({});
 	});
 
-	test("reads the session token by Fabric's names before Minecraft 26 as well", async () => {
-		const findings = await scanOne({ members: ['net/minecraft/class_320.method_1674'] });
-
-		expect(findings.signals.session).toEqual({ 'a/A.class': ['net/minecraft/class_320.method_1674'] });
+	test("reads the session token by Fabric's names before Minecraft 26, and Forge's SRG names, as well", async () => {
+		for (const member of [
+			'net/minecraft/class_320.method_1674',
+			'net/minecraft/client/User.m_92547_',
+			'net/minecraft/util/Session.func_148254_d',
+		]) {
+			expect((await scanOne({ members: [member] })).signals.session).toEqual({ 'a/A.class': [member] });
+		}
 	});
 
 	test('names where other programs keep their logins as secrets, apart from every warning', async () => {
@@ -365,5 +369,72 @@ describe('the scan, as versioned', () => {
 			signals: {},
 			hidden: [],
 		});
+	});
+});
+
+describe('where a call is', () => {
+	test('names the method each call is made in', async () => {
+		const findings = await scanOne({ code: { checkForUpdates: ['java/net/http/HttpClient.send'] } });
+
+		expect(findings.capabilities.network['a/A.class']).toEqual(['java/net/http/HttpClient.send in checkForUpdates']);
+	});
+
+	test('warns of a Fabric entry point reaching anything in its static initializer, which runs as the class loads', async () => {
+		const path = await jar({
+			'fabric.mod.json': JSON.stringify({ entrypoints: { main: ['a.Main'], client: [{ value: 'a.Other::init' }] } }),
+			'a/Main.class': classFile({ name: 'a/Main', code: { '<clinit>': ['java/net/URLClassLoader.<init>'] } }),
+			'a/Plain.class': classFile({ name: 'a/Plain', code: { '<clinit>': ['java/net/URLClassLoader.<init>'] } }),
+		});
+		const findings = await scanJar(path);
+
+		expect(findings.signals.initializer).toEqual({ 'a/Main.class': ['java/net/URLClassLoader.<init> in <clinit>'] });
+	});
+
+	test("warns the same of a NeoForge mod's main class, found by its annotation", async () => {
+		const findings = await scanOne({
+			annotations: ['Lnet/neoforged/fml/common/Mod;'],
+			code: { '<clinit>': ['java/lang/Runtime.exec'] },
+		});
+
+		expect(findings.signals.initializer).toEqual({ 'a/A.class': ['java/lang/Runtime.exec in <clinit>'] });
+	});
+
+	test('reads the entry points a Quilt mod names, and none from metadata that does not parse', () => {
+		expect(entryClasses(JSON.stringify({ quilt_loader: { entrypoints: { init: 'a.b.Init' } } }))).toEqual([
+			'a/b/Init.class',
+		]);
+		expect(entryClasses('{ not json')).toEqual([]);
+	});
+});
+
+describe('an archive read two ways', () => {
+	const named = classFile({ name: 'a/A' });
+
+	test('warns of an entry named twice, and a class in the file its directory does not list', async () => {
+		const path = join(directory, 'tricked.jar');
+
+		await Bun.write(
+			path,
+			rawZip(
+				[
+					['a/A.class', named],
+					['a/A.class', named],
+					['x/Payload.class', classFile({ name: 'x/Payload' })],
+				],
+				{ unlisted: ['x/Payload.class'] },
+			),
+		);
+
+		expect((await scanJar(path)).signals.zip).toEqual({
+			'(the jar)': ['a/A.class is named twice', 'x/Payload.class is in the file but not in its directory'],
+		});
+	});
+
+	test("takes no notice of the headers inside a jar it carries stored, which are the inner jar's own", async () => {
+		const path = join(directory, 'carrier.jar');
+
+		await Bun.write(path, rawZip({ 'a/A.class': named, 'META-INF/jars/lib.jar': rawZip({ 'b/B.class': named }) }));
+
+		expect((await scanJar(path)).signals.zip).toBeUndefined();
 	});
 });

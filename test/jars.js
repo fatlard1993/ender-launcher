@@ -3,8 +3,28 @@ import { dirname, join } from 'node:path';
 
 const u2 = value => Buffer.from([value >> 8, value & 0xff]);
 
+const u4be = value => {
+	const bytes = Buffer.alloc(4);
+
+	bytes.writeUInt32BE(value);
+
+	return bytes;
+};
+
 /** The smallest class file the reader accepts: a constant pool, then empty everything else. */
-export const classFile = ({ name, superName = 'java/lang/Object', members = [], strings = [], long = false }) => {
+/**
+ * `code` gives methods by name, each calling the members listed, so a scan can tell which method makes which call;
+ * `annotations` adds descriptors to the pool, as an annotated class carries them.
+ */
+export const classFile = ({
+	name,
+	superName = 'java/lang/Object',
+	members = [],
+	strings = [],
+	long = false,
+	code = {},
+	annotations = [],
+}) => {
 	const pool = [];
 	const add = (bytes, slots = 1) => {
 		const index = pool.reduce((sum, entry) => sum + entry.slots, 1);
@@ -25,12 +45,35 @@ export const classFile = ({ name, superName = 'java/lang/Object', members = [], 
 	const self = classRef(name);
 	const parent = classRef(superName);
 
-	for (const member of members) {
+	const memberRef = member => {
 		const [owner, memberName] = member.split('.');
 		const nameAndType = add(Buffer.concat([Buffer.from([12]), u2(utf8(memberName)), u2(utf8('()V'))]));
 
-		add(Buffer.concat([Buffer.from([10]), u2(classRef(owner)), u2(nameAndType)]));
-	}
+		return add(Buffer.concat([Buffer.from([10]), u2(classRef(owner)), u2(nameAndType)]));
+	};
+
+	for (const member of members) memberRef(member);
+	for (const annotation of annotations) utf8(annotation);
+
+	const codeName = Object.keys(code).length > 0 ? utf8('Code') : undefined;
+	const methods = Object.entries(code).map(([methodName, calls]) => {
+		// invokestatic each call, then return
+		const bytecode = Buffer.concat([
+			...calls.map(call => Buffer.concat([Buffer.from([0xb8]), u2(memberRef(call))])),
+			Buffer.from([0xb1]),
+		]);
+		const attribute = Buffer.concat([u2(4), u2(4), u4be(bytecode.length), bytecode, u2(0), u2(0)]);
+
+		return Buffer.concat([
+			u2(0x09),
+			u2(utf8(methodName)),
+			u2(utf8('()V')),
+			u2(1),
+			u2(codeName),
+			u4be(attribute.length),
+			attribute,
+		]);
+	});
 
 	for (const string of strings) add(Buffer.concat([Buffer.from([8]), u2(utf8(string))]));
 
@@ -45,7 +88,8 @@ export const classFile = ({ name, superName = 'java/lang/Object', members = [], 
 		u2(parent),
 		u2(0),
 		u2(0),
-		u2(0),
+		u2(methods.length),
+		...methods,
 		u2(0),
 	]);
 };
@@ -87,19 +131,28 @@ const u4 = value => {
 	return bytes;
 };
 
-/** A zip written byte by byte, stored, so an entry can carry a name the system zip would refuse, such as `../x`. */
-export const rawZip = entries => {
+/**
+ * A zip written byte by byte, stored, so an entry can carry a name the system zip would refuse, such as `../x`.
+ * Entries given as pairs may repeat a name, and those named in `unlisted` get a local header but no directory entry.
+ */
+export const rawZip = (entries, { unlisted = [] } = {}) => {
 	const locals = [];
 	const central = [];
 	let offset = 0;
 
-	for (const [name, text] of Object.entries(entries)) {
+	for (const [name, text] of Array.isArray(entries) ? entries : Object.entries(entries)) {
 		const nameBytes = Buffer.from(name);
 		const data = Buffer.from(text);
 		const check = u4(Bun.hash.crc32(data));
 		const fixed = Buffer.concat([u2(0).reverse(), u2(0), u2(0), u2(0), u2(0), check, u4(data.length), u4(data.length)]);
 
 		locals.push(Buffer.concat([u4(0x04_03_4b_50), fixed, u2(nameBytes.length).reverse(), u2(0), nameBytes, data]));
+
+		if (unlisted.includes(name)) {
+			offset += locals.at(-1).length;
+			continue;
+		}
+
 		central.push(
 			Buffer.concat([
 				u4(0x02_01_4b_50),

@@ -104,7 +104,17 @@ const openArchive = async path => {
 export const zipEntries = buffer =>
 	centralDirectory(buffer)
 		.filter(entry => !entry.name.endsWith('/'))
-		.map(entry => ({ name: entry.name, read: limit => contentOf(buffer, entry, limit) }));
+		.map(entry => ({ name: entry.name, read: limit => contentOf(buffer, entry, limit), span: spanOf(buffer, entry) }));
+
+/** Where an entry's local header starts and its data ends, which no other entry's header can sit inside. */
+const spanOf = (buffer, entry) => {
+	if (entry.localOffset + 30 > buffer.length) return [entry.localOffset, entry.localOffset];
+
+	const start =
+		entry.localOffset + 30 + buffer.readUInt16LE(entry.localOffset + 26) + buffer.readUInt16LE(entry.localOffset + 28);
+
+	return [entry.localOffset, start + entry.compressedSize];
+};
 
 /** Every file path inside the archive, directories omitted. */
 export const listEntries = async path => {
