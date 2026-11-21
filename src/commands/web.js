@@ -49,6 +49,24 @@ export const allowed = (request, port = PORT) => {
  */
 const sentAsJson = request => request.headers.get('content-type')?.split(';')[0].trim() === 'application/json';
 
+/**
+ * What ender web answers each request with: nothing at all for one this machine's own page did not send, then the API,
+ * then the site's files. Every write the API takes passes here first, whatever page tries it.
+ */
+export const serving =
+	({ answer, files, port = PORT, seen = () => {} }) =>
+	async request => {
+		if (!allowed(request, port)) return new Response(REFUSED, { status: 403 });
+
+		seen();
+
+		return (
+			(await answer(request)) ??
+			servePage(files, new URL(request.url).pathname) ??
+			new Response('Not found', { status: 404 })
+		);
+	};
+
 export const selfCommand = args => (isCompiled() ? [process.execPath, ...args] : [process.execPath, Bun.main, ...args]);
 
 /** A command run to its end: what it printed to each stream, and how it ended. */
@@ -217,7 +235,8 @@ export const webApi = ({
 		const [area, name, verb, ...rest] = segments;
 
 		if (rest.length > 0) return json({ error: 'Not found' }, 404);
-		if (area === 'ender' && method === 'GET') return json({ version, ...where(), terminal: await terminal() });
+		if (area === 'ender' && name === undefined && method === 'GET')
+			return json({ version, ...where(), terminal: await terminal() });
 
 		if (area === 'terminal' && name === undefined && method === 'POST') {
 			try {
@@ -229,7 +248,7 @@ export const webApi = ({
 			return json(await terminal());
 		}
 
-		if (area === 'jobs' && method === 'GET') {
+		if (area === 'jobs' && method === 'GET' && verb === undefined) {
 			if (name === undefined) return json(jobs.list().map(shown));
 
 			const job = jobs.get(name);
@@ -614,17 +633,7 @@ export const web = async ({ flags }) => {
 		server = Bun.serve({
 			hostname: '127.0.0.1',
 			port,
-			fetch: async request => {
-				if (!allowed(request, port)) return new Response(REFUSED, { status: 403 });
-
-				watch.seen();
-
-				return (
-					(await answer(request)) ??
-					servePage(files, new URL(request.url).pathname) ??
-					new Response('Not found', { status: 404 })
-				);
-			},
+			fetch: serving({ answer, files, port, seen: watch.seen }),
 		});
 	} catch (error) {
 		if (error.code === 'EADDRINUSE' && (await enderAt(port))) {

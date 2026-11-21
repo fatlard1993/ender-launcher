@@ -15,6 +15,7 @@ import {
 	servePage,
 	siteFiles,
 	retryOf,
+	serving,
 	webApi,
 } from '../src/commands/web';
 import { commandLine } from '../src/cli/index';
@@ -331,6 +332,88 @@ describe('ender web', () => {
 		});
 		expect(retryOf({ args: ['import', 'gist:x', '--sync'] }, [':: Syncing mods for --purge'])).toBeUndefined();
 		expect((await post('/api/jobs/nothing/again')).status).toBe(404);
+	});
+
+	test('answers a read only at the path it is for, not one with more after it', async () => {
+		const { jobs } = await fakeJobs();
+		const api = webApi({ jobs });
+		const job = await jobs.start(['update', '--instance', 'family'], { title: 'Updating family' });
+
+		await job.finished;
+		expect((await api(request(`/api/jobs/${job.id}`))).status).toBe(200);
+		expect((await api(request(`/api/jobs/${job.id}/again`))).status).toBe(404);
+		expect((await api(request('/api/ender/anything'))).status).toBe(404);
+	});
+
+	describe('trusting a jar and installing it, as a hostile page would try them', () => {
+		const hash = 'ef'.repeat(32);
+		const attempt = async headers => {
+			const { jobs, started } = await fakeJobs(1);
+			const trusted = [];
+			const handle = serving({ answer: webApi({ jobs, trust: async sha256 => trusted.push(sha256) }), files: site });
+			const failed = await jobs.start(['add', 'gh:me/mod', '--instance', 'family'], {
+				title: 'Adding to family',
+				instance: 'family',
+			});
+
+			await failed.finished;
+			started.length = 0;
+
+			const send = (path, body) =>
+				handle(
+					new Request(`http://${headers.host ?? 'localhost:7460'}${path}`, {
+						method: headers.method ?? 'POST',
+						headers: Object.fromEntries(
+							Object.entries({ 'content-type': 'application/json', host: 'localhost:7460', ...headers }).filter(
+								([key, value]) => value !== undefined && key !== 'method',
+							),
+						),
+						...((headers.method ?? 'POST') === 'POST' ? { body } : {}),
+					}),
+				);
+			const statuses = [
+				(await send('/api/trust', JSON.stringify({ sha256: hash }))).status,
+				(await send(`/api/jobs/${failed.id}/again`, '{}')).status,
+			];
+
+			return { statuses, trusted, started };
+		};
+
+		test("this machine's own page is answered, which is what every refusal below is measured against", async () => {
+			const { statuses, trusted, started } = await attempt({ origin: ORIGIN });
+
+			expect(statuses).toEqual([200, 202]);
+			expect(trusted).toEqual([hash]);
+			expect(started).toHaveLength(1);
+		});
+
+		for (const [what, headers, status] of [
+			['another site posting across to it', { origin: 'https://evil.example' }, 403],
+			['a page on another port of this machine', { origin: 'http://localhost:3000' }, 403],
+			['a sandboxed frame or a file, whose origin is null', { origin: 'null' }, 403],
+			['a request that names no origin', {}, 403],
+			[
+				'a site rebinding its own name to this machine',
+				{ host: 'evil.example:7460', origin: 'http://evil.example:7460' },
+				403,
+			],
+			[
+				'a preflight from another site, before it could send JSON',
+				{ method: 'OPTIONS', origin: 'https://evil.example' },
+				403,
+			],
+			['a form, which cannot send JSON, even from this page', { origin: ORIGIN, 'content-type': 'text/plain' }, 415],
+			['a form posted url-encoded', { origin: ORIGIN, 'content-type': 'application/x-www-form-urlencoded' }, 415],
+			['a link followed, which only reads', { method: 'GET' }, 404],
+		]) {
+			test(`refuses ${what}, trusting and starting nothing`, async () => {
+				const { statuses, trusted, started } = await attempt(headers);
+
+				expect(statuses).toEqual([status, status]);
+				expect(trusted).toEqual([]);
+				expect(started).toEqual([]);
+			});
+		}
 	});
 
 	test('runs one job on an instance at a time, and says which one holds it', async () => {
