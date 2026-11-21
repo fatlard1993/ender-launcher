@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 
 import { scan } from '../src/commands/mods';
-import { gainedSince, scanJar } from '../src/mods/capabilities';
+import { SCANNER_VERSION, gainedSince, scanJar } from '../src/mods/capabilities';
 import { readClass } from '../src/mods/classfile';
 import { classFile, jar as jarIn } from './jars';
 
@@ -259,5 +259,111 @@ describe('ender scan', () => {
 		const { lines } = await run([path], { json: true });
 
 		expect(JSON.parse(lines[0])[path].capabilities).toEqual({ network: { 'a/A.class': ['java/net/Socket.<init>'] } });
+	});
+});
+
+describe('the scan, as versioned', () => {
+	test('says which version of the scanner read it', async () => {
+		expect((await scanOne({})).version).toBe(SCANNER_VERSION);
+	});
+
+	test('finds native code through Java 22 and the libraries Minecraft provides, not only System.load', async () => {
+		const findings = await scanOne({
+			members: [
+				'java/lang/foreign/Linker.nativeLinker',
+				'org/lwjgl/system/Library.loadNative',
+				'io/netty/bootstrap/Bootstrap.connect',
+				'java/net/ServerSocket.<init>',
+				'java/awt/Desktop.browse',
+				'com/sun/tools/attach/VirtualMachine.attach',
+			],
+		});
+
+		expect(findings.capabilities.native['a/A.class']).toEqual([
+			'java/lang/foreign/Linker.nativeLinker',
+			'org/lwjgl/system/Library.loadNative',
+		]);
+		expect(findings.capabilities.network['a/A.class']).toEqual([
+			'io/netty/bootstrap/Bootstrap.connect',
+			'java/net/ServerSocket.<init>',
+		]);
+		expect(findings.capabilities.exec['a/A.class']).toEqual(['java/awt/Desktop.browse']);
+		expect(findings.capabilities.classloading['a/A.class']).toEqual(['com/sun/tools/attach/VirtualMachine.attach']);
+	});
+
+	test('reads hosts from websocket and ftp addresses too', async () => {
+		const findings = await scanOne({ strings: ['wss://voice.example.net/room', 'ftp://files.example.org'] });
+
+		expect(Object.keys(findings.hosts).sort()).toEqual(['files.example.org', 'voice.example.net']);
+	});
+
+	test('warns of a webhook, the session token, persistence and the clipboard, by what names each', async () => {
+		const findings = await scanOne({
+			members: ['net/minecraft/client/User.getAccessToken', 'java/awt/Toolkit.getSystemClipboard'],
+			strings: [
+				'https://discord.com/api/webhooks/1/abc',
+				'\\Microsoft\\Windows\\Start Menu\\Programs\\Startup',
+				'launcher_accounts.json',
+			],
+		});
+
+		expect(findings.signals).toEqual({
+			session: { 'a/A.class': ['net/minecraft/client/User.getAccessToken', 'launcher_accounts.json'] },
+			clipboard: { 'a/A.class': ['java/awt/Toolkit.getSystemClipboard'] },
+			webhook: { 'a/A.class': ['https://discord.com/api/webhooks/1/abc'] },
+			persistence: { 'a/A.class': ['\\Microsoft\\Windows\\Start Menu\\Programs\\Startup'] },
+		});
+		expect(findings.secrets).toEqual({});
+	});
+
+	test("reads the session token by Fabric's names before Minecraft 26 as well", async () => {
+		const findings = await scanOne({ members: ['net/minecraft/class_320.method_1674'] });
+
+		expect(findings.signals.session).toEqual({ 'a/A.class': ['net/minecraft/class_320.method_1674'] });
+	});
+
+	test('names where other programs keep their logins as secrets, apart from every warning', async () => {
+		const findings = await scanOne({
+			strings: ['\\discord\\Local Storage\\leveldb', 'Login Data', 'Exodus\\exodus.wallet', 'a login screen'],
+		});
+
+		expect(findings.secrets).toEqual({
+			discord: { 'a/A.class': ['\\discord\\Local Storage\\leveldb'] },
+			browser: { 'a/A.class': ['Login Data'] },
+			wallet: { 'a/A.class': ['Exodus\\exodus.wallet'] },
+		});
+	});
+
+	test('finds a jar or a class kept under another name, and leaves plain resources alone', async () => {
+		const path = await jar({
+			'a/A.class': classFile({ name: 'a/A' }),
+			'assets/a/data.bin': classFile({ name: 'x/Payload' }),
+			'assets/a/textures/block.png': Buffer.from('\x89PNG not code'),
+			'assets/a/lang/en_us.json': '{}',
+		});
+
+		expect((await scanJar(path)).hidden).toEqual(['assets/a/data.bin']);
+	});
+
+	test('an update gaining a warning, a secret or hidden code is news, as a capability is', () => {
+		const before = { capabilities: {}, signals: {}, secrets: {}, hidden: [], hosts: {}, unreadable: [] };
+		const after = {
+			capabilities: {},
+			signals: { webhook: { 'a/A.class': ['https://discord.com/api/webhooks/1'] } },
+			secrets: { discord: { 'a/A.class': ['Local Storage/leveldb'] } },
+			hidden: ['data.bin'],
+			hosts: {},
+			unreadable: [],
+		};
+
+		expect(gainedSince(before, after)).toMatchObject({
+			signals: after.signals,
+			secrets: after.secrets,
+			hidden: ['data.bin'],
+		});
+		expect(gainedSince({ capabilities: {}, hosts: {}, unreadable: [] }, before)).toMatchObject({
+			signals: {},
+			hidden: [],
+		});
 	});
 });

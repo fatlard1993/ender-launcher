@@ -1,24 +1,42 @@
 import { zipEntries } from '../archive';
 import { readClass } from './classfile';
+import { SCANNER_VERSION } from './scannerVersion';
+
+export { SCANNER_VERSION };
 
 /**
  * What a jar's code can reach, by the references that grant it: a bare class name covers every
  * member of that class, and `owner.member` covers that member alone.
  */
 export const CAPABILITIES = {
-	exec: ['java/lang/Runtime.exec', 'java/lang/ProcessBuilder'],
+	exec: [
+		'java/lang/Runtime.exec',
+		'java/lang/ProcessBuilder',
+		'java/awt/Desktop.browse',
+		'java/awt/Desktop.open',
+		'java/awt/Desktop.edit',
+	],
 	classloading: [
 		'java/lang/ClassLoader.defineClass',
 		'java/security/SecureClassLoader.defineClass',
 		'java/net/URLClassLoader',
 		'java/lang/invoke/MethodHandles$Lookup.defineClass',
 		'java/lang/invoke/MethodHandles$Lookup.defineHiddenClass',
+		'java/lang/instrument/Instrumentation',
+		'com/sun/tools/attach/VirtualMachine',
+		'javax/script/ScriptEngineManager',
 	],
 	native: [
 		'java/lang/System.load',
 		'java/lang/System.loadLibrary',
 		'java/lang/Runtime.load',
 		'java/lang/Runtime.loadLibrary',
+		'java/lang/foreign/Linker',
+		'java/lang/foreign/SymbolLookup.libraryLookup',
+		'com/sun/jna/Native',
+		'com/sun/jna/NativeLibrary',
+		'org/lwjgl/system/Library.loadNative',
+		'org/lwjgl/system/Library.loadSystem',
 	],
 	network: [
 		'java/net/URL.openConnection',
@@ -26,7 +44,17 @@ export const CAPABILITIES = {
 		'java/net/Socket',
 		'java/net/DatagramSocket',
 		'java/net/http/HttpClient',
+		'java/net/URL.getContent',
+		'java/net/ServerSocket',
+		'java/net/MulticastSocket',
 		'java/nio/channels/SocketChannel',
+		'java/nio/channels/ServerSocketChannel',
+		'java/nio/channels/DatagramChannel',
+		'java/nio/channels/AsynchronousSocketChannel',
+		'java/nio/channels/AsynchronousServerSocketChannel',
+		'com/sun/net/httpserver/HttpServer',
+		'io/netty/bootstrap/Bootstrap',
+		'io/netty/bootstrap/ServerBootstrap',
 	],
 	unsafe: ['sun/misc/Unsafe', 'jdk/internal/misc/Unsafe'],
 };
@@ -52,7 +80,65 @@ for (const [capability, rules] of Object.entries(CAPABILITIES)) {
 	}
 }
 
-const URL_HOST = /\bhttps?:\/\/([\w.-]+)/gi;
+const URL_HOST = /\b(?:https?|wss?|ftp):\/\/([\w.-]+)/gi;
+
+/**
+ * What code can do that has an innocent reason as often as not, so each is a warning to weigh, not a verdict: by the
+ * references that grant it, or the strings that name it. Strings are matched in lower case, with backslashes as slashes.
+ */
+export const SIGNALS = {
+	webhook: { strings: [/discord(app)?\.com\/api\/webhooks/, /api\.telegram\.org\/bot/] },
+	session: {
+		references: [
+			'net/minecraft/client/User.getAccessToken',
+			'net/minecraft/client/User.getSessionId',
+			'net/minecraft/class_320.method_1674',
+			'net/minecraft/class_320.method_1675',
+		],
+		strings: [/(^|\/)launcher_accounts(_microsoft_store)?\.json$/],
+	},
+	persistence: {
+		strings: [
+			/start menu\/programs\/startup/,
+			/currentversion\/run(once)?($|\/)/,
+			/\.config\/autostart/,
+			/systemd\/user/,
+			/library\/launchagents/,
+		],
+	},
+	clipboard: { references: ['java/awt/Toolkit.getSystemClipboard', 'java/awt/datatransfer/Clipboard'] },
+};
+
+/**
+ * Where other programs keep what lets someone sign in as their user: saved logins, session tokens, wallets. No mod has
+ * a reason to name these, so a jar that does is held back until its player allows it by its hash.
+ */
+export const SECRETS = {
+	discord: [/discord(canary|ptb)?\/local storage/, /local storage\/leveldb/],
+	browser: [
+		/(^|\/)(login data|web data|login data for account)$/,
+		/os_crypt/,
+		/(^|\/)(logins\.json|key4\.db|cookies\.sqlite)$/,
+		/google\/chrome\/user data/,
+		/microsoft\/edge\/user data/,
+		/bravesoftware\/brave-browser/,
+		/mozilla\/firefox\/profiles/,
+	],
+	wallet: [/wallet\.dat/, /exodus\.wallet/, /electrum\/wallets/, /nkbihfbeogaeaoehlefnkodbefgpgknn/],
+	telegram: [/telegram desktop\/tdata/],
+	steam: [/loginusers\.vdf/],
+};
+
+/** Files a mod carries that are what they are named: an entry of any other name holding a jar or class is hidden code. */
+const PLAIN_FILES =
+	/\.(png|jpe?g|gif|webp|svg|ogg|wav|mp3|json|json5|mcmeta|lang|txt|md|nbt|snbt|glsl|fsh|vsh|csh|toml|properties|cfg|yml|yaml|xml|html|css|js|ttf|otf|obj|mtl|bbmodel|accesswidener|classtweaker|mf|sf|rsa|dsa|ec|kotlin_module|kotlin_builtins|so|dll|dylib|jnilib|zip)$/i;
+
+const HIDDEN_LIMIT = 64 * 1024 * 1024;
+
+const looksLikeCode = bytes =>
+	bytes.length >= 4 &&
+	((bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04) ||
+		bytes.readUInt32BE(0) === 0xca_fe_ba_be);
 
 const DEFAULT_LIMIT = 512 * 1024 * 1024;
 
@@ -82,7 +168,17 @@ const grantedTo = reference => {
  * jar) to the references that granted it, and hosts map each URL host to the classes naming it.
  */
 export const scanJar = async (path, { limit = DEFAULT_LIMIT } = {}) => {
-	const findings = { classes: 0, jars: [], capabilities: {}, hosts: Object.create(null), unreadable: [] };
+	const findings = {
+		version: SCANNER_VERSION,
+		classes: 0,
+		jars: [],
+		capabilities: {},
+		signals: {},
+		secrets: {},
+		hidden: [],
+		hosts: Object.create(null),
+		unreadable: [],
+	};
 	const named = [];
 	let looksUp = false;
 	let remaining = limit;
@@ -103,6 +199,19 @@ export const scanJar = async (path, { limit = DEFAULT_LIMIT } = {}) => {
 		remaining -= bytes.length;
 
 		return bytes;
+	};
+
+	/** Whether an entry named as something else holds a jar or a class; one past the hidden limit is left unread. */
+	const hidesCode = entry => {
+		try {
+			const bytes = entry.read(Math.min(HIDDEN_LIMIT, remaining));
+
+			remaining -= bytes.length;
+
+			return looksLikeCode(bytes);
+		} catch {
+			return false;
+		}
 	};
 
 	const note = (record, key, value) => {
@@ -134,8 +243,27 @@ export const scanJar = async (path, { limit = DEFAULT_LIMIT } = {}) => {
 
 		if (parsed.references.some(reference => BY_NAME.includes(reference))) looksUp = true;
 
+		for (const [signal, { references = [] }] of Object.entries(SIGNALS)) {
+			for (const reference of parsed.references) {
+				if (references.some(rule => reference === rule || reference.startsWith(`${rule}.`)))
+					note((findings.signals[signal] ??= Object.create(null)), where, reference);
+			}
+		}
+
 		for (const string of parsed.strings) {
 			for (const [, host] of string.matchAll(URL_HOST)) note(findings.hosts, host.toLowerCase(), where);
+
+			const plain = string.replaceAll('\\', '/').toLowerCase();
+
+			for (const [signal, { strings = [] }] of Object.entries(SIGNALS)) {
+				if (strings.some(pattern => pattern.test(plain)))
+					note((findings.signals[signal] ??= Object.create(null)), where, string);
+			}
+
+			for (const [store, patterns] of Object.entries(SECRETS)) {
+				if (patterns.some(pattern => pattern.test(plain)))
+					note((findings.secrets[store] ??= Object.create(null)), where, string);
+			}
 
 			const owner = string.replace(/^\[*L(.+);$/, '$1').replaceAll('/', '.');
 
@@ -149,7 +277,11 @@ export const scanJar = async (path, { limit = DEFAULT_LIMIT } = {}) => {
 			const isClass = entry.name.endsWith('.class');
 			const isJar = entry.name.endsWith('.jar');
 
-			if (!isClass && !isJar) continue;
+			if (!isClass && !isJar) {
+				if (!PLAIN_FILES.test(entry.name) && hidesCode(entry)) findings.hidden.push(where);
+
+				continue;
+			}
 
 			if (isJar) findings.jars.push(where);
 
@@ -195,6 +327,9 @@ export const gainedSince = (before, after) => {
 
 	return {
 		capabilities: fresh(after.capabilities, before.capabilities),
+		signals: fresh(after.signals ?? {}, before.signals ?? {}),
+		secrets: fresh(after.secrets ?? {}, before.secrets ?? {}),
+		hidden: (before.hidden ?? []).length === 0 ? (after.hidden ?? []) : [],
 		hosts: fresh(after.hosts, before.hosts),
 		unreadable: before.unreadable.length === 0 ? after.unreadable : [],
 	};
