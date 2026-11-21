@@ -10,8 +10,8 @@ Minecraft instances, mods, modpacks and servers from one small program, `ender`.
 - **Any modpack.** `ender import` takes a Modrinth `.mrpack`, a CurseForge zip, a packwiz pack, a Prism instance or an ender pack, from a file or a link. A packwiz pack's CurseForge mods come from Modrinth where it has the very same file.
 - **A pack everyone follows.** An ender pack is one small file naming the mods chosen. `ender export --gist` publishes one, and publishing again updates the same gist; `ender follow` puts any instance on it, and `ender launch --update` reads it again before every launch, so every client in the house runs the same mods without anyone copying jars.
 - **Servers.** A server instance is made and filled the same way, and `ender server start --update` takes new releases each time it starts.
-- **Accounts.** Microsoft sign-in, on this machine or from a phone by scanning a code, or offline identities; each instance plays as the account it is given.
-- **In the browser.** `ender web` opens the index with your instances beside it: install a mod with a button, make instances from what you collected or from a pack, watch an import or update as it runs, launch, and publish a pack.
+- **Accounts.** Microsoft sign-in, on this machine or from a phone by scanning a code, the accounts Prism already signed in, or offline identities; each instance plays as the account it is given.
+- **In the browser.** `ender web` opens the index with your instances beside it: install a mod with a button, make instances from what you collected or from a pack, watch an import or update as it runs, launch, publish a pack, sign in players, and update ender itself.
 - **The people who make them.** `ender support` says how to support the authors of an instance's mods, and `ender share` puts a screenshot and its story on the mods' pages in the index. A mod's author runs `ender submit gh:owner/repo` to have the index list it within minutes, rather than when its discovery finds it.
 - **No mirror to wait for.** ender reads Mojang's and the loaders' own metadata, so a snapshot plays the day it ships. Prism waits on a metadata service of its own, which takes days to take a new version in.
 
@@ -19,7 +19,9 @@ Minecraft instances, mods, modpacks and servers from one small program, `ender`.
 
 ender is one file, with nothing else to install: it fetches the Java each game version needs itself.
 
-To skip the terminal, download from the [newest release](https://github.com/fatlard1993/ender-launcher/releases/latest): `Ender-mac-arm64.dmg` (Apple silicon) or `Ender-mac-x64.dmg` (Intel) for macOS 13 or later, `Ender-Setup.exe` for Windows. Each leaves an Ender icon that opens ender web in your browser, which stops once its page has been closed a while. Neither is signed: macOS asks you to allow Ender once in System Settings, Privacy & Security, and Windows SmartScreen needs More info, then Run anyway. The Windows installer puts `ender` on your PATH; on a Mac, Settings in ender web has Add ender to Terminal, which links it into `/usr/local/bin` once you give your password, and leaves alone an `ender` something else put there, such as Homebrew's. Every account on the Mac then runs Ender.app's own binary as `ender`, so whoever can replace Ender.app can change what that command does, as with any app installed for one user.
+To skip the terminal, download from the [newest release](https://github.com/fatlard1993/ender-launcher/releases/latest): `Ender-mac-arm64.dmg` (Apple silicon) or `Ender-mac-x64.dmg` (Intel) for macOS 13 or later, `Ender-Setup.exe` for Windows. Each leaves an Ender icon that opens ender web in your browser, which stops once its page has been closed a while. Neither is signed: macOS asks you to allow Ender once in System Settings, Privacy & Security, and Windows SmartScreen needs More info, then Run anyway.
+
+The Windows installer puts `ender` on your PATH; on a Mac, Settings in ender web has Add ender to Terminal, which links it into `/usr/local/bin` once you give your password, and leaves alone an `ender` something else put there, such as Homebrew's. Every account on the Mac then runs Ender.app's own binary as `ender`, so whoever can replace Ender.app can change what that command does, as with any app installed for one user.
 
 On Linux or macOS:
 
@@ -39,7 +41,7 @@ With Homebrew:
 brew install fatlard1993/tap/ender
 ```
 
-Each checks the download against the release's sha256 before installing it. The two scripts also add an Ender icon to the app menu (`ENDER_DESKTOP=0` skips it; with Homebrew, run `ender desktop`), and `ender desktop remove` takes it away. When the install folder is not on your PATH yet, the script prints the line that puts it there. `ender upgrade` brings an installed ender up to the newest release.
+Each checks the download against the release's sha256 before installing it. The two scripts also add an Ender icon to the app menu (`ENDER_DESKTOP=0` skips it; with Homebrew, run `ender desktop`), and `ender desktop remove` takes it away. When the install folder is not on your PATH yet, the script prints the line that puts it there. `ender upgrade` brings an installed ender up to the newest release, checked against the sha256 the release lists; one Homebrew installed is left to `brew upgrade`.
 
 Then make an instance and play it:
 
@@ -53,8 +55,7 @@ With no flags, `ender new` is the newest release on the newest stable Fabric loa
 If you have a modpack, start from it:
 
 ```
-ender import pack.mrpack
-ender sync
+ender import pack.mrpack --sync
 ender launch
 ```
 
@@ -62,15 +63,13 @@ If you have a Prism instance already, adopt it rather than rebuild it:
 
 ```
 ender import ~/.local/share/PrismLauncher/instances/suite
-ender account add --offline <your-name>
+ender account import
 ender launch
 ```
 
-Import reads the version and loader out of `mmc-pack.json`, follows `.minecraft` to wherever it really points, and asks Modrinth to identify the jars already in `mods/`. What it recognizes becomes a declared mod. What it does not recognize is listed and then left exactly where it is.
+Import reads the version and loader out of `mmc-pack.json`, follows `.minecraft` to wherever it really points, and asks Modrinth to identify the jars already in `mods/`. What it recognizes becomes a declared mod. What it does not recognize is listed and then left exactly where it is. `ender account import` takes over the Microsoft accounts Prism signed in, renewed before they are kept, so there is no second sign in.
 
-To browse mods rather than name them, `ender web` opens the [index](https://fatlard1993.github.io/ender-index/) in your browser with your instances beside it: pick one, and each mod says whether it is installed, with a button to add or drop it. Its Instances page makes instances from a list of mods or from a pack, updates, launches and deletes them, and publishes one as a gist; what takes a while shows ender's progress as it goes, and a launch reports how the game ended. A release carries the index's pages inside it; the mods themselves load live. It serves `http://localhost:7460` (`--port` for another), and answers only pages it served itself. From a checkout, it builds the pages of an ender-index checkout beside it each time it starts; `ENDER_SITE` names any other built site.
-
-Deleting an instance keeps its game directory, worlds included: one inside the instance is moved to `kept/` in ender's data directory, and only `ender delete --purge` removes it. `ender kept` lists what is kept and how large, and `ender kept remove <folder>` (or `--all`) clears it.
+To browse mods rather than name them, `ender web` opens the [index](https://fatlard1993.github.io/ender-index/) in your browser with your instances beside it: pick one, and each mod says whether it is installed, with a button to add or drop it. Its Instances page makes instances from a list of mods or from a pack, updates, launches and deletes them, and publishes one as a gist; what takes a while shows ender's progress as it goes, and a launch reports how the game ended. A release carries the index's pages inside it; the mods themselves load live. It serves `http://localhost:7460` (`--port` for another), and answers only pages it served itself. `--until-idle`, as the Ender icon runs it, stops once no page has been open for a while and nothing it started is running.
 
 ## Packs
 
@@ -83,11 +82,13 @@ Deleting an instance keeps its game directory, worlds included: one inside the i
 | packwiz | `pack.toml`, `index.toml` and a `.pw.toml` per mod | version, loader, and each mod by its Modrinth or CurseForge id or its link; an `[option]` opt-in whose default is off is left out, as packwiz-installer leaves it out |
 | A plain zip of jars | jars, and nothing else | lays them in `mods/`; needs `--minecraft`, because nothing in it says |
 
+A pack can also come by link, from a gist, or from a repository: `ender import gh:owner/repo` reads an `ender.pack.json` or packwiz `pack.toml` at its root, or else the newest release's `.mrpack`.
+
 Whatever a pack carries as loose files is unpacked into the game directory, then offered to Modrinth by hash. A bundled jar that turns out to be a published mod becomes a declared, updatable entry; one that does not is listed and left alone, the same as any jar you dropped in yourself. A pack's `client`/`server` markings are honored: `ender import pack.mrpack --server` makes a server instance and leaves out what the pack says is client-only.
 
 ### Keeping clients on a pack
 
-An ender pack is one small file, `ender.pack.json`, naming the game version, the loader and the mods chosen; what they need is resolved where it is installed. `ender export` writes one from an instance, and `ender export --gist` publishes it as a secret gist; publishing the same instance again updates that gist, so whoever follows it gets the change (`--new` starts another). Kept in a gist, it is a pack anyone can follow:
+An ender pack is one small file, `ender.pack.json`, naming the game version, the loader and the mods chosen; what they need is resolved where it is installed. `ender export` writes one from an instance, and `ender export --gist` publishes it as a secret gist; publishing the same instance again updates that gist, so whoever follows it gets the change (`--new` starts another), and `--list` asks the index to list it, as your GitHub account. Kept in a gist, it is a pack anyone can follow:
 
 ```
 ender import gist:aa5e1f0c9b2d4e6f8a1b3c5d7e9f0a2b
@@ -96,21 +97,13 @@ ender launch family --update
 
 An instance already set up follows one with `ender follow <pack> --instance <name>`: its game directory and worlds stay, and its own mods give way to the pack's (`--keep` keeps them beside it). A jar copied into `mods/` by hand that is another copy of a mod the pack installs would stop the game loading, so sync moves it to `mods-displaced/` and says so. An instance imported from an ender pack remembers where it came from too. `ender update` reads the pack again first: mods it added come in, mods it dropped go, its pins hold, and mods added beside it stay. `ender launch --update` does that before every launch, and when the update cannot run, says why and launches what is installed. A gist is read through GitHub's API, so an edit reaches the next update at once, whichever of the gist's links was imported.
 
-Otherwise, start fresh. `new` takes mods, so an instance and its contents are one command:
-
-```
-ender new suite lithium modmenu mr:sodium
-ender launch suite
-```
-
-With no flags at all, `ender new suite` is the newest release on the newest stable Fabric loader, both resolved live. Mods named on the line are resolved before the instance is created, so a typo leaves nothing behind to clean up, and anything they require comes along with them.
-
 ## Accounts
 
 ```
 ender account                    who you can play as
 ender account add --offline Bob  an identity that needs no sign in
 ender account add                sign in to a Microsoft account
+ender account import             take over the Microsoft accounts Prism signed in
 ender account use <name>         choose which one instances play as
 ender account assign <name>      bind one instance to one account
 ender account remove <name>      forget one
@@ -138,9 +131,20 @@ ender bump <version>         move to another Minecraft version, carrying the loa
 ender clone <src> <name>     copy one under a new name
 ender explain                the launch plan, and where each piece of it came from
 ender delete <name>          remove it; --purge takes the game directory too
+ender kept                   the game directories deleted instances left behind
 ```
 
-Only the mod list used to be changeable after creation. `ender bump 26.4` moves an instance to a new snapshot and re-resolves the loader with it, which is the whole of what a version bump takes.
+`new` takes mods, so an instance and its contents are one command:
+
+```
+ender new suite lithium modmenu mr:sodium
+```
+
+Mods named on the line are resolved before the instance is created, so a typo leaves nothing behind to clean up, and anything they require comes along with them.
+
+`ender bump 26.4` moves an instance to a new snapshot and re-resolves the loader with it, which is the whole of what a version bump takes.
+
+Deleting an instance keeps its game directory, worlds included: one inside the instance is moved to `kept/` in ender's data directory, and only `ender delete --purge` removes it. `ender kept` lists what is kept and how large, and `ender kept remove <folder>` (or `--all`) clears it.
 
 The game directory is the instance's own by default, but `--game-dir` points at a directory you already have. A working tree is a perfectly good game directory.
 
@@ -155,7 +159,7 @@ ender launch --width 1280 --height 720   the window size
 ender launch --dry-run                   print the java command instead of running it
 ```
 
-`ender install` downloads everything an instance needs without launching it, and `ender ls --names` and `ender account --names` print bare names, one per line, for scripts.
+`ender install` downloads everything an instance needs without launching it. For scripts, `ender ls --names` and `ender account --names` print bare names, one per line, and `ender ls`, `ender info` and `ender account` take `--json`.
 
 ## Mods
 
@@ -201,7 +205,11 @@ The jar itself is found by its version rather than by its name, because the name
 
 A project built against a different game version than the instance is refused rather than deployed, and a version that was never built says so instead of silently installing an older jar. `--build` runs the project's own `gradlew` first; without it, nothing is built behind you.
 
-### The file
+### Mods with no built release
+
+A repository the index lists only by its source, with no jar on its releases, installs by building it: `ender add gh:owner/repo --build` downloads the zip of the commit the index read and runs its own gradle wrapper with a JDK of the Java its game version runs on, then keeps the jar. That runs the project's build scripts on your machine with your permissions, so it happens only once you allow it by name with `--build`; ender remembers the allowance, and the mod's later commits build without asking again. Without it, ender says the mod has only its source, and names the line that allows building it.
+
+### The manifest
 
 The manifest is the file, and `ender add` is only a way of editing it. Instance state lives in `instances/<name>/instance.json`:
 
@@ -240,7 +248,7 @@ Setting `ender config curseforgeKey <key>` with a key from [their console](https
 
 `ender add gh:owner/repo` takes a mod straight from the releases of the repository its source lives in; `@tag` pins one.
 
-Repositories on GitHub, Codeberg and GitLab that ship jars in their releases are crawled nightly by [ender-index](https://github.com/fatlard1993/ender-index), which reads each jar's own metadata and scans what its code can reach. `ender search` searches that index, and only lists repositories whose jars declare a loader and game version the instance can use. Each hit says which loaders it ships for and what its newest release can reach, and says so when one of its releases was changed after it was published.
+Repositories on GitHub, Codeberg and GitLab that ship jars in their releases are crawled every hour by [ender-index](https://github.com/fatlard1993/ender-index), which reads each jar's own metadata and scans what its code can reach. `ender search` searches that index, and only lists repositories whose jars declare a loader and game version the instance can use. Each hit says which loaders it ships for and what its newest release can reach, and says so when one of its releases was changed after it was published.
 
 A repository the index has crawled resolves from it. The release is the one whose jar declares the instance's loader and game version, read out of the jar rather than guessed from its name, so one release carrying fabric and neoforge jars side by side hands over the right one. The download is checked against the sha256 the index computed. Dependencies come along through the index too: each mod id a jar requires is found as a repository's own mod, or else as one bundled in a release (Fabric API is forty-four modules in one jar), and anything the jar already carries inside itself is not fetched again. A required id the index does not know is said, not dropped, and so is one claimed only by a repository with fewer than 50 stars and a different owner from the mod requiring it: an author's own library is trusted by their other mods, but a stranger's claim to a mod id is not installed unasked. A jar the index lists as known bad is refused.
 
@@ -277,7 +285,7 @@ ender server offline         set online-mode=false
 ender server status          version, port, online-mode, what is installed
 ```
 
-Mods sync into a server instance exactly as they do into a client one, and every loader that can launch a client can also run a server:
+`ender launch` starts a server instance the same way `ender server start` does. Mods sync into a server instance exactly as they do into a client one, and every loader that can launch a client can also run a server:
 
 | Loader          | How its server is built                                       |
 | --------------- | ------------------------------------------------------------- |
@@ -321,7 +329,7 @@ bun link            # puts `ender` on your PATH
 bun test
 ```
 
-`bun run compile` builds the single binary the releases carry. When a command fails, `ENDER_DEBUG=1` prints the stack behind the error under it.
+`bun run compile` builds the single binary the releases carry. `ender web` from a checkout builds the pages of an ender-index checkout beside it each time it starts; `ENDER_SITE` names any other built site. When a command fails, `ENDER_DEBUG=1` prints the stack behind the error under it.
 
 ## License
 
