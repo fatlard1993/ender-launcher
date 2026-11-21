@@ -104,6 +104,9 @@ export const listing = async context => {
 	return entries;
 };
 
+/** The explanations mods' authors gave of their findings, by the index's key for each mod and then by finding. */
+export const explanations = async context => (await load(indexBase(context), 'explanations.json')) ?? {};
+
 /** Where a host's records live in the index; a dotted directory cannot collide with a GitHub owner. */
 const DIRECTORIES = { github: '', codeberg: 'codeberg.org/', gitlab: 'gitlab.com/' };
 

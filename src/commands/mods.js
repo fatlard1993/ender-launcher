@@ -5,7 +5,7 @@ import { readConfig } from '../config';
 import { fileIndexIssue, modLink } from '../indexIssues';
 import * as instances from '../instance';
 import { scanJar } from '../mods/capabilities';
-import { listing } from '../mods/catalog';
+import { explanations, listing } from '../mods/catalog';
 import { ownerName, supportOf } from '../mods/support';
 import { entryKey, evidence, reportSync, resolveAll, sources, syncMods, unplacedMessage, unplacedOf } from '../mods';
 import { done, fail, info, paint, plural, step, warn } from '../out';
@@ -404,47 +404,66 @@ export const search = async ({ positionals, flags }) => {
 	return 0;
 };
 
-/** The jars a scan covers: jar files named by path, installed mods named by file, id or key, or else all of mods/. */
+/** The index's key for an installed mod from a repository, under which its author's explanations are kept. */
+const repositoryKey = mod => (REPOSITORY_SOURCES.has(mod?.source) ? `${mod.source}:${mod.id}` : undefined);
+
+/**
+ * The jars a scan covers, each with the index's key for its mod when it is one installed from a repository: jar files
+ * named by path, installed mods named by file, id or key, or else all of mods/.
+ */
 const scanTargets = async (positionals, flags) => {
 	const onDisk = await Promise.all(positionals.map(target => Bun.file(resolve(target)).exists()));
 
-	if (positionals.length > 0 && onDisk.every(Boolean)) return positionals.map(target => resolve(target));
+	if (positionals.length > 0 && onDisk.every(Boolean)) return positionals.map(target => ({ path: resolve(target) }));
 
 	const { manifest } = await targetInstance(flags.instance);
 	const directory = instances.modsDir(manifest);
+	const { mods } = await instances.readLock(manifest.name);
+	const byFile = new Map(mods.map(mod => [mod.filename, mod]));
 
 	if (positionals.length === 0) {
 		return (await readdir(directory).catch(() => []))
 			.filter(file => file.endsWith('.jar'))
 			.sort()
-			.map(file => join(directory, file));
+			.map(file => ({ path: join(directory, file), key: repositoryKey(byFile.get(file)) }));
 	}
 
-	const { mods } = await instances.readLock(manifest.name);
-
 	return positionals.map((target, index) => {
-		if (onDisk[index]) return resolve(target);
+		if (onDisk[index]) return { path: resolve(target) };
 
 		const match = mods.find(mod => [mod.filename, mod.id, mod.key].includes(target));
 
 		if (match === undefined) throw new Error(`${target} is neither a jar file nor a mod installed in ${manifest.name}`);
 
-		return join(directory, match.filename);
+		return { path: join(directory, match.filename), key: repositoryKey(match) };
 	});
 };
 
+/** An author's explanation under the finding it answers, said to be theirs: the index looked it over, but not into it. */
+const authorsWord = note =>
+	note &&
+	info(
+		paint.dim(
+			`  ${''.padEnd(12)} its author, ${note.by}${note.release ? `, for ${note.release}` : ''}: ${note.text.replaceAll('\n', ' ')} (their words, not checked)`,
+		),
+	);
+
 /** What each jar's code can reach: one line per jar for a whole mods/, the evidence for named ones. */
 export const scan = async ({ positionals, flags }) => {
-	const paths = await scanTargets(positionals, flags);
+	const targets = await scanTargets(positionals, flags);
 	const detailed = positionals.length > 0;
 	const results = [];
 	let failed = 0;
+	const explained =
+		detailed && targets.some(({ key }) => key)
+			? await explanations({ index: (await readConfig()).index }).catch(() => ({}))
+			: {};
 
-	if (paths.length > 3) step(`Scanning ${plural(paths.length, 'jar')}`);
+	if (targets.length > 3) step(`Scanning ${plural(targets.length, 'jar')}`);
 
-	for (const path of paths) {
+	for (const { path, key } of targets) {
 		try {
-			results.push({ path, findings: await scanJar(path) });
+			results.push({ path, findings: await scanJar(path), notes: explained[key] ?? {} });
 		} catch (error) {
 			fail(`${basename(path)} :: ${error.message}`);
 
@@ -458,7 +477,7 @@ export const scan = async ({ positionals, flags }) => {
 		return failed > 0 ? 1 : 0;
 	}
 
-	for (const { path, findings } of results) {
+	for (const { path, findings, notes } of results) {
 		const reach = Object.keys(findings.capabilities);
 		const hosts = Object.keys(findings.hosts);
 
@@ -478,14 +497,25 @@ export const scan = async ({ positionals, flags }) => {
 
 		if (!detailed) continue;
 
-		for (const [capability, classes] of Object.entries(findings.capabilities))
+		for (const [capability, classes] of Object.entries(findings.capabilities)) {
 			info(`  ${capability.padEnd(12)} ${evidence(classes)}`);
-		for (const [signal, classes] of Object.entries(findings.signals))
+			authorsWord(notes[capability]);
+		}
+		for (const [signal, classes] of Object.entries(findings.signals)) {
 			info(`  ${signal.padEnd(12)} ${evidence(classes)}`);
+			authorsWord(notes[signal]);
+		}
 		for (const [store, classes] of Object.entries(findings.secrets))
 			info(`  ${paint.bold(`secrets:${store}`.padEnd(12))} ${evidence(classes)}`);
-		if (findings.hidden.length > 0) info(`  ${'hidden'.padEnd(12)} ${findings.hidden.join(' ')}`);
-		if (hosts.length > 0) info(`  ${'hosts'.padEnd(12)} ${hosts.join(' ')}`);
+		if (Object.keys(findings.secrets).length > 0) authorsWord(notes.secrets);
+		if (findings.hidden.length > 0) {
+			info(`  ${'hidden'.padEnd(12)} ${findings.hidden.join(' ')}`);
+			authorsWord(notes.hidden);
+		}
+		if (hosts.length > 0) {
+			info(`  ${'hosts'.padEnd(12)} ${hosts.join(' ')}`);
+			authorsWord(notes.hosts);
+		}
 		if (findings.unreadable.length > 0) info(`  ${'unreadable'.padEnd(12)} ${findings.unreadable.join(' ')}`);
 
 		info(

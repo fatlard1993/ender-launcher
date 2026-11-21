@@ -247,6 +247,47 @@ describe('ender scan', () => {
 		expect(lines).toContain('  exec         a/A.class (java/lang/Runtime.exec)');
 	});
 
+	test("shows an installed mod's author's explanation under the finding it answers, as theirs", async () => {
+		const previousHome = process.env.ENDER_HOME;
+		const home = await mkdtemp(join(tmpdir(), 'ender-home-'));
+		const index = join(home, 'index');
+
+		process.env.ENDER_HOME = home;
+
+		try {
+			const instances = await import('../src/instance');
+			const { updateConfig } = await import('../src/config');
+			const manifest = await instances.create('explained');
+			const modsDir = instances.modsDir(manifest);
+			const jarPath = await jar({ 'a/A.class': classFile({ name: 'a/A', members: ['java/net/Socket.<init>'] }) });
+
+			await Bun.write(join(modsDir, 'mod.jar'), Bun.file(jarPath));
+			await instances.writeLock('explained', {
+				mods: [{ key: 'k', source: 'github', id: 'Author/mod', filename: 'mod.jar' }],
+			});
+			await Bun.write(
+				join(index, 'explanations.json'),
+				JSON.stringify({
+					'github:Author/mod': { network: { text: 'It finds LAN games.', by: 'Author', release: '1.0' } },
+				}),
+			);
+			await updateConfig({ index });
+
+			const { lines } = await run(['Author/mod'], { instance: 'explained' });
+
+			expect(lines).toContain('  network      a/A.class (java/net/Socket.<init>)');
+			expect(
+				lines.some(line =>
+					line.includes('its author, Author, for 1.0: It finds LAN games. (their words, not checked)'),
+				),
+			).toBe(true);
+		} finally {
+			if (previousHome === undefined) delete process.env.ENDER_HOME;
+			else process.env.ENDER_HOME = previousHome;
+			await rm(home, { recursive: true, force: true });
+		}
+	});
+
 	test('says plainly when a jar reaches none of them', async () => {
 		const path = await jar({ 'a/A.class': classFile({ name: 'a/A' }) });
 		const { lines } = await run([path]);
