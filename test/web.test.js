@@ -280,11 +280,18 @@ describe('ender web', () => {
 		expect((await (await api(request('/api/jobs'))).json()).map(job => job.title)[0]).toBe('Deleting family');
 	});
 
-	test('trusts a held-back jar only by its hash, and runs a failed job again only as it was started', async () => {
+	test('trusts a held-back jar only by its hash, then installs it by syncing the instance the job was for', async () => {
 		const { jobs, started } = await fakeJobs(1);
 		const trusted = [];
 		const api = webApi({ jobs, trust: async sha256 => trusted.push(sha256) });
 		const post = (path, body) => api(request(path, { method: 'POST', origin: ORIGIN, body: JSON.stringify(body) }));
+		const finish = async response => {
+			const { job } = await response.json();
+
+			await jobs.get(job.id).finished;
+
+			return job;
+		};
 		const hash = 'ab'.repeat(32);
 
 		expect((await post('/api/trust', { sha256: 'not a hash' })).status).toBe(400);
@@ -292,26 +299,31 @@ describe('ender web', () => {
 		expect(await (await post('/api/trust', { sha256: hash })).json()).toEqual({ trusted: hash });
 		expect(trusted).toEqual([hash]);
 
-		const { job } = await (await post('/api/instances/family/add', { specs: ['gh:me/mod'] })).json();
+		const added = await finish(await post('/api/instances/family/add', { specs: ['gh:me/mod'] }));
+		const made = await finish(await post('/api/instances', { name: 'kids', specs: ['gh:me/mod'] }));
+		const played = await finish(await post('/api/instances/family/launch', { update: true }));
+		const imported = await finish(await post('/api/import', { source: 'gist:a1db98319884288ad3d83a0db854291f' }));
 
-		await jobs.get(job.id).finished;
+		started.length = 0;
 
-		const again = await post(`/api/jobs/${job.id}/again`, { args: ['delete', 'family'] });
+		for (const job of [added, made, played]) {
+			const again = await post(`/api/jobs/${job.id}/again`, { args: ['delete', 'family'] });
 
-		expect(again.status).toBe(202);
-		await jobs.get((await again.json()).job.id).finished;
+			expect(again.status).toBe(202);
+			await finish(again);
+		}
+
 		expect(started).toEqual([
-			['add', 'gh:me/mod', '--instance', 'family'],
-			['add', 'gh:me/mod', '--instance', 'family'],
+			['sync', '--instance', 'family'],
+			['sync', '--instance', 'kids'],
+			['launch', 'family', '--update'],
 		]);
+
+		const refused = await post(`/api/jobs/${imported.id}/again`);
+
+		expect(refused.status).toBe(409);
+		expect((await refused.json()).error).toContain('installs it the next time it is updated');
 		expect((await post('/api/jobs/nothing/again')).status).toBe(404);
-
-		const { jobs: passing } = await fakeJobs(0);
-		const fine = webApi({ jobs: passing });
-		const done = await passing.start(['update', '--instance', 'family'], { title: 'Updating family' });
-
-		await done.finished;
-		expect((await fine(request(`/api/jobs/${done.id}/again`, { method: 'POST', origin: ORIGIN }))).status).toBe(409);
 	});
 
 	test('runs one job on an instance at a time, and says which one holds it', async () => {

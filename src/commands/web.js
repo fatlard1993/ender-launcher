@@ -116,6 +116,29 @@ const allSpecs = specs => Array.isArray(specs) && specs.every(spec => SPEC.test(
  * a while is a job the page follows; what ender answers as JSON is answered as it is. Undefined for a path that is not
  * the API's.
  */
+/** What an import that a held-back jar stopped says to do, since only ender knows the name it gave the instance. */
+const retryRefusal = 'Trusted. The instance the import made installs it the next time it is updated, from its card.';
+
+/**
+ * How to install what a finished job held back, once trusted. Running it again would not: an add finds its mods
+ * declared and stops, and a new instance finds its name taken. A sync of the instance installs what it declares, and a
+ * launch updates as it starts. An import's instance is named by its pack, so it has none here.
+ */
+export const retryOf = ({ args = [], title, instance }) => {
+	const [verb, first] = args;
+	const syncing = name => ({
+		args: ['sync', '--instance', name],
+		title: `Installing what ${name} held back`,
+		instance: name,
+	});
+
+	if (verb === 'new') return syncing(first);
+	if (['add', 'drop', 'update'].includes(verb) && instance) return syncing(instance);
+	if (verb === 'launch') return { args, title, instance };
+
+	return undefined;
+};
+
 export const webApi = ({
 	command = selfCommand,
 	run = args => collect(command(args), { env: { ...process.env, NO_COLOR: '1' } }),
@@ -226,14 +249,18 @@ export const webApi = ({
 			return json({ trusted: sha256 });
 		}
 
-		// A job that failed, run again as it was first started: the page names the job, never what it runs
+		// What a finished job held back, installed now it is trusted: the page names the job, never what it runs
 		if (area === 'jobs' && name !== undefined && verb === 'again' && method === 'POST') {
 			const job = jobs.get(name);
 
 			if (!job) return json({ error: 'No such job' }, 404);
-			if (job.state !== 'failed') return json({ error: `${job.title} did not fail` }, 409);
+			if (job.state === 'running') return json({ error: `${job.title} is still running` }, 409);
 
-			return startJob(job.args, { title: job.title, instance: job.instance });
+			const again = retryOf(job);
+
+			if (!again) return json({ error: retryRefusal }, 409);
+
+			return startJob(again.args, { title: again.title, instance: again.instance });
 		}
 
 		if (area === 'import' && name === undefined && method === 'POST') {
