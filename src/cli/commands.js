@@ -25,6 +25,11 @@ const depsFlag = {
 		description:
 			'Build mods from source: a gradle project on disk, or a repository with no built release, allowed from then on',
 	},
+	trust: {
+		type: 'boolean',
+		description:
+			'Install a jar even though its code names where other programs keep logins, allowed for that jar from then on',
+	},
 };
 
 export const commands = {

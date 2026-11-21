@@ -16,6 +16,9 @@ import { isRemote, refreshFromPack, sourceOf } from './packSource';
 /** The sources that resolve through the index. */
 const INDEXED = new Set(['github', 'codeberg', 'gitlab', 'index']);
 
+/** The index's page saying what each finding of a scan means. */
+const FINDINGS_PAGE = 'https://fatlard1993.github.io/ender-index/findings';
+
 const contextFor = (manifest, config, flags = {}) => ({
 	minecraft: manifest.minecraft,
 	loader: manifest.loader?.type === 'vanilla' ? undefined : manifest.loader?.type,
@@ -27,6 +30,7 @@ const contextFor = (manifest, config, flags = {}) => ({
 	// to run behind someone during an ordinary sync.
 	buildMissing: flags.build ?? false,
 	rebuild: flags.build ?? false,
+	trustSecrets: flags.trust ?? false,
 });
 
 /**
@@ -458,19 +462,40 @@ export const scan = async ({ positionals, flags }) => {
 		const reach = Object.keys(findings.capabilities);
 		const hosts = Object.keys(findings.hosts);
 
+		const warnings = [...Object.keys(findings.signals), ...(findings.hidden.length > 0 ? ['hidden'] : [])];
+		const secrets = Object.keys(findings.secrets);
+
 		info(
-			`${paint.bold(basename(path))} ${reach.length > 0 ? reach.join(' ') : paint.dim('reaches none of exec, classloading, native, network, unsafe')}`,
+			[
+				paint.bold(basename(path)),
+				reach.length > 0 ? reach.join(' ') : paint.dim('reaches none of exec, classloading, native, network, unsafe'),
+				warnings.length > 0 && `warns of ${warnings.join(' ')}`,
+				secrets.length > 0 && paint.bold(`names where other programs keep logins: ${secrets.join(' ')}`),
+			]
+				.filter(Boolean)
+				.join(' '),
 		);
 
 		if (!detailed) continue;
 
 		for (const [capability, classes] of Object.entries(findings.capabilities))
 			info(`  ${capability.padEnd(12)} ${evidence(classes)}`);
+		for (const [signal, classes] of Object.entries(findings.signals))
+			info(`  ${signal.padEnd(12)} ${evidence(classes)}`);
+		for (const [store, classes] of Object.entries(findings.secrets))
+			info(`  ${paint.bold(`secrets:${store}`.padEnd(12))} ${evidence(classes)}`);
+		if (findings.hidden.length > 0) info(`  ${'hidden'.padEnd(12)} ${findings.hidden.join(' ')}`);
 		if (hosts.length > 0) info(`  ${'hosts'.padEnd(12)} ${hosts.join(' ')}`);
 		if (findings.unreadable.length > 0) info(`  ${'unreadable'.padEnd(12)} ${findings.unreadable.join(' ')}`);
 
-		info(paint.dim(`  ${plural(findings.classes, 'class', 'es')}, ${plural(findings.jars.length, 'nested jar')}`));
+		info(
+			paint.dim(
+				`  ${plural(findings.classes, 'class', 'es')}, ${plural(findings.jars.length, 'nested jar')}, scanner version ${findings.version}`,
+			),
+		);
 	}
+
+	if (detailed && results.length > 0) info(paint.dim(`What each finding means: ${FINDINGS_PAGE}`));
 
 	return failed > 0 ? 1 : 0;
 };

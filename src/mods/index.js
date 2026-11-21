@@ -5,6 +5,7 @@ import { checksumOf, checksumText, ensureFile, pool } from '../download';
 import { version as enderVersion } from '../../package.json';
 import { readJson, writeJson } from '../json';
 import { detail, fail, plural, progress, step, warn } from '../out';
+import { readConfig, updateConfig } from '../config';
 import { gainedSince, scanJar } from './capabilities';
 import * as curseforge from './curseforge';
 import * as github from './github';
@@ -332,7 +333,15 @@ const compareReplacements = async (installed, baselines, modsDir, scanCache) => 
 				await scanKept(join(modsDir, resolution.file.filename), resolution.key, scanCache),
 			);
 
-			if (Object.keys(found.capabilities).length + Object.keys(found.hosts).length + found.unreadable.length > 0) {
+			const news =
+				Object.keys(found.capabilities).length +
+				Object.keys(found.signals).length +
+				Object.keys(found.secrets).length +
+				Object.keys(found.hosts).length +
+				found.hidden.length +
+				found.unreadable.length;
+
+			if (news > 0) {
 				gained.push({ resolution, from: baseline.from, gained: found });
 			}
 		} catch (error) {
@@ -343,6 +352,80 @@ const compareReplacements = async (installed, baselines, modsDir, scanCache) => 
 	bar.clear();
 
 	return { gained, notCompared };
+};
+
+/** The names a scan gives the places other programs keep their logins, as a player would know them. */
+const STORES = {
+	discord: "Discord's login token",
+	browser: "a browser's saved logins and cookies",
+	wallet: 'a cryptocurrency wallet',
+	telegram: "Telegram's session",
+	steam: "Steam's sign in",
+};
+
+/**
+ * Whether a jar may be installed though its code names where other programs keep logins: only once the player allowed
+ * this very jar, by its hash, so a later build of the same mod is asked about again.
+ */
+export const allowSecrets = async (sha256, allowing) => {
+	const { trustedJars = [] } = await readConfig();
+
+	if (trustedJars.includes(sha256)) return true;
+	if (!allowing) return false;
+
+	await updateConfig({ trustedJars: [...trustedJars, sha256] });
+
+	return true;
+};
+
+/**
+ * The jars just installed whose code names where other programs keep logins, taken out again unless the player
+ * allowed them: no mod has a reason to, and stealing those is what Minecraft malware is for. Each is a failure, so the
+ * build it was to replace stays.
+ */
+const holdSecrets = async (installed, previous, modsDir, scanCache, trusting) => {
+	const unchanged = new Set(previous.map(mod => `${mod.filename}\0${mod.checksum}`));
+	const cleared = [];
+	const refused = [];
+	const bar = progress();
+
+	for (const [index, resolution] of installed.entries()) {
+		const path = join(modsDir, resolution.file.filename);
+
+		bar.update(`   checking ${index + 1}/${installed.length}`);
+
+		if (unchanged.has(`${resolution.file.filename}\0${checksumText(resolution.file.checksum)}`)) {
+			cleared.push(resolution);
+			continue;
+		}
+
+		const scan = await scanKept(path, resolution.key, scanCache).catch(() => undefined);
+		const stores = Object.keys(scan?.secrets ?? {});
+
+		if (stores.length === 0) {
+			cleared.push(resolution);
+			continue;
+		}
+
+		const sha256 = new Bun.CryptoHasher('sha256').update(await Bun.file(path).arrayBuffer()).digest('hex');
+
+		if (await allowSecrets(sha256, trusting)) {
+			cleared.push(resolution);
+			continue;
+		}
+
+		await unlink(path).catch(() => {});
+		refused.push({
+			resolution,
+			error: new Error(
+				`not installed: its code names where ${stores.map(store => STORES[store] ?? store).join(', ')} ${stores.length === 1 ? 'is' : 'are'} kept, which no mod has a reason to. If you are sure of it, the same command with --trust allows this jar`,
+			),
+		});
+	}
+
+	bar.clear();
+
+	return { cleared, refused };
 };
 
 /** Where a jar goes that would stop the game loading beside one ender manages: beside mods/, where no loader looks. */
@@ -452,7 +535,10 @@ export const syncMods = async ({ entries, modsDir, lock, context, withDependenci
 		if (learned) await writeJson(modIdCache, knownIds);
 	}
 
-	installed = kept;
+	const { cleared, refused } = await holdSecrets(kept, previous, modsDir, scanCache, context.trustSecrets ?? false);
+
+	installed = cleared;
+	failures.push(...refused);
 
 	const { gained, notCompared } = await compareReplacements(installed, baselines, modsDir, scanCache);
 	const wanted = new Set(installed.map(resolution => resolution.file.filename));
@@ -552,6 +638,16 @@ export const reportSync = ({
 		for (const [capability, classes] of Object.entries(found.capabilities)) {
 			warn(`${mod} gained ${capability} since ${from}: ${evidence(classes)}`);
 		}
+
+		for (const [signal, classes] of Object.entries(found.signals)) {
+			warn(`${mod} gained a ${signal} warning since ${from}: ${evidence(classes)}`);
+		}
+
+		for (const [store, classes] of Object.entries(found.secrets)) {
+			warn(`${mod} names where ${STORES[store] ?? store} is kept, since ${from}: ${evidence(classes)}`);
+		}
+
+		if (found.hidden.length > 0) warn(`${mod} hides code under other names since ${from}: ${found.hidden.join(', ')}`);
 
 		for (const [host, classes] of Object.entries(found.hosts)) {
 			warn(`${mod} names a new host since ${from}: ${host} in ${classes[0]}`);

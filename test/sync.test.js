@@ -406,3 +406,57 @@ describe('mod ids known by checksum', () => {
 		expect(Object.values(await Bun.file(modIdCache).json())).toEqual([['fabric-api'], ['fabric-api']]);
 	});
 });
+
+describe('a jar whose code names where other programs keep logins', () => {
+	let home;
+	let previousHome;
+
+	beforeEach(async () => {
+		previousHome = process.env.ENDER_HOME;
+		home = await mkdtemp(join(tmpdir(), 'ender-home-'));
+		process.env.ENDER_HOME = home;
+	});
+
+	afterEach(async () => {
+		if (previousHome === undefined) delete process.env.ENDER_HOME;
+		else process.env.ENDER_HOME = previousHome;
+		await rm(home, { recursive: true, force: true });
+	});
+
+	const stealer = async () => {
+		const path = await jarIn(root, {
+			'a/A.class': classFile({ name: 'a/A', strings: ['\\discord\\Local Storage\\leveldb'] }),
+		});
+
+		return { source: 'local', path };
+	};
+
+	test('is not installed, says why, and names --trust', async () => {
+		const result = await sync([await stealer()], { mods: [] });
+
+		expect(await readdir(modsDir)).toEqual([]);
+		expect(result.lock.mods).toEqual([]);
+		expect(result.failures[0].error.message).toContain("Discord's login token");
+		expect(result.failures[0].error.message).toContain('--trust');
+	});
+
+	test('is installed once the player trusts it, and stays trusted by its hash', async () => {
+		const entry = await stealer();
+		const trusted = await syncMods({
+			entries: [entry],
+			modsDir,
+			lock: { mods: [] },
+			context: { trustSecrets: true },
+			withDependencies: false,
+		});
+
+		expect(trusted.failures).toEqual([]);
+		expect(await readdir(modsDir)).toHaveLength(1);
+
+		await rm(join(modsDir, (await readdir(modsDir))[0]));
+
+		const again = await sync([entry], { mods: [] });
+
+		expect(again.failures).toEqual([]);
+	});
+});
