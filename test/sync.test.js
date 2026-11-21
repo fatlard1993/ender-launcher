@@ -438,6 +438,7 @@ describe('a jar whose code names where other programs keep logins', () => {
 		expect(result.lock.mods).toEqual([]);
 		expect(result.failures[0].error.message).toContain("Discord's login token");
 		expect(result.failures[0].error.message).toContain('--trust');
+		expect(result.failures[0].error.message).toMatch(/\[sha256:[0-9a-f]{64}\]$/);
 	});
 
 	test('is installed once the player trusts it, and stays trusted by its hash', async () => {

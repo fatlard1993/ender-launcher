@@ -418,7 +418,7 @@ const holdSecrets = async (installed, previous, modsDir, scanCache, trusting) =>
 		refused.push({
 			resolution,
 			error: new Error(
-				`not installed: its code names where ${stores.map(store => STORES[store] ?? store).join(', ')} ${stores.length === 1 ? 'is' : 'are'} kept, which no mod has a reason to. If you are sure of it, the same command with --trust allows this jar`,
+				`not installed: its code names where ${stores.map(store => STORES[store] ?? store).join(', ')} ${stores.length === 1 ? 'is' : 'are'} kept, which no mod has a reason to. If you are sure of it, the same command with --trust allows this jar [sha256:${sha256}]`,
 			),
 		});
 	}

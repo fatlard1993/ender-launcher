@@ -59,6 +59,7 @@ export const jobRunner = ({ command, start = detach, directory = () => join(path
 				id,
 				title,
 				instance,
+				args,
 				log: join(directory(), `${id}.log`),
 				state: 'running',
 				started: new Date().toISOString(),

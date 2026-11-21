@@ -5,6 +5,7 @@ import { version } from '../../package.json';
 import { NAME as PLAYER } from '../auth/accounts';
 import { openInBrowser } from '../browser';
 import { linkForTerminal, terminalStatus } from '../desktop';
+import { allowSecrets } from '../mods';
 import { publishPack } from '../gist';
 import { INSTANCE_NAME } from '../instance';
 import { parseEnderPack } from '../instance/enderPack';
@@ -129,6 +130,7 @@ export const webApi = ({
 	where = installedWhere,
 	terminal = () => terminalStatus(bundledBinary()),
 	linkTerminal = () => linkForTerminal(bundledBinary()),
+	trust = sha256 => allowSecrets(sha256, true),
 } = {}) => {
 	const answerJson = async args => {
 		const { code, stdout, stderr } = await run(args);
@@ -211,6 +213,27 @@ export const webApi = ({
 			const lines = await jobs.lines(seen, from);
 
 			return json({ ...seen, lines, next: from + lines.length });
+		}
+
+		// The one jar a sync held back for naming other programs' secret stores, by its hash, as --trust allows it
+		if (area === 'trust' && name === undefined && method === 'POST') {
+			const { sha256 } = await bodyOf(request);
+
+			if (!/^[0-9a-f]{64}$/.test(sha256 ?? '')) return json({ error: 'A jar is trusted by its sha256' }, 400);
+
+			await trust(sha256);
+
+			return json({ trusted: sha256 });
+		}
+
+		// A job that failed, run again as it was first started: the page names the job, never what it runs
+		if (area === 'jobs' && name !== undefined && verb === 'again' && method === 'POST') {
+			const job = jobs.get(name);
+
+			if (!job) return json({ error: 'No such job' }, 404);
+			if (job.state !== 'failed') return json({ error: `${job.title} did not fail` }, 409);
+
+			return startJob(job.args, { title: job.title, instance: job.instance });
 		}
 
 		if (area === 'import' && name === undefined && method === 'POST') {

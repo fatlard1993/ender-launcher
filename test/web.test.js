@@ -280,6 +280,40 @@ describe('ender web', () => {
 		expect((await (await api(request('/api/jobs'))).json()).map(job => job.title)[0]).toBe('Deleting family');
 	});
 
+	test('trusts a held-back jar only by its hash, and runs a failed job again only as it was started', async () => {
+		const { jobs, started } = await fakeJobs(1);
+		const trusted = [];
+		const api = webApi({ jobs, trust: async sha256 => trusted.push(sha256) });
+		const post = (path, body) => api(request(path, { method: 'POST', origin: ORIGIN, body: JSON.stringify(body) }));
+		const hash = 'ab'.repeat(32);
+
+		expect((await post('/api/trust', { sha256: 'not a hash' })).status).toBe(400);
+		expect((await post('/api/trust', { sha256: `${hash} --instance x` })).status).toBe(400);
+		expect(await (await post('/api/trust', { sha256: hash })).json()).toEqual({ trusted: hash });
+		expect(trusted).toEqual([hash]);
+
+		const { job } = await (await post('/api/instances/family/add', { specs: ['gh:me/mod'] })).json();
+
+		await jobs.get(job.id).finished;
+
+		const again = await post(`/api/jobs/${job.id}/again`, { args: ['delete', 'family'] });
+
+		expect(again.status).toBe(202);
+		await jobs.get((await again.json()).job.id).finished;
+		expect(started).toEqual([
+			['add', 'gh:me/mod', '--instance', 'family'],
+			['add', 'gh:me/mod', '--instance', 'family'],
+		]);
+		expect((await post('/api/jobs/nothing/again')).status).toBe(404);
+
+		const { jobs: passing } = await fakeJobs(0);
+		const fine = webApi({ jobs: passing });
+		const done = await passing.start(['update', '--instance', 'family'], { title: 'Updating family' });
+
+		await done.finished;
+		expect((await fine(request(`/api/jobs/${done.id}/again`, { method: 'POST', origin: ORIGIN }))).status).toBe(409);
+	});
+
 	test('runs one job on an instance at a time, and says which one holds it', async () => {
 		let release;
 		const jobs = jobRunner({
