@@ -14,6 +14,7 @@ import {
 	idleWatch,
 	servePage,
 	siteFiles,
+	retryOf,
 	webApi,
 } from '../src/commands/web';
 import { commandLine } from '../src/cli/index';
@@ -323,6 +324,12 @@ describe('ender web', () => {
 
 		expect(refused.status).toBe(409);
 		expect((await refused.json()).error).toContain('installs it the next time it is updated');
+		expect(
+			retryOf({ args: ['import', 'gist:x', '--sync'] }, [':: Importing', ':: Syncing mods for family']),
+		).toMatchObject({
+			args: ['sync', '--instance', 'family'],
+		});
+		expect(retryOf({ args: ['import', 'gist:x', '--sync'] }, [':: Syncing mods for --purge'])).toBeUndefined();
 		expect((await post('/api/jobs/nothing/again')).status).toBe(404);
 	});
 

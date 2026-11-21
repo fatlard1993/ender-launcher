@@ -116,15 +116,18 @@ const allSpecs = specs => Array.isArray(specs) && specs.every(spec => SPEC.test(
  * a while is a job the page follows; what ender answers as JSON is answered as it is. Undefined for a path that is not
  * the API's.
  */
-/** What an import that a held-back jar stopped says to do, since only ender knows the name it gave the instance. */
-const retryRefusal = 'Trusted. The instance the import made installs it the next time it is updated, from its card.';
+/** What a job that stopped before naming its instance says to do, once its jar is trusted. */
+const retryRefusal = 'Trusted. The instance it made installs it the next time it is updated, from its card.';
+
+const SYNCING = /^:: Syncing mods for (\S+)$/;
 
 /**
  * How to install what a finished job held back, once trusted. Running it again would not: an add finds its mods
  * declared and stops, and a new instance finds its name taken. A sync of the instance installs what it declares, and a
- * launch updates as it starts. An import's instance is named by its pack, so it has none here.
+ * launch updates as it starts. An import's instance is named by its pack, so it is read from the step the import
+ * printed before its sync, and taken only as an instance name could be.
  */
-export const retryOf = ({ args = [], title, instance }) => {
+export const retryOf = ({ args = [], title, instance }, lines = []) => {
 	const [verb, first] = args;
 	const syncing = name => ({
 		args: ['sync', '--instance', name],
@@ -136,7 +139,9 @@ export const retryOf = ({ args = [], title, instance }) => {
 	if (['add', 'drop', 'update'].includes(verb) && instance) return syncing(instance);
 	if (verb === 'launch') return { args, title, instance };
 
-	return undefined;
+	const imported = verb === 'import' && lines.map(line => line.match(SYNCING)?.[1]).find(Boolean);
+
+	return imported && INSTANCE.test(imported) ? syncing(imported) : undefined;
 };
 
 export const webApi = ({
@@ -256,7 +261,7 @@ export const webApi = ({
 			if (!job) return json({ error: 'No such job' }, 404);
 			if (job.state === 'running') return json({ error: `${job.title} is still running` }, 409);
 
-			const again = retryOf(job);
+			const again = retryOf(job, await jobs.lines(shown(job)));
 
 			if (!again) return json({ error: retryRefusal }, 409);
 
