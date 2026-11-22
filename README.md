@@ -207,7 +207,7 @@ A project built against a different game version than the instance is refused ra
 
 ### Mods with no built release
 
-A repository the index lists only by its source, with no jar on its releases, installs by building it: `ender add gh:owner/repo --build` downloads the zip of the commit the index read and runs its own gradle wrapper with a JDK of the Java its game version runs on, then keeps the jar. That runs the project's build scripts on your machine with your permissions, so it happens only once you allow it by name with `--build`; ender remembers the allowance, and the mod's later commits build without asking again. Without it, ender says the mod has only its source, and names the line that allows building it.
+A repository the index lists only by its source, with no jar on its releases, installs by building it: `ender add gh:owner/repo --build` downloads the zip of the commit the index read and runs its own gradle wrapper with a JDK of the Java its game version runs on, then keeps the jar. That runs the project's build scripts on your machine with your permissions, so it happens only once you allow it by name with `--build`. ender remembers the allowance together with the build scripts it covered: the wrapper, every `.gradle` and `.gradle.kts` file, `gradle.properties`, the `gradle/` folder, `buildSrc`, `build-logic` and any build `settings.gradle` includes. A later commit whose scripts are the same builds without asking. One whose scripts changed is held: ender names each script added, changed or removed, keeps both versions, and prints the `git diff --no-index` line that compares them; `--build` again allows the new ones. Without it, ender says the mod has only its source, and names the line that allows building it.
 
 ### The manifest
 

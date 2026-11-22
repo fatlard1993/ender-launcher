@@ -1,13 +1,13 @@
 import { copyFile, mkdir, readdir, rename, rm, stat } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 
 import { extractArchive } from '../archive';
 import { readConfig, updateConfig } from '../config';
 import { ensureFile } from '../download';
 import { provideJdk } from '../jdk';
 import { versionMeta } from '../meta/mojang';
-import { step } from '../out';
-import { paths } from '../paths';
+import { step, warn } from '../out';
+import { dataRoot, paths } from '../paths';
 import { builtJar, readProperties, runGradle } from './gradle';
 
 /** Where each host serves a repository's files at one commit, as a zip. */
@@ -35,20 +35,139 @@ export const pickBuiltJar = async (directory, version) => {
 	return sized.length > 0 ? join(libs, sized.toSorted((a, b) => b.size - a.size)[0].file) : undefined;
 };
 
+/** Folders a build writes or keeps for itself, never part of what the project ships as its build. */
+const SKIPPED = new Set(['.git', '.gradle', 'build', 'run', 'out']);
+
+/** The builds a settings file includes, whose own code runs while the project builds. */
+const includedBuilds = text => [...text.matchAll(/includeBuild\s*\(?\s*["']([^"']+)["']/g)].map(([, path]) => path);
+
 /**
- * Whether the player allowed building this repository: once allowed, its later commits build without asking again.
- * Building runs the project's own gradle scripts on this machine with the player's permissions, before the game runs
- * anything of it, so that is the player's to say, by name.
+ * The files that decide what a gradle build runs: the wrapper and its jar, every build and settings script, the
+ * properties and version catalogs they read, and all of buildSrc, build-logic and any build a settings file includes.
  */
-export const allowBuilding = async (key, allowing) => {
-	const { builds = [] } = await readConfig();
+export const isBuildScript = (path, included = []) =>
+	/^gradlew(\.bat)?$/.test(path) ||
+	path.startsWith('gradle/') ||
+	/(^|\/)[^/]+\.gradle(\.kts)?$/.test(path) ||
+	/(^|\/)gradle\.properties$/.test(path) ||
+	/^(buildSrc|build-logic)\//.test(path) ||
+	included.some(root => path.startsWith(`${root.replace(/^\.\//, '').replace(/\/$/, '')}/`));
 
-	if (builds.includes(key)) return true;
-	if (!allowing) return false;
+/** A project's build scripts, each by its path with its sha256: what an allowance to build it is held to. */
+export const buildScripts = async directory => {
+	const files = (await readdir(directory, { recursive: true, withFileTypes: true }))
+		.filter(entry => entry.isFile())
+		.map(entry => relative(directory, join(entry.parentPath ?? entry.path, entry.name)).replaceAll('\\', '/'))
+		.filter(path => !path.split('/').some(part => SKIPPED.has(part)));
+	const settings = files.filter(path => /^settings\.gradle(\.kts)?$/.test(path));
+	const included = (
+		await Promise.all(settings.map(async path => includedBuilds(await Bun.file(join(directory, path)).text())))
+	).flat();
+	const scripts = {};
 
-	await updateConfig({ builds: [...builds, key] });
+	for (const path of files.filter(path => isBuildScript(path, included)).toSorted()) {
+		scripts[path] = new Bun.CryptoHasher('sha256')
+			.update(await Bun.file(join(directory, path)).arrayBuffer())
+			.digest('hex');
+	}
 
-	return true;
+	return scripts;
+};
+
+/** What changed in a project's build scripts since an allowance: files added, changed and removed. */
+export const scriptChanges = (allowed, now) => ({
+	added: Object.keys(now).filter(path => !(path in allowed)),
+	changed: Object.keys(now).filter(path => path in allowed && allowed[path] !== now[path]),
+	removed: Object.keys(allowed).filter(path => !(path in now)),
+});
+
+/** Where the build scripts a player allowed are kept, to show what changed when they do. */
+const allowedCopy = key => join(dataRoot(), 'builds-allowed', ...key.split(':'));
+
+/**
+ * The player's allowance to build a repository: the commit and build scripts it was given for. One given before ender
+ * kept which scripts it covered holds none, and is asked for again. Undefined when building it was never allowed.
+ */
+export const allowanceOf = async key => {
+	const { builds } = await readConfig();
+
+	if (Array.isArray(builds)) return builds.includes(key) ? { scripts: undefined } : undefined;
+
+	return builds?.[key];
+};
+
+const keepAllowance = async (key, allowance) => {
+	const { builds } = await readConfig();
+	const kept = Array.isArray(builds) ? {} : { ...builds };
+
+	await updateConfig({ builds: { ...kept, [key]: allowance } });
+};
+
+/** Copy a project's build scripts out of its source, to show beside a later commit's. */
+const copyScripts = async (directory, scripts, to) => {
+	await rm(to, { recursive: true, force: true });
+
+	for (const path of Object.keys(scripts)) {
+		await mkdir(dirname(join(to, path)), { recursive: true });
+		await copyFile(join(directory, path), join(to, path));
+	}
+};
+
+/** A build that waits for the player, because its build scripts changed since they allowed it. */
+export class ScriptsChanged extends Error {}
+
+const listed = (word, paths) => (paths.length > 0 ? [`${word}: ${paths.join(', ')}`] : []);
+
+/**
+ * Hold a build to the scripts its allowance was given for. Allowing it now, by name, takes these scripts as allowed;
+ * otherwise scripts that changed since stop it, saying which and where both copies are to compare.
+ */
+const holdToAllowance = async ({ key, commit, directory, allowance, allowing }) => {
+	const scripts = await buildScripts(directory);
+	const copy = allowedCopy(key);
+
+	if (!allowing) {
+		const changes = allowance.scripts ? scriptChanges(allowance.scripts, scripts) : undefined;
+
+		if (changes === undefined || Object.values(changes).some(paths => paths.length > 0)) {
+			const pending = `${copy}@${commit.slice(0, 7)}`;
+
+			await copyScripts(directory, scripts, pending);
+
+			const what = changes
+				? [
+						`${key}'s build scripts changed since you allowed building it${allowance.commit ? ` at ${allowance.commit.slice(0, 7)}` : ''}:`,
+						...listed('added', changes.added),
+						...listed('changed', changes.changed),
+						...listed('removed', changes.removed),
+						`Compare them with: git diff --no-index ${copy} ${pending}`,
+					]
+				: [
+						`${key} was allowed to build before ender kept which build scripts an allowance covers.`,
+						`Its build scripts at ${commit.slice(0, 7)} are in ${pending}.`,
+					];
+
+			throw new ScriptsChanged(
+				[...what, `They run on this machine with your permissions; ender add ${key} --build allows these.`].join('\n'),
+			);
+		}
+	}
+
+	const changes = allowance.scripts && scriptChanges(allowance.scripts, scripts);
+
+	if (allowing && changes && Object.values(changes).some(paths => paths.length > 0)) {
+		warn(
+			[
+				`Allowing ${key}'s changed build scripts, as --build says:`,
+				...listed('added', changes.added),
+				...listed('changed', changes.changed),
+				...listed('removed', changes.removed),
+			].join('\n'),
+		);
+	}
+
+	await copyScripts(directory, scripts, copy);
+	await keepAllowance(key, { commit, scripts });
 };
 
 const javaFor = async minecraft =>
@@ -74,17 +193,23 @@ const fetchSource = async (host, name, commit, directory) => {
 
 /**
  * A jar built from a repository's source at one commit, built once and kept: the zip of that commit from its host,
- * built by its own gradle wrapper with a JDK of the Java its game version runs on.
+ * built by its own gradle wrapper with a JDK of the Java its game version runs on, once its build scripts are the ones
+ * the player allowed.
  */
-export const buildFromSource = async ({ host, name, commit, minecraft }) => {
+export const buildFromSource = async ({ host, name, commit, minecraft, allowance, allowing = false }) => {
 	const label = `${host}:${name}`;
 	const built = join(paths.cache, 'builds', host, name, `${commit}.jar`);
 
-	if (await Bun.file(built).exists()) return built;
+	if (allowance === undefined && !allowing) throw new Error(`Building ${label} was not allowed`);
+	if (allowance?.commit === commit && (await Bun.file(built).exists())) return built;
 
 	const directory = join(paths.cache, 'sources', host, name, commit);
 
 	if (!(await Bun.file(join(directory, 'gradlew')).exists())) await fetchSource(host, name, commit, directory);
+
+	await holdToAllowance({ key: label, commit, directory, allowance: allowance ?? {}, allowing });
+
+	if (await Bun.file(built).exists()) return built;
 
 	const javaHome = await provideJdk(await javaFor(minecraft));
 

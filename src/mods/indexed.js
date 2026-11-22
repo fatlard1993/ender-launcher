@@ -3,7 +3,7 @@ import { detail, warn } from '../out';
 import * as catalog from './catalog';
 import { chooseAsset, nameFits, pickBuild } from './pick';
 import { HOSTS, rank } from './rank';
-import { allowBuilding, buildFromSource } from './source';
+import { allowanceOf, buildFromSource } from './source';
 import { specFor } from './spec';
 
 export { HOSTS } from './rank';
@@ -160,9 +160,11 @@ export const resolveFromSource = async (record, entry, context) => {
 		);
 	}
 
-	if (!(await allowBuilding(key, context.buildMissing))) {
+	const allowance = await allowanceOf(key);
+
+	if (allowance === undefined && !context.buildMissing) {
 		throw new Error(
-			`${key} ${lacks}, only its source. Building it runs its gradle scripts on this machine with your permissions; ender add ${key} --build allows that for it from now on.`,
+			`${key} ${lacks}, only its source. Building it runs its gradle scripts on this machine with your permissions; ender add ${key} --build allows that, for these build scripts: when they change, ender shows what changed and asks again.`,
 		);
 	}
 
@@ -171,6 +173,8 @@ export const resolveFromSource = async (record, entry, context) => {
 		name: entry.id,
 		commit: source.commit,
 		minecraft: source.minecraft,
+		allowance,
+		allowing: context.buildMissing,
 	});
 	const short = source.commit.slice(0, 7);
 
