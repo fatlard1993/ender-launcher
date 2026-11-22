@@ -132,7 +132,7 @@ Only `minecraft`, `loader` and `mods` are needed.
 - **`loaderVersion`** pins the loader, so every player runs the one the pack was tested with; without it, each gets the newest. `ender export --pin-loader` writes the instance's.
 - **`memory`** is megabytes, the most the game may take, kept until a player sets their own.
 - **`servers`** are added to the game's multiplayer list after a player's own, and taken off when the pack drops them. `ender export --servers` writes an instance's list.
-- **Files beside the pack** in a repository or a zip, such as `config/`, `kubejs/` or `options.txt`, are laid down on import. On update, a file the pack changed is rewritten while the player's copy is still the pack's; one they edited is kept, and the update says so. A pack in a gist is one file and carries none.
+- **Files beside the pack** in a repository or a zip, such as `config/`, `kubejs/`, `datapacks/` or `options.txt`, are laid down on import. On update, a file the pack changed is rewritten while the player's copy is still the pack's; one they edited is kept, and the update says so. A pack in a gist is one file and carries none.
 
 `ender export --mrpack` writes an instance as a Modrinth `.mrpack` of what it installed, with each file's hashes from disk, for any launcher that reads them.
 
@@ -140,7 +140,7 @@ Only `minecraft`, `loader` and `mods` are needed.
 
 - **Commands run before or after the game, and JVM arguments.** A pack from a stranger would run them on your machine, and a `-javaagent` argument is code. `memory` is the part of those settings a pack can safely ask for.
 - **One pack for several game versions.** A pack is a set of mods tested together on one version; another version is another pack.
-- **Worlds and datapacks.** They belong to a world, not to an instance, and a world download is not a pack.
+- **Worlds, and a world's own data packs.** They belong to a world, not to an instance, and a world download is not a pack. Data packs meant for every world travel as files: in `datapacks/` or `global_packs/`, as Global Packs, Data Loader and Global Datapacks read them, or under `config/`, as Paxi and Open Loader do.
 - **A side written for each mod.** Each jar already says whether it runs on the client, the server or both, and ender reads that rather than ask a pack author to repeat it.
 
 ## Accounts

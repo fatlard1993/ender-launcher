@@ -731,3 +731,84 @@ describe('a pack that names paths outside where they belong', () => {
 		expect(manifest.resourcepacks.map(entry => entry.file)).toEqual(['options.zip']);
 	});
 });
+
+describe('data packs that apply to every world', () => {
+	const files = {
+		'config/paxi/datapacks/paxi-dp.zip': 'paxi',
+		'config/paxi/resourcepacks/paxi-rp.zip': 'paxi resources',
+		'config/openloader/packs/open-dp.zip': 'open loader',
+		'datapacks/global-dp.zip': 'global packs, data loader, global datapacks',
+		'global_packs/required_data/old-dp.zip': 'older global packs',
+	};
+	const placedIn = async (gameDir, paths) =>
+		Promise.all(paths.map(async path => [path, await Bun.file(join(gameDir, path)).exists()]));
+
+	test('travel as files of an ender pack, a packwiz pack and an mrpack, and reach followers on update', async () => {
+		const ender = await zip('global-ender', async staging => {
+			await writeFile(
+				join(staging, 'ender.pack.json'),
+				JSON.stringify({ minecraft: '26.3', loader: 'fabric', mods: [] }),
+			);
+
+			for (const [path, text] of Object.entries(files)) {
+				await mkdir(join(staging, path, '..'), { recursive: true });
+				await writeFile(join(staging, path), text);
+			}
+		});
+		const packwiz = await zip('global-packwiz', async staging => {
+			await writeFile(
+				join(staging, 'pack.toml'),
+				'name = "W"\n[index]\nfile = "index.toml"\n[versions]\nminecraft = "26.3"\nfabric = "0.20.1"\n',
+			);
+			await writeFile(join(staging, 'index.toml'), '');
+
+			for (const [path, text] of Object.entries(files)) {
+				await mkdir(join(staging, path, '..'), { recursive: true });
+				await writeFile(join(staging, path), text);
+			}
+		});
+		const mrpack = await zip('global-mrpack', async staging => {
+			await writeFile(
+				join(staging, 'modrinth.index.json'),
+				JSON.stringify({ dependencies: { minecraft: '26.3' }, files: [] }),
+			);
+
+			for (const [path, text] of Object.entries(files)) {
+				await mkdir(join(staging, 'overrides', path, '..'), { recursive: true });
+				await writeFile(join(staging, 'overrides', path), text);
+			}
+		});
+
+		for (const [name, path] of [
+			['ender', ender],
+			['packwiz', packwiz],
+			['mrpack', mrpack],
+		]) {
+			const gameDir = join(directory, `global-game-${name}`);
+
+			await unpackInto(path, await readPack(path, {}), gameDir);
+
+			expect({ name, placed: await placedIn(gameDir, Object.keys(files)) }).toEqual({
+				name,
+				placed: Object.keys(files).map(file => [file, true]),
+			});
+		}
+
+		const gameDir = join(directory, 'global-game-update');
+		const written = await unpackInto(ender, await readPack(ender, {}), gameDir);
+		const recorded = await recordOverrides(gameDir, written);
+		const changed = await zip('global-ender-2', async staging => {
+			await writeFile(
+				join(staging, 'ender.pack.json'),
+				JSON.stringify({ minecraft: '26.3', loader: 'fabric', mods: [] }),
+			);
+			await mkdir(join(staging, 'datapacks'), { recursive: true });
+			await writeFile(join(staging, 'datapacks', 'global-dp.zip'), 'a newer data pack');
+			await writeFile(join(staging, 'datapacks', 'another-dp.zip'), 'a new one');
+		});
+		const update = await updateOverrides(changed, await readPack(changed, {}), gameDir, recorded);
+
+		expect(update.written.toSorted()).toEqual(['datapacks/another-dp.zip', 'datapacks/global-dp.zip']);
+		expect(await Bun.file(join(gameDir, 'datapacks', 'global-dp.zip')).text()).toBe('a newer data pack');
+	});
+});

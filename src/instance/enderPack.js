@@ -9,7 +9,11 @@ export const ENDER_PACK = 'ender.pack.json';
 
 const LOADERS = new Set(['fabric', 'quilt', 'forge', 'neoforge', 'vanilla']);
 
-/** The parts of a game directory a pack may carry beside its file; anything else there is the repository's own. */
+/**
+ * The parts of a game directory a pack may carry beside its file; anything else there is the repository's own.
+ * `datapacks/` and `global_packs/` hold data packs that apply to every world, as Global Packs, Data Loader, Global
+ * Datapacks and Paxi read them; Paxi's own folder and Open Loader's are under `config/`.
+ */
 export const GAME_FILES = [
 	'config/',
 	'defaultconfigs/',
@@ -17,6 +21,8 @@ export const GAME_FILES = [
 	'scripts/',
 	'resourcepacks/',
 	'shaderpacks/',
+	'datapacks/',
+	'global_packs/',
 	'options.txt',
 	'servers.dat',
 ];
