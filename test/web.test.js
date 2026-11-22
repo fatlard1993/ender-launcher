@@ -323,6 +323,35 @@ describe('ender web', () => {
 		]);
 	});
 
+	test('turns an optional entry on or off only by a key ender lists, as a job on its instance', async () => {
+		const { jobs, started } = await fakeJobs(0);
+		const api = webApi({ jobs });
+		const post = body =>
+			api(request('/api/instances/family/optional', { method: 'POST', origin: ORIGIN, body: JSON.stringify(body) }));
+
+		for (const bad of [
+			{ key: 'modrinth:zoom' },
+			{ key: 'modrinth:zoom --instance x', on: true },
+			{ key: 'github:../x', on: true },
+			{ key: 'github:a/..', on: true },
+			{ key: 'local:/etc/passwd', on: true },
+			{ key: 'url:http://example.com/x.jar', on: true },
+		]) {
+			expect((await post(bad)).status).toBe(400);
+		}
+
+		for (const job of [
+			await (await post({ key: 'modrinth:zoom', on: true })).json(),
+			await (await post({ key: 'github:a/b', on: false })).json(),
+		])
+			await jobs.get(job.job.id).finished;
+
+		expect(started).toEqual([
+			['optional', 'on', 'modrinth:zoom', '--instance', 'family'],
+			['optional', 'off', 'github:a/b', '--instance', 'family'],
+		]);
+	});
+
 	test('trusts a held-back jar only by its hash, then installs it by syncing the instance the job was for', async () => {
 		const { jobs, started } = await fakeJobs(1);
 		const trusted = [];
@@ -494,6 +523,7 @@ describe('ender web', () => {
 			['POST', '/api/instances/family/update', {}],
 			['POST', '/api/instances/family/launch', { update: true }],
 			['POST', '/api/instances/family/gist', {}],
+			['POST', '/api/instances/family/optional', { key: 'modrinth:zoom', on: true }],
 			['PUT', '/api/instances/family/player', { player: 'Steve' }],
 			['DELETE', '/api/instances/family', {}],
 			['POST', '/api/import', { source: 'gist:a1db98319884288ad3d83a0db854291f' }],

@@ -7,6 +7,7 @@ import { openInBrowser } from '../browser';
 import { linkForTerminal, terminalStatus } from '../desktop';
 import { allowSecrets } from '../mods';
 import { HELD_COMMIT, HELD_KEY, allowHeldScripts, heldScriptsDiff } from '../mods/source';
+import { safeId } from '../mods/spec';
 import { publishPack } from '../gist';
 import { INSTANCE_NAME } from '../instance';
 import { parseEnderPack } from '../instance/enderPack';
@@ -121,6 +122,16 @@ const bodyOf = request => request.json().catch(() => ({}));
 const importable = source =>
 	typeof source === 'string' &&
 	(gistOf(source) !== undefined || REPOSITORY.test(source) || /^https:\/\/\S+$/.test(source));
+
+/** An entry's key as ender optional lists it: a host and an id with no empty or dot part, or an https link. */
+export const optionalKey = key => {
+	if (typeof key !== 'string') return false;
+	if (/^url:https:\/\/[^\s"]+$/.test(key)) return true;
+
+	const [, id] = key.match(/^(?:github|codeberg|gitlab|modrinth|curseforge):([\w./-]+)$/) ?? [];
+
+	return id !== undefined && safeId(id);
+};
 
 /** A GitHub repository as owner/repo, neither of them dots alone, which would climb out of the path it is put in. */
 const STARRABLE = /^(?!\.+\/)[\w.-]+\/(?!\.+$)[\w.-]+$/;
@@ -513,6 +524,21 @@ export const webApi = ({
 			if (player !== null && !PLAYER.test(player ?? '')) return json({ error: 'Not a player name' }, 400);
 
 			return changeThen(['account', 'assign', player ?? 'none', '--instance', name], ['info', name, '--json']);
+		}
+
+		// What a pack offers as optional, and turning one on or off, by the key ender optional lists it under
+		if (verb === 'optional' && method === 'GET') return answerJson(['optional', '--json', '--instance', name]);
+		if (verb === 'optional' && method === 'POST') {
+			const { key, on } = await bodyOf(request);
+
+			if (!optionalKey(key) || typeof on !== 'boolean') {
+				return json({ error: 'An optional entry is named by its key, and turned on or off' }, 400);
+			}
+
+			return startJob(['optional', on ? 'on' : 'off', key, '--instance', name], {
+				title: `${on ? 'Turning on' : 'Turning off'} ${key}`,
+				...named,
+			});
 		}
 
 		if (verb === 'gist' && method === 'POST') {
