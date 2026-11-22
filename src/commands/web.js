@@ -119,6 +119,17 @@ export const cached = (ask, fresh, now = Date.now) => {
 const bodyOf = request => request.json().catch(() => ({}));
 
 /** A pack import fetches: a gist, a GitHub repository, or a link over https; never a file on this machine. */
+/** Keep a pack the page made where import reads files, named by its content so the same pack is one file. */
+export const keepMadePack = async pack => {
+	const text = `${JSON.stringify(pack, null, '\t')}\n`;
+	const file = join(paths.cache, 'packs', `made-${new Bun.CryptoHasher('sha1').update(text).digest('hex')}.json`);
+
+	await mkdir(join(paths.cache, 'packs'), { recursive: true });
+	await Bun.write(file, text);
+
+	return file;
+};
+
 const importable = source =>
 	typeof source === 'string' &&
 	(gistOf(source) !== undefined || REPOSITORY.test(source) || /^https:\/\/\S+$/.test(source));
@@ -326,7 +337,22 @@ export const webApi = ({
 		}
 
 		if (area === 'import' && name === undefined && method === 'POST') {
-			const { source } = await bodyOf(request);
+			const { source, pack, name: wanted } = await bodyOf(request);
+
+			// A pack the page made, whole: checked as ender reads one, kept where import reads files, and imported
+			if (pack !== undefined) {
+				if (!INSTANCE.test(wanted ?? '')) return json({ error: `"${wanted ?? ''}" cannot name an instance` }, 400);
+
+				try {
+					parseEnderPack(pack);
+				} catch (error) {
+					return json({ error: error.message }, 400);
+				}
+
+				const file = await keepMadePack(pack);
+
+				return startJob(['import', file, '--name', wanted, '--sync'], { title: `Making ${wanted}`, instance: wanted });
+			}
 
 			if (!importable(source)) return json({ error: 'A pack is a gist, gh:owner/repo, or an https link' }, 400);
 

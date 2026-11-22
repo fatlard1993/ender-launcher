@@ -323,6 +323,48 @@ describe('ender web', () => {
 		]);
 	});
 
+	test('makes an instance of a pack the page made, whole, once ender reads it as a pack', async () => {
+		const previous = process.env.ENDER_HOME;
+		const home = await mkdtemp(join(tmpdir(), 'ender-made-'));
+
+		process.env.ENDER_HOME = home;
+
+		try {
+			const { jobs, started } = await fakeJobs(0);
+			const api = webApi({ jobs });
+			const post = body => api(request('/api/import', { method: 'POST', origin: ORIGIN, body: JSON.stringify(body) }));
+			const pack = {
+				name: 'House',
+				minecraft: '26.3',
+				loader: 'fabric',
+				loaderVersion: '0.20.1',
+				memory: 6144,
+				mods: ['gh:a/b', { spec: 'mr:zoomify', optional: true }],
+				resourcepacks: ['mr:faithful-32x'],
+				servers: [{ name: 'Ours', address: 'play.example.com' }],
+			};
+
+			expect((await post({ pack, name: '../x' })).status).toBe(400);
+			expect((await post({ pack: { ...pack, loader: 'nonsense' }, name: 'house' })).status).toBe(400);
+			expect((await post({ pack: { ...pack, mods: ['./mine.jar'] }, name: 'house' })).status).toBe(400);
+
+			const { job } = await (await post({ pack, name: 'house' })).json();
+
+			await jobs.get(job.id).finished;
+
+			const [args] = started;
+
+			expect(args.slice(0, 1)).toEqual(['import']);
+			expect(args.slice(2)).toEqual(['--name', 'house', '--sync']);
+			expect(args[1].startsWith(join(home, 'cache', 'packs', 'made-'))).toBe(true);
+			expect(await Bun.file(args[1]).json()).toEqual(pack);
+		} finally {
+			if (previous === undefined) delete process.env.ENDER_HOME;
+			else process.env.ENDER_HOME = previous;
+			await rm(home, { recursive: true, force: true });
+		}
+	});
+
 	test('turns an optional entry on or off only by a key ender lists, as a job on its instance', async () => {
 		const { jobs, started } = await fakeJobs(0);
 		const api = webApi({ jobs });
