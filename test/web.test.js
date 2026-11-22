@@ -282,6 +282,46 @@ describe('ender web', () => {
 		expect((await (await api(request('/api/jobs'))).json()).map(job => job.title)[0]).toBe('Deleting family');
 	});
 
+	test('allows a held build only by its mod and commit, shows what changed, and runs a held add again', async () => {
+		const allowed = [];
+		const api = webApi({
+			jobs: (await fakeJobs(0)).jobs,
+			builds: {
+				allow: async (key, commit) => (allowed.push([key, commit]), commit === 'beef000000'),
+				diff: async () => '--- a/b/build.gradle\n+++ b/b@beef000/build.gradle',
+			},
+		});
+		const post = body => api(request('/api/builds', { method: 'POST', origin: ORIGIN, body: JSON.stringify(body) }));
+
+		expect((await post({ key: 'github:a/b', commit: 'not a commit' })).status).toBe(400);
+		expect((await post({ key: '../../etc', commit: 'beef000000' })).status).toBe(400);
+		expect((await post({ key: 'github:a/b --build', commit: 'beef000000' })).status).toBe(400);
+		expect((await post({ key: 'github:a/b', commit: 'abc1234' })).status).toBe(404);
+		expect(await (await post({ key: 'github:a/b', commit: 'beef000000' })).json()).toEqual({ allowed: 'github:a/b' });
+		expect(allowed).toEqual([
+			['github:a/b', 'abc1234'],
+			['github:a/b', 'beef000000'],
+		]);
+		expect(
+			await (await api(request('/api/builds?key=github:a/b&commit=beef000000', { origin: ORIGIN }))).json(),
+		).toEqual({ diff: '--- a/b/build.gradle\n+++ b/b@beef000/build.gradle' });
+
+		const held = ['allows these. [build-scripts:github:a/b@beef000000]'];
+
+		expect(
+			retryOf({ args: ['add', 'gh:a/b', '--instance', 'family'], title: 'Adding gh:a/b', instance: 'family' }, held),
+		).toEqual({
+			args: ['add', 'gh:a/b', '--instance', 'family'],
+			title: 'Adding gh:a/b',
+			instance: 'family',
+		});
+		expect(retryOf({ args: ['update', '--instance', 'family'], instance: 'family' }, held).args).toEqual([
+			'sync',
+			'--instance',
+			'family',
+		]);
+	});
+
 	test('trusts a held-back jar only by its hash, then installs it by syncing the instance the job was for', async () => {
 		const { jobs, started } = await fakeJobs(1);
 		const trusted = [];

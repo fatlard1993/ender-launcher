@@ -6,6 +6,7 @@ import { NAME as PLAYER } from '../auth/accounts';
 import { openInBrowser } from '../browser';
 import { linkForTerminal, terminalStatus } from '../desktop';
 import { allowSecrets } from '../mods';
+import { HELD_COMMIT, HELD_KEY, allowHeldScripts, heldScriptsDiff } from '../mods/source';
 import { publishPack } from '../gist';
 import { INSTANCE_NAME } from '../instance';
 import { parseEnderPack } from '../instance/enderPack';
@@ -143,7 +144,8 @@ const SYNCING = /^:: Syncing mods for (\S+)$/;
  * How to install what a finished job held back, once trusted. Running it again would not: an add finds its mods
  * declared and stops, and a new instance finds its name taken. A sync of the instance installs what it declares, and a
  * launch updates as it starts. An import's instance is named by its pack, so it is read from the step the import
- * printed before its sync, and taken only as an instance name could be.
+ * printed before its sync, and taken only as an instance name could be. A held build is past once its scripts are
+ * allowed, and an add it stopped is run again, as it declared nothing.
  */
 export const retryOf = ({ args = [], title, instance }, lines = []) => {
 	const [verb, first] = args;
@@ -153,6 +155,8 @@ export const retryOf = ({ args = [], title, instance }, lines = []) => {
 		instance: name,
 	});
 
+	// An add resolves its mods before declaring them, so one a held build stopped declared nothing: it runs again
+	if (verb === 'add' && lines.some(line => line.includes('[build-scripts:'))) return { args, title, instance };
 	if (verb === 'new') return syncing(first);
 	if (['add', 'drop', 'update'].includes(verb) && instance) return syncing(instance);
 	if (verb === 'launch') return { args, title, instance };
@@ -177,6 +181,7 @@ export const webApi = ({
 	terminal = () => terminalStatus(bundledBinary()),
 	linkTerminal = () => linkForTerminal(bundledBinary()),
 	trust = sha256 => allowSecrets(sha256, true),
+	builds = { allow: allowHeldScripts, diff: heldScriptsDiff },
 } = {}) => {
 	const answerJson = async args => {
 		const { code, stdout, stderr } = await run(args);
@@ -271,6 +276,23 @@ export const webApi = ({
 			await trust(sha256);
 
 			return json({ trusted: sha256 });
+		}
+
+		// A source build held because its build scripts changed, by the key and commit ender printed for it: GET answers
+		// what changed, POST allows the scripts as they were held
+		if (area === 'builds' && name === undefined && ['GET', 'POST'].includes(method)) {
+			const { key, commit } = method === 'GET' ? Object.fromEntries(searchParams) : await bodyOf(request);
+
+			if (!HELD_KEY.test(key ?? '') || !HELD_COMMIT.test(commit ?? '')) {
+				return json({ error: 'A held build is named by its mod and commit' }, 400);
+			}
+
+			if (method === 'GET') return json({ diff: (await builds.diff(key, commit)) ?? null });
+			if (!(await builds.allow(key, commit))) {
+				return json({ error: `No build of ${key} at ${commit.slice(0, 7)} is waiting to be allowed` }, 404);
+			}
+
+			return json({ allowed: key });
 		}
 
 		// What a finished job held back, installed now it is trusted: the page names the job, never what it runs

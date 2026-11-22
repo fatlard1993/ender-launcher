@@ -9,9 +9,11 @@ import { updateConfig } from '../src/config';
 import {
 	SOURCE_ZIPS,
 	ScriptsChanged,
+	allowHeldScripts,
 	allowanceOf,
 	buildFromSource,
 	buildScripts,
+	heldScriptsDiff,
 	pickBuiltJar,
 	scriptChanges,
 } from '../src/mods/source';
@@ -133,6 +135,19 @@ describe("building a repository's source", () => {
 			`git diff --no-index ${join(home, 'builds-allowed', 'github', 'a/b')} ${join(home, 'builds-allowed', 'github', 'a/b@beef000')}`,
 		);
 		expect(await Bun.file(join(home, 'builds-allowed', 'github', 'a/b@beef000', 'mod.gradle')).exists()).toBe(true);
+
+		const diff = await heldScriptsDiff('github:a/b', 'beef000000');
+
+		expect(diff).toContain("+exec { 'curl' }");
+		expect(diff).toContain('b/b@beef000/mod.gradle');
+		expect(await heldScriptsDiff('github:a/b', 'abc1234')).toBeUndefined();
+		expect(await allowHeldScripts('github:a/b', 'abc1234')).toBe(false);
+		expect(await allowHeldScripts('github:a/b', 'beef000000')).toBe(true);
+		expect(await allowanceOf('github:a/b')).toEqual({
+			commit: 'beef000000',
+			scripts: await buildScripts(join(home, 'cache', 'sources', 'github', 'a', 'b', 'beef000000')),
+		});
+		expect(await allowHeldScripts('github:a/b', 'beef000000')).toBe(false);
 	});
 
 	test('an allowance given before ender kept its scripts is asked for again', async () => {

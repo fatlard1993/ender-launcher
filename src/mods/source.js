@@ -1,5 +1,5 @@
 import { copyFile, mkdir, readdir, rename, rm, stat } from 'node:fs/promises';
-import { dirname, join, relative } from 'node:path';
+import { basename, dirname, join, relative } from 'node:path';
 
 import { extractArchive } from '../archive';
 import { readConfig, updateConfig } from '../config';
@@ -113,6 +113,64 @@ const copyScripts = async (directory, scripts, to) => {
 	}
 };
 
+/** Where the build scripts of a commit held for the player are kept, beside the ones they allowed. */
+const pendingCopy = (key, commit) => `${allowedCopy(key)}@${commit.slice(0, 7)}`;
+
+/** A key and commit as a held build names them, and nothing a path could be built from otherwise. */
+export const HELD_KEY = /^(github|codeberg|gitlab):[\w.-]+(\/[\w.-]+)+$/;
+export const HELD_COMMIT = /^[0-9a-f]{7,64}$/;
+
+const heldOf = async (key, commit) => {
+	if (!HELD_KEY.test(key ?? '') || !HELD_COMMIT.test(commit ?? '') || key.split('/').includes('..')) return undefined;
+
+	const file = Bun.file(`${pendingCopy(key, commit)}.json`);
+	const held = (await file.exists()) ? await file.json() : undefined;
+
+	return held?.commit === commit ? held : undefined;
+};
+
+/**
+ * Allow the build scripts of a commit held because they changed, as the player saw them: the copy kept when it was
+ * held, not whatever the commit's source holds later. Answers whether there was such a commit to allow.
+ */
+export const allowHeldScripts = async (key, commit) => {
+	const held = await heldOf(key, commit);
+
+	if (!held) return false;
+
+	await rm(allowedCopy(key), { recursive: true, force: true });
+	await rename(pendingCopy(key, commit), allowedCopy(key));
+	await rm(`${pendingCopy(key, commit)}.json`, { force: true });
+	await keepAllowance(key, held);
+
+	return true;
+};
+
+/**
+ * What changed in a held commit's build scripts since the ones allowed, as git prints a diff, or undefined without
+ * git or such a commit. The allowed copy is missing for an allowance from before ender kept scripts, and every script
+ * then shows as added.
+ */
+export const heldScriptsDiff = async (key, commit) => {
+	if (!(await heldOf(key, commit))) return undefined;
+
+	const allowed = allowedCopy(key);
+
+	await mkdir(allowed, { recursive: true });
+
+	try {
+		const child = Bun.spawn(
+			['git', 'diff', '--no-index', '--no-color', '--', basename(allowed), basename(pendingCopy(key, commit))],
+			{ cwd: dirname(allowed), stdout: 'pipe', stderr: 'ignore' },
+		);
+		const text = await new Response(child.stdout).text();
+
+		return (await child.exited) <= 1 ? text : undefined;
+	} catch {
+		return undefined;
+	}
+};
+
 /** A build that waits for the player, because its build scripts changed since they allowed it. */
 export class ScriptsChanged extends Error {}
 
@@ -130,9 +188,10 @@ const holdToAllowance = async ({ key, commit, directory, allowance, allowing }) 
 		const changes = allowance.scripts ? scriptChanges(allowance.scripts, scripts) : undefined;
 
 		if (changes === undefined || Object.values(changes).some(paths => paths.length > 0)) {
-			const pending = `${copy}@${commit.slice(0, 7)}`;
+			const pending = pendingCopy(key, commit);
 
 			await copyScripts(directory, scripts, pending);
+			await Bun.write(`${pending}.json`, JSON.stringify({ commit, scripts }));
 
 			const what = changes
 				? [
@@ -148,7 +207,10 @@ const holdToAllowance = async ({ key, commit, directory, allowance, allowing }) 
 					];
 
 			throw new ScriptsChanged(
-				[...what, `They run on this machine with your permissions; ender add ${key} --build allows these.`].join('\n'),
+				[
+					...what,
+					`They run on this machine with your permissions; ender add ${key} --build allows these. [build-scripts:${key}@${commit}]`,
+				].join('\n'),
 			);
 		}
 	}
