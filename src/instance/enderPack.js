@@ -23,8 +23,19 @@ export const GAME_FILES = [
 	'shaderpacks/',
 	'datapacks/',
 	'global_packs/',
+	// What mods read from the game directory itself: menus, maps, defaults, gun packs, schematics, skins, loaded resources
+	'fancymenu_data/',
+	'journeymap/',
+	'configureddefaults/',
+	'tacz/',
+	'schematics/',
+	'CustomSkinLoader/',
+	'resources/',
+	'local/',
 	'options.txt',
 	'servers.dat',
+	'server.properties',
+	'server-icon.png',
 ];
 
 /**

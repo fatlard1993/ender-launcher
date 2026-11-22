@@ -47,8 +47,20 @@ export const detectPack = async path => {
 	throw new Error(`Not a modpack: ${path}`);
 };
 
-const unpackOverrides = async (path, gameDir, prefix, keep) => {
-	const written = await extractArchive(path, gameDir, { prefix, keep });
+/** The files a pack is read from, which describe it rather than being carried by it, so are never said left out. */
+const PACK_FILES = /(^|\/)(ender\.pack\.json|pack\.toml|index\.toml|modrinth\.index\.json|manifest\.json)$|\.pw\.toml$/;
+
+const unpackOverrides = async (path, gameDir, prefix, keep, left) => {
+	const written = await extractArchive(path, gameDir, {
+		prefix,
+		keep: inner => {
+			const kept = keep ? keep(inner) : true;
+
+			if (!kept && !PACK_FILES.test(inner)) left.push(inner);
+
+			return kept;
+		},
+	});
 
 	if (written.length > 0) detail('overrides', `${plural(written.length, 'file')} from ${prefix}`);
 
@@ -357,12 +369,17 @@ export const updateOverrides = async (path, pack, gameDir, recorded = {}) => {
 	const record = { ...recorded };
 	const written = [];
 	const kept = [];
+	const left = [];
 
 	for (const prefix of pack.overridePrefixes ?? []) {
 		for (const name of entries.filter(entry => entry.startsWith(prefix) && !entry.endsWith('/'))) {
 			const inner = name.slice(prefix.length);
 
-			if (inner === '' || (pack.keepOverride && !pack.keepOverride(inner))) continue;
+			if (inner === '') continue;
+			if (pack.keepOverride && !pack.keepOverride(inner)) {
+				if (!PACK_FILES.test(inner)) left.push(inner);
+				continue;
+			}
 
 			const destination = join(gameDir, normalize(inner));
 			const below = relative(gameDir, destination);
@@ -396,7 +413,21 @@ export const updateOverrides = async (path, pack, gameDir, recorded = {}) => {
 		}
 	}
 
-	return { written, kept, record };
+	return { written, kept, left, record };
+};
+
+/**
+ * The files a pack carried that ender left out, said by the folder each is in: a repository's own files, a world, or a
+ * folder ender does not lay down. Undefined when none were.
+ */
+export const leftOutLine = left => {
+	if (left.length === 0) return undefined;
+
+	const folders = [...new Set(left.map(inner => (inner.includes('/') ? `${inner.split('/')[0]}/` : inner)))].toSorted(
+		(a, b) => a.localeCompare(b),
+	);
+
+	return `${left.length === 1 ? '1 file' : `${left.length} files`} the pack carries ${left.length === 1 ? 'was' : 'were'} left out, as ender lays down only what the game and its mods read: ${folders.slice(0, 12).join(', ')}${folders.length > 12 ? `, and ${folders.length - 12} more` : ''}`;
 };
 
 /** Lay a pack's own files into the game directory, after the instance has been created. */
@@ -421,8 +452,10 @@ export const unpackInto = async (path, pack, gameDir) => {
 
 	const written = [];
 
+	pack.leftOut = [];
+
 	for (const prefix of pack.overridePrefixes ?? [])
-		written.push(...(await unpackOverrides(path, gameDir, prefix, pack.keepOverride)));
+		written.push(...(await unpackOverrides(path, gameDir, prefix, pack.keepOverride, pack.leftOut)));
 
 	return written;
 };

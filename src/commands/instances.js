@@ -7,7 +7,7 @@ import * as instances from '../instance';
 import { fromPrism, identifyMods } from '../instance/import';
 import { packFrom } from '../instance/enderPack';
 import { mrpackFrom } from '../instance/mrpack';
-import { readPack, recordOverrides, unpackInto } from '../instance/pack';
+import { leftOutLine, readPack, recordOverrides, unpackInto } from '../instance/pack';
 import { placeServers, serversIn } from '../instance/servers';
 import { entryKey, resolveAll, takeChosen } from '../mods';
 import { resolveVersionId } from '../meta/mojang';
@@ -408,6 +408,9 @@ const importPack = async (path, flags, target = path) => {
 	});
 
 	const written = await unpackInto(path, pack, manifest.gameDir);
+	const left = leftOutLine(pack.leftOut ?? []);
+
+	if (left) info(paint.dim(`  ${left}`));
 
 	// What each file was as the pack laid it down, so an update can tell the pack's copy from a player's edit
 	if (FOLLOWED.has(pack.kind) && written.length > 0) {

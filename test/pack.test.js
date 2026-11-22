@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 
 import { listEntries, readEntryJson } from '../src/archive';
 import { packFrom, parseEnderPack } from '../src/instance/enderPack';
-import { detectPack, readPack, recordOverrides, unpackInto, updateOverrides } from '../src/instance/pack';
+import { detectPack, leftOutLine, readPack, recordOverrides, unpackInto, updateOverrides } from '../src/instance/pack';
 import { writeZip } from '../src/zipWriter';
 import { zipped } from './jars';
 
@@ -810,5 +810,48 @@ describe('data packs that apply to every world', () => {
 
 		expect(update.written.toSorted()).toEqual(['datapacks/another-dp.zip', 'datapacks/global-dp.zip']);
 		expect(await Bun.file(join(gameDir, 'datapacks', 'global-dp.zip')).text()).toBe('a newer data pack');
+	});
+});
+
+describe("what a pack's files hold beside configs", () => {
+	test('lays down the folders mods read from the game directory, and names what it leaves out', async () => {
+		const carried = {
+			'fancymenu_data/customization/menu.txt': 'menu',
+			'journeymap/config/5.9/journeymap.core.config': 'map',
+			'configureddefaults/options.txt': 'defaults',
+			'tacz/custom/pack.zip': 'guns',
+			'schematics/base.litematic': 'base',
+			'CustomSkinLoader/CustomSkinLoader.json': 'skins',
+			'resources/assets/x.json': 'resource',
+			'local/ftb.snbt': 'local',
+			'server.properties': 'motd=Ours',
+		};
+		const repository = {
+			'README.md': 'readme',
+			LICENSE: 'mit',
+			'docs/guide.md': 'guide',
+			'saves/World/level.dat': 'world',
+		};
+		const path = await zip('carried', async staging => {
+			await writeFile(
+				join(staging, 'ender.pack.json'),
+				JSON.stringify({ minecraft: '26.3', loader: 'fabric', mods: [] }),
+			);
+
+			for (const [file, text] of Object.entries({ ...carried, ...repository })) {
+				await mkdir(join(staging, file, '..'), { recursive: true });
+				await writeFile(join(staging, file), text);
+			}
+		});
+		const gameDir = join(directory, 'carried-game');
+		const pack = await readPack(path, {});
+		const written = await unpackInto(path, pack, gameDir);
+
+		expect(written.toSorted()).toEqual(Object.keys(carried).toSorted());
+		expect(pack.leftOut.toSorted()).toEqual(Object.keys(repository).toSorted());
+		expect(leftOutLine(pack.leftOut)).toBe(
+			'4 files the pack carries were left out, as ender lays down only what the game and its mods read: docs/, LICENSE, README.md, saves/',
+		);
+		expect(leftOutLine([])).toBeUndefined();
 	});
 });
