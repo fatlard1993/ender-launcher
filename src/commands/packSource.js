@@ -124,9 +124,12 @@ export const resolveSpecs = async (specs, config) => {
 	const entries = [];
 	const failed = [];
 
-	for (const { spec, version } of specs) {
+	for (const { spec, version, ...offered } of specs) {
 		try {
-			entries.push(await refineModSpec(parseModSpec(version ? `${spec}@${version}` : spec), { index: config.index }));
+			entries.push({
+				...(await refineModSpec(parseModSpec(version ? `${spec}@${version}` : spec), { index: config.index })),
+				...offered,
+			});
 		} catch (error) {
 			failed.push(`  ${spec}: ${error.message}`);
 		}
@@ -170,7 +173,26 @@ export const refreshFromPack = async (manifest, config) => {
 		};
 	}
 
-	manifest.mods = [...entries, ...beside];
+	// An optional entry the pack turns on by default is turned on when it is new; one already known keeps its choice
+	const known = new Set([
+		...before,
+		...['resourcepacks', 'shaderpacks'].flatMap(kind => (manifest[kind] ?? []).map(entryKey)),
+	]);
+	const offered = { ...pack.manifest, mods: [...entries, ...beside] };
+	const chosen = new Set(manifest.chosen ?? []);
+
+	for (const kind of ['mods', 'resourcepacks', 'shaderpacks']) {
+		offered[kind] = (offered[kind] ?? []).map(({ chosen: on, ...entry }) => {
+			if (on && !known.has(entryKey(entry))) chosen.add(entryKey(entry));
+
+			return entry;
+		});
+	}
+
+	manifest.mods = offered.mods;
+	manifest.resourcepacks = offered.resourcepacks;
+	manifest.shaderpacks = offered.shaderpacks;
+	if (chosen.size > 0) manifest.chosen = [...chosen];
 	manifest.pack = { ...manifest.pack, mods: [...named.keys()] };
 
 	await instances.write(manifest);

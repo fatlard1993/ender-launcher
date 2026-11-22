@@ -7,7 +7,7 @@ import * as instances from '../instance';
 import { fromPrism, identifyMods } from '../instance/import';
 import { packFrom } from '../instance/enderPack';
 import { readPack, unpackInto } from '../instance/pack';
-import { entryKey, resolveAll } from '../mods';
+import { entryKey, resolveAll, takeChosen } from '../mods';
 import { resolveVersionId } from '../meta/mojang';
 import { LOADER_SERVICES, assertKnownLoader } from '../meta/resolve';
 import { done, info, paint, plural, step, warn } from '../out';
@@ -378,6 +378,8 @@ const importPack = async (path, flags, target = path) => {
 	}
 
 	if (pack.specs) pack.manifest.mods = await resolveSpecs(pack.specs, await readConfig());
+
+	takeChosen(pack.manifest);
 
 	const manifest = await instances.create(pack.manifest.name, {
 		...pack.manifest,

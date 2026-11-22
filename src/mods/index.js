@@ -28,6 +28,33 @@ const resolvers = {
 
 export const entryKey = entry => `${entry.source}:${entry.id ?? entry.path ?? entry.url}`;
 
+/** Whether an instance installs an entry: every one it declares, but an optional one only once a player turns it on. */
+export const isWanted = manifest => {
+	const chosen = new Set(manifest.chosen ?? []);
+
+	return entry => !entry.optional || chosen.has(entryKey(entry));
+};
+
+/**
+ * An instance's entries with what a pack chose at the start moved to its `chosen` list: an optional entry a pack turns
+ * on by default is on until a player turns it off, and the mark itself is not kept on the entry.
+ */
+export const takeChosen = manifest => {
+	const chosen = new Set(manifest.chosen ?? []);
+
+	for (const kind of ['mods', 'resourcepacks', 'shaderpacks']) {
+		manifest[kind] = (manifest[kind] ?? []).map(({ chosen: on, ...entry }) => {
+			if (on) chosen.add(entryKey(entry));
+
+			return entry;
+		});
+	}
+
+	if (chosen.size > 0) manifest.chosen = [...chosen];
+
+	return manifest;
+};
+
 const resolveLocal = entry => {
 	const path = resolvePath(entry.path);
 

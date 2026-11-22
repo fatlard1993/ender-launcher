@@ -212,6 +212,12 @@ export const commands = {
 		flags: { ...instanceFlag, ...depsFlag },
 		run: modCommands.drop,
 	},
+	optional: {
+		summary: 'List the mods and packs a pack offers as optional, or turn one on or off',
+		usage: 'ender optional [on|off <mod> [mod...]]',
+		flags: { ...instanceFlag, json: { type: 'boolean', description: 'Print them as JSON' } },
+		run: modCommands.optional,
+	},
 	scan: {
 		summary: 'Show what mods can reach: exec, classloading, native, network, unsafe',
 		usage: 'ender scan [jar|mod...]',

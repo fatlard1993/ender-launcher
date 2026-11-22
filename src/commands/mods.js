@@ -7,9 +7,20 @@ import * as instances from '../instance';
 import { scanJar } from '../mods/capabilities';
 import { explanations, listing } from '../mods/catalog';
 import { ownerName, supportOf } from '../mods/support';
-import { entryKey, evidence, reportSync, resolveAll, sources, syncMods, unplacedMessage, unplacedOf } from '../mods';
+import {
+	entryKey,
+	evidence,
+	isWanted,
+	reportSync,
+	resolveAll,
+	sources,
+	syncMods,
+	unplacedMessage,
+	unplacedOf,
+} from '../mods';
 import { done, fail, info, paint, plural, step, warn } from '../out';
 import { paths } from '../paths';
+import { KINDS, reportAssets, syncAssets } from '../mods/assets';
 import { parseModSpec, refineModSpec, specFor, targetInstance } from './context';
 import { isRemote, refreshFromPack, sourceOf } from './packSource';
 
@@ -50,21 +61,38 @@ export const syncInstance = async (manifest, config, { withDependencies = true, 
 
 	await mkdir(directory, { recursive: true });
 
+	const lock = await instances.readLock(manifest.name);
+	const wanted = isWanted(manifest);
 	const result = await syncMods({
-		entries: manifest.mods,
+		entries: manifest.mods.filter(wanted),
 		modsDir: directory,
-		lock: await instances.readLock(manifest.name),
+		lock,
 		context: contextFor(manifest, config, flags),
 		withDependencies,
 		modIdCache: join(paths.cache, 'mod-ids.json'),
 		scanCache: join(paths.cache, 'scans'),
 	});
 
-	await instances.writeLock(manifest.name, result.lock);
+	const declaresAssets = KINDS.some(
+		kind => (manifest[kind] ?? []).length > 0 || (lock.assets?.[kind] ?? []).length > 0,
+	);
+	const assets = declaresAssets
+		? await syncAssets({
+				manifest: {
+					...manifest,
+					...Object.fromEntries(KINDS.map(kind => [kind, (manifest[kind] ?? []).filter(wanted)])),
+				},
+				lock,
+				context: contextFor(manifest, config, flags),
+			})
+		: { assets: undefined, installed: [], removed: [], failures: [] };
+
+	await instances.writeLock(manifest.name, { ...result.lock, ...(assets.assets ? { assets: assets.assets } : {}) });
 
 	reportSync({ ...result, modsDir: directory });
+	reportAssets(assets);
 
-	return result;
+	return { ...result, failures: [...result.failures, ...assets.failures] };
 };
 
 export const sync = async ({ positionals, flags }) => {
@@ -652,4 +680,77 @@ export const submit = async ({ positionals, flags }, { file = fileIndexIssue } =
 	);
 
 	return 0;
+};
+
+/** Each optional entry an instance declares, mods and packs alike, with whether it is on. */
+export const offeredIn = manifest => {
+	const chosen = new Set(manifest.chosen ?? []);
+
+	return ['mods', 'resourcepacks', 'shaderpacks'].flatMap(kind =>
+		(manifest[kind] ?? [])
+			.filter(entry => entry.optional)
+			.map(entry => ({ kind, key: entryKey(entry), description: entry.description, on: chosen.has(entryKey(entry)) })),
+	);
+};
+
+/**
+ * The optional entries a pack offers, listed, or turned on or off by name: by their key, or by the id or slug alone.
+ * A change is installed or removed at the next sync, which this runs.
+ */
+export const optional = async ({ positionals, flags }) => {
+	const { manifest, config } = await targetInstance(flags.instance);
+	const [action, ...names] = positionals;
+	const offered = offeredIn(manifest);
+
+	if (action === undefined) {
+		if (flags.json) {
+			console.log(JSON.stringify(offered, null, 2));
+
+			return 0;
+		}
+
+		if (offered.length === 0) {
+			info(`${manifest.name} has nothing optional`);
+
+			return 0;
+		}
+
+		for (const item of offered) {
+			info(
+				`${item.on ? paint.green('on ') : paint.dim('off')} ${item.key}${item.kind === 'mods' ? '' : paint.dim(` (${item.kind})`)}${item.description ? paint.dim(`  ${item.description}`) : ''}`,
+			);
+		}
+
+		return 0;
+	}
+
+	if (!['on', 'off'].includes(action) || names.length === 0) throw new Error('ender optional [on|off <mod> [mod...]]');
+
+	const matched = names.map(name => {
+		const found = offered.filter(item => item.key === name || item.key.split(':').slice(1).join(':') === name);
+
+		if (found.length !== 1) {
+			throw new Error(
+				found.length === 0
+					? `${name} is not optional in ${manifest.name}; "ender optional" lists what is`
+					: `${name} names more than one optional entry: ${found.map(item => item.key).join(', ')}`,
+			);
+		}
+
+		return found[0].key;
+	});
+	const chosen = new Set(manifest.chosen ?? []);
+
+	for (const key of matched) {
+		if (action === 'on') chosen.add(key);
+		else chosen.delete(key);
+	}
+
+	manifest.chosen = [...chosen];
+	await instances.write(manifest);
+	done(`${action === 'on' ? 'Turned on' : 'Turned off'} ${matched.join(', ')} in ${manifest.name}`);
+
+	const { failures } = await syncInstance(manifest, config, { flags });
+
+	return failures.length > 0 ? 1 : 0;
 };

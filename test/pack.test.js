@@ -131,7 +131,7 @@ describe('curseforge packs', () => {
 		expect(pack.manifest.mods).toEqual([{ source: 'curseforge', id: '238222', version: '555' }]);
 	});
 
-	test('a file marked required: false is left out, as the CurseForge app leaves it out', async () => {
+	test('a file marked required: false is offered as optional, off until a player turns it on', async () => {
 		const path = await zip('cf-optional', async staging => {
 			await writeFile(
 				join(staging, 'manifest.json'),
@@ -146,7 +146,13 @@ describe('curseforge packs', () => {
 			);
 		});
 
-		expect((await readPack(path, {})).manifest.mods.map(mod => mod.id)).toEqual(['238222', '419699']);
+		const { mods } = (await readPack(path, {})).manifest;
+
+		expect(mods.map(mod => [mod.id, mod.optional ?? false])).toEqual([
+			['238222', false],
+			['306612', true],
+			['419699', false],
+		]);
 	});
 });
 
@@ -337,7 +343,7 @@ describe('a packwiz pack', () => {
 		expect(await unpackInto(path, read, join(directory, 'packwiz-game'))).toEqual(['config/sodium.json']);
 	});
 
-	test('leaves out a mod whose [option] is an opt-in defaulting to off, as packwiz-installer leaves it out', async () => {
+	test('offers a mod its [option] makes optional, with its description, on at the start only when its default is', async () => {
 		const path = await zip('packwiz-optional', async staging => {
 			const root = join(staging, 'opt-pack');
 
@@ -401,7 +407,11 @@ describe('a packwiz pack', () => {
 			);
 		});
 
-		expect((await readPack(path, {})).manifest.mods.map(mod => mod.id)).toEqual(['map', 'AANobbMI']);
+		expect((await readPack(path, {})).manifest.mods).toEqual([
+			{ source: 'modrinth', id: 'shd', version: '1', optional: true, description: 'Pretty, if your card can' },
+			{ source: 'modrinth', id: 'map', version: '1', optional: true, chosen: true },
+			{ source: 'modrinth', id: 'AANobbMI', version: '2' },
+		]);
 	});
 
 	test('takes a CurseForge mod from Modrinth where Modrinth has the very same file, and says how many', async () => {
@@ -484,4 +494,87 @@ test('a modrinth pack that gives a file no download is refused by that file, not
 	});
 
 	await expect(readPack(path, {})).rejects.toThrow('gives no download for mods/x.jar');
+});
+
+describe('what a pack carries beside its mods', () => {
+	test("an mrpack's resource and shader packs go to their own folders, and its optional files are offered", async () => {
+		const file = (path, env) => ({
+			path,
+			downloads: [`https://cdn.modrinth.com/${path}`],
+			hashes: { sha1: 'a'.repeat(40) },
+			...(env ? { env } : {}),
+		});
+		const path = await zip('mr-kinds', async staging => {
+			await writeFile(
+				join(staging, 'modrinth.index.json'),
+				JSON.stringify({
+					name: 'Kinds',
+					dependencies: { minecraft: '26.3', 'fabric-loader': '0.20.1' },
+					files: [
+						file('mods/sodium.jar'),
+						file('mods/zoom.jar', { client: 'optional', server: 'unsupported' }),
+						file('resourcepacks/Faithful.zip'),
+						file('shaderpacks/Complementary.zip'),
+						file('config/stray.json'),
+					],
+				}),
+			);
+		});
+		const { manifest } = await readPack(path, {});
+
+		expect(manifest.mods.map(mod => [mod.file, mod.optional ?? false])).toEqual([
+			['sodium.jar', false],
+			['zoom.jar', true],
+		]);
+		expect(manifest.resourcepacks.map(entry => entry.file)).toEqual(['Faithful.zip']);
+		expect(manifest.shaderpacks.map(entry => entry.file)).toEqual(['Complementary.zip']);
+	});
+
+	test('an ender pack names resource and shader packs, optional entries, and writes them back as it read them', () => {
+		const pack = parseEnderPack(
+			JSON.stringify({
+				name: 'House',
+				minecraft: '26.3',
+				loader: 'fabric',
+				mods: ['gh:a/b', { spec: 'mr:zoomify', optional: true, description: 'Zoom with C', default: true }],
+				resourcepacks: ['mr:faithful-32x', { spec: 'https://example.com/r.zip', optional: true }],
+				shaderpacks: [{ spec: 'mr:complementary-reimagined', version: 'r5.9' }],
+			}),
+		);
+
+		expect(pack.mods[1]).toEqual({ spec: 'mr:zoomify', optional: true, description: 'Zoom with C', chosen: true });
+		expect(pack.resourcepacks).toEqual([
+			{ source: 'modrinth', id: 'faithful-32x' },
+			{ source: 'url', url: 'https://example.com/r.zip', optional: true },
+		]);
+		expect(pack.shaderpacks).toEqual([{ source: 'modrinth', id: 'complementary-reimagined', version: 'r5.9' }]);
+
+		const { pack: written } = packFrom({
+			name: 'House',
+			minecraft: '26.3',
+			loader: { type: 'fabric' },
+			mods: [
+				{ source: 'github', id: 'a/b' },
+				{ source: 'modrinth', id: 'zoomify', optional: true, description: 'Zoom with C' },
+			],
+			resourcepacks: pack.resourcepacks,
+			shaderpacks: pack.shaderpacks,
+			chosen: ['modrinth:zoomify'],
+		});
+
+		expect(written.mods).toEqual([
+			'gh:a/b',
+			{ spec: 'mr:zoomify', optional: true, description: 'Zoom with C', default: true },
+		]);
+		expect(written.resourcepacks).toEqual(['mr:faithful-32x', { spec: 'https://example.com/r.zip', optional: true }]);
+		expect(written.shaderpacks).toEqual([{ spec: 'mr:complementary-reimagined', version: 'r5.9' }]);
+	});
+
+	test("an ender pack's resource and shader packs are only Modrinth, CurseForge or links", () => {
+		const pack = list => JSON.stringify({ minecraft: '26.3', loader: 'fabric', mods: [], resourcepacks: list });
+
+		for (const bad of [['gh:a/b'], ['./pack.zip'], ['mr:..'], 'mr:x']) {
+			expect(() => parseEnderPack(pack(bad))).toThrow('resourcepacks');
+		}
+	});
 });

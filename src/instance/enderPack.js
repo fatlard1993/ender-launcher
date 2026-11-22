@@ -1,5 +1,8 @@
 import { namesThisMachine, specFor } from '../mods/spec';
 
+/** The key an instance knows an entry by, as mods/index writes it; kept here so a pack reads without the resolvers. */
+const entryKey = entry => `${entry.source}:${entry.id ?? entry.path ?? entry.url}`;
+
 /** The file a pack is: at the root of a repository or a zip, or anywhere by itself. */
 export const ENDER_PACK = 'ender.pack.json';
 
@@ -16,6 +19,73 @@ export const GAME_FILES = [
 	'options.txt',
 	'servers.dat',
 ];
+
+/**
+ * How a pack offers an entry a player may leave out: `optional`, with a line saying what it adds, and `default` to have
+ * it on until they turn it off. Nothing for an entry every player gets.
+ */
+const offering = item =>
+	item?.optional === true
+		? {
+				optional: true,
+				...(typeof item.description === 'string' && item.description.trim() !== ''
+					? { description: item.description.trim() }
+					: {}),
+				...(item.default === true ? { chosen: true } : {}),
+			}
+		: {};
+
+/** An entry's offering as a pack writes it, from the instance that keeps it and the choices made there. */
+const offeredAs = (entry, chosen) =>
+	entry.optional
+		? {
+				optional: true,
+				...(entry.description ? { description: entry.description } : {}),
+				...(chosen.has(entryKey(entry)) ? { default: true } : {}),
+			}
+		: {};
+
+/** What a pack names a resource or shader pack by: a Modrinth or CurseForge project, or a link. */
+const ASSET_SPEC = /^(mr|modrinth|cf|curseforge):([\w.-]+)$/;
+const ASSET_HOSTS = { mr: 'modrinth', modrinth: 'modrinth', cf: 'curseforge', curseforge: 'curseforge' };
+
+/** A resource or shader pack's spec as the entry an instance keeps, or undefined when it names none of those. */
+export const assetEntry = (spec, version) => {
+	if (/^https:\/\/\S+$/.test(spec)) return { source: 'url', url: spec };
+
+	const [, host, id] = spec.match(ASSET_SPEC) ?? [];
+
+	if (!host || id === '.' || id === '..') return undefined;
+
+	return { source: ASSET_HOSTS[host], id, ...(version ? { version } : {}) };
+};
+
+/** The spec a resource or shader pack entry is written as in a pack. */
+export const assetSpec = entry =>
+	entry.source === 'url' ? entry.url : `${{ modrinth: 'mr', curseforge: 'cf' }[entry.source]}:${entry.id}`;
+
+/** Each resource or shader pack a pack lists, as entries, with what is wrong in the list said in `problems`. */
+const assetsIn = (pack, kind, problems) => {
+	if (pack?.[kind] === undefined) return [];
+	if (!Array.isArray(pack[kind])) {
+		problems.push(`"${kind}" is not a list`);
+
+		return [];
+	}
+
+	return pack[kind].flatMap((item, at) => {
+		const spec = typeof item === 'string' ? item.trim() : item?.spec?.trim?.();
+		const entry = spec && assetEntry(spec, typeof item?.version === 'string' ? item.version : undefined);
+
+		if (!entry) {
+			problems.push(`${kind}[${at}] is not mr:<project>, cf:<project> or an https link`);
+
+			return [];
+		}
+
+		return [{ ...entry, ...offering(item) }];
+	});
+};
 
 /**
  * A pack as its file says it, checked: its name, game version and loader, and the mods it chose, each a spec as
@@ -47,8 +117,15 @@ export const parseEnderPack = (json, { file = ENDER_PACK } = {}) => {
 			return undefined;
 		}
 
-		return { spec: spec.trim(), ...(typeof mod?.version === 'string' ? { version: mod.version } : {}) };
+		return {
+			spec: spec.trim(),
+			...(typeof mod?.version === 'string' ? { version: mod.version } : {}),
+			...offering(mod),
+		};
 	});
+
+	const resourcepacks = assetsIn(pack, 'resourcepacks', problems);
+	const shaderpacks = assetsIn(pack, 'shaderpacks', problems);
 
 	if (problems.length > 0) throw new Error(`${file} ${problems.join('; ')}`);
 
@@ -58,7 +135,16 @@ export const parseEnderPack = (json, { file = ENDER_PACK } = {}) => {
 		minecraft: pack.minecraft.trim(),
 		loader: pack.loader,
 		mods,
+		...(resourcepacks.length > 0 ? { resourcepacks } : {}),
+		...(shaderpacks.length > 0 ? { shaderpacks } : {}),
 	};
+};
+
+/** An entry as a pack lists it: its spec alone when nothing more is said of it. */
+const written = (spec, entry, chosen) => {
+	const more = { ...(entry.version ? { version: entry.version } : {}), ...offeredAs(entry, chosen) };
+
+	return Object.keys(more).length > 0 ? { spec, ...more } : spec;
 };
 
 const SHAREABLE = new Set(['github', 'codeberg', 'gitlab', 'modrinth', 'curseforge']);
@@ -66,20 +152,24 @@ const SHAREABLE = new Set(['github', 'codeberg', 'gitlab', 'modrinth', 'cursefor
 /**
  * An instance's chosen mods as a pack, and those that cannot be in one: a jar on this disk, a link, or a gradle build
  * mean nothing on another machine. Only what was chosen is listed; what it needs is resolved where it is installed.
+ * An optional entry stays optional, on by default where this instance has it on.
  */
 export const packFrom = manifest => {
+	const chosen = new Set(manifest.chosen ?? []);
 	const shareable = manifest.mods.filter(entry => SHAREABLE.has(entry.source));
+	const assets = Object.fromEntries(
+		['resourcepacks', 'shaderpacks']
+			.map(kind => [kind, (manifest[kind] ?? []).map(entry => written(assetSpec(entry), entry, chosen))])
+			.filter(([, listed]) => listed.length > 0),
+	);
 
 	return {
 		pack: {
 			name: manifest.name,
 			minecraft: manifest.minecraft,
 			loader: manifest.loader?.type ?? 'vanilla',
-			mods: shareable.map(entry => {
-				const spec = specFor(entry.source, entry.id);
-
-				return entry.version ? { spec, version: entry.version } : spec;
-			}),
+			mods: shareable.map(entry => written(specFor(entry.source, entry.id), entry, chosen)),
+			...assets,
 		},
 		left: manifest.mods.filter(entry => !SHAREABLE.has(entry.source)),
 	};

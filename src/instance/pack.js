@@ -2,6 +2,7 @@ import { mkdir } from 'node:fs/promises';
 import { basename, extname, join } from 'node:path';
 
 import { extractArchive, listEntries, readEntry, readEntryJson } from '../archive';
+import { kindOfPath } from '../mods/assets';
 import { versionsByHash } from '../mods/modrinth';
 import { detail, plural, step, warn } from '../out';
 import { ENDER_PACK, GAME_FILES, parseEnderPack } from './enderPack';
@@ -55,6 +56,23 @@ const unpackOverrides = async (path, gameDir, prefix, keep) => {
 };
 
 /**
+ * A pack's files as an instance keeps them, by the folder each names: mods, resource packs and shader packs. A file
+ * listed for anywhere else is said and left out, as ender installs nothing it does not manage.
+ */
+const placed = (files, from) => {
+	const kept = { mods: [], resourcepacks: [], shaderpacks: [] };
+
+	for (const { path, entry } of files) {
+		const kind = kindOfPath(path) ?? (path.startsWith('mods/') || !path.includes('/') ? 'mods' : undefined);
+
+		if (kind) kept[kind].push(entry);
+		else detail('pack', `${from} lists ${path}, which is neither a mod nor a resource or shader pack, and is left out`);
+	}
+
+	return Object.fromEntries(Object.entries(kept).filter(([kind, entries]) => kind === 'mods' || entries.length > 0));
+};
+
+/**
  * A Modrinth pack states its game version and loader, lists the files it expects to be fetched,
  * and carries everything else as overrides. The listed files are verifiable, so they become mod
  * entries; the overrides are just files, and are laid down as they are.
@@ -69,6 +87,7 @@ const fromMrpack = async (path, { name, side = 'client' }) => {
 	if (minecraft === undefined) throw new Error(`${basename(path)} names no Minecraft version`);
 
 	const wanted = (index.files ?? []).filter(file => (file.env?.[side] ?? 'required') !== 'unsupported');
+	const optional = file => file.env?.[side] === 'optional';
 	const unreachable = wanted.find(file => typeof file.downloads?.[0] !== 'string');
 
 	if (unreachable) throw new Error(`${basename(path)} gives no download for ${unreachable.path}`);
@@ -78,12 +97,20 @@ const fromMrpack = async (path, { name, side = 'client' }) => {
 			name: name ?? index.name ?? nameFrom(path),
 			minecraft,
 			loader: loaderKey ? { type: MODRINTH_LOADERS[loaderKey], version: dependencies[loaderKey] } : { type: 'vanilla' },
-			mods: wanted.map(file => ({
-				source: 'url',
-				url: file.downloads[0],
-				file: basename(file.path),
-				checksum: file.hashes?.sha1 ? `sha1:${file.hashes.sha1}` : undefined,
-			})),
+			...placed(
+				wanted.map(file => ({
+					path: file.path,
+					entry: {
+						source: 'url',
+						url: file.downloads[0],
+						file: basename(file.path),
+						checksum: file.hashes?.sha1 ? `sha1:${file.hashes.sha1}` : undefined,
+						// Off until a player turns it on, as the pack leaves it to them
+						...(optional(file) ? { optional: true } : {}),
+					},
+				})),
+				basename(path),
+			),
 		},
 		summary: index.summary,
 		overridePrefixes: ['overrides/', `${side}-overrides/`],
@@ -109,13 +136,10 @@ const fromCurseForge = async (path, { name }) => {
 	const loaderName = split === -1 ? identifier : identifier.slice(0, split);
 	const loaderVersion = split === -1 ? undefined : identifier.slice(split + 1);
 	const files = manifest.files ?? [];
-	const wanted = files.filter(file => file.required !== false);
+	const optional = files.filter(file => file.required === false).length;
 
-	if (wanted.length < files.length) {
-		detail(
-			'curseforge',
-			`${plural(files.length - wanted.length, 'optional mod')} left out, as the CurseForge app does`,
-		);
+	if (optional > 0) {
+		detail('curseforge', `${plural(optional, 'optional mod')} kept off until turned on: ender optional lists them`);
 	}
 
 	return {
@@ -125,7 +149,12 @@ const fromCurseForge = async (path, { name }) => {
 			loader: CURSEFORGE_LOADERS[loaderName]
 				? { type: CURSEFORGE_LOADERS[loaderName], version: loaderVersion }
 				: { type: 'vanilla' },
-			mods: wanted.map(file => ({ source: 'curseforge', id: String(file.projectID), version: String(file.fileID) })),
+			mods: files.map(file => ({
+				source: 'curseforge',
+				id: String(file.projectID),
+				version: String(file.fileID),
+				...(file.required === false ? { optional: true } : {}),
+			})),
 		},
 		overridePrefixes: [`${manifest.overrides ?? 'overrides'}/`],
 	};
@@ -171,6 +200,8 @@ const fromEnder = async (path, { name }) => {
 			minecraft: pack.minecraft,
 			loader: { type: pack.loader },
 			mods: [],
+			...(pack.resourcepacks ? { resourcepacks: pack.resourcepacks } : {}),
+			...(pack.shaderpacks ? { shaderpacks: pack.shaderpacks } : {}),
 		},
 		specs: pack.mods,
 		summary: pack.summary,
@@ -202,7 +233,14 @@ export const preferModrinth = async (mods, { byHash = versionsByHash } = {}) => 
 
 		if (!same) continue;
 
-		mods[index] = { source: 'modrinth', id: same.project, version: same.version };
+		const { optional, description, chosen } = mod;
+
+		mods[index] = {
+			source: 'modrinth',
+			id: same.project,
+			version: same.version,
+			...(optional ? { optional, ...(description ? { description } : {}), ...(chosen ? { chosen } : {}) } : {}),
+		};
 		moved++;
 	}
 
@@ -237,21 +275,25 @@ const fromPackwiz = async (path, { name, side = 'client', byHash }) => {
 			`${pack.index} lists no mods, so every .pw.toml beside it is read, as packwiz refresh would list them`,
 		);
 
-	const mods = [];
-	let optional = 0;
+	const listedFiles = [];
 
 	for (const metafile of metafiles) {
 		const source = await text(metafile);
 
 		if (source === undefined) throw new Error(`${basename(path)} has no ${metafile}, which its index lists`);
 
-		const { entry, leftOut } = packwizMod(source, { side });
+		const { entry } = packwizMod(source, { side });
 
-		if (entry) mods.push(entry);
-		if (leftOut === 'optional') optional++;
+		if (entry) listedFiles.push({ path: metafile, entry });
 	}
 
-	if (optional > 0) detail('packwiz', `${plural(optional, 'optional mod')} left out, as packwiz-installer does`);
+	const kept = placed(listedFiles, basename(path));
+	const mods = kept.mods;
+	const optional = listedFiles.filter(({ entry }) => entry.optional).length;
+
+	if (optional > 0) {
+		detail('packwiz', `${plural(optional, 'optional mod')} as the pack offers them: ender optional lists them`);
+	}
 
 	const moved = await preferModrinth(mods, { byHash });
 
@@ -261,7 +303,13 @@ const fromPackwiz = async (path, { name, side = 'client', byHash }) => {
 					summary: `${plural(moved, 'CurseForge mod')} come from Modrinth instead, the same file by its checksum`,
 				}
 			: {}),
-		manifest: { name: name ?? pack.name ?? nameFrom(path), minecraft: pack.minecraft, loader: pack.loader, mods },
+		manifest: {
+			...kept,
+			name: name ?? pack.name ?? nameFrom(path),
+			minecraft: pack.minecraft,
+			loader: pack.loader,
+			mods,
+		},
 		overridePrefixes: [folder],
 		keepOverride: isGameFile,
 	};
