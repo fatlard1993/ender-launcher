@@ -72,7 +72,7 @@ const fabric = (json, loader = 'fabric', bundled = []) => ({
 	name: json.name,
 	description: json.description,
 	minecraft: [json.depends?.minecraft].flat().filter(Boolean).join(' || ') || undefined,
-	environment: json.environment ?? '*',
+	environment: environmentOf(json.environment),
 	depends: Object.keys(json.depends ?? {}),
 	provides: [...(json.provides ?? []), ...bundled],
 	...relations({
@@ -97,7 +97,7 @@ const quilt = (json, bundled = []) => {
 		minecraft:
 			[depends.find(dependency => dependency.id === 'minecraft')?.versions].flat().filter(Boolean).join(' || ') ||
 			undefined,
-		environment: json.minecraft?.environment ?? '*',
+		environment: environmentOf(json.minecraft?.environment),
 		depends: depends.filter(dependency => !dependency.optional).map(dependency => dependency.id),
 		provides: [...(loader.provides ?? []).map(provided => provided.id ?? provided), ...bundled],
 		...relations({
@@ -136,6 +136,19 @@ const bundledIds = files => {
 /** NeoForge names a dependency's kind; Forge before it said only whether one was mandatory. */
 const kindOf = dependency =>
 	dependency.type?.toLowerCase() ?? (dependency.mandatory === false ? 'optional' : 'required');
+
+/**
+ * The side a mod runs on, as `*`, `client` or `server`: jars write it in any case, some as Quilt's `dedicated_server`,
+ * and one left as an unfilled placeholder or empty says nothing, which is both sides.
+ */
+export const environmentOf = declared => {
+	const side = typeof declared === 'string' ? declared.trim().toLowerCase() : '';
+
+	if (side === 'client') return 'client';
+	if (side === 'server' || side === 'dedicated_server') return 'server';
+
+	return '*';
+};
 
 /**
  * Forge and NeoForge describe their mods in TOML, one jar sometimes carrying several. A version of

@@ -11,6 +11,7 @@ import {
 	readLinks,
 	readMods,
 	readSourceMods,
+	environmentOf,
 } from '../src/mods/metadata';
 import { jar as jarIn } from './jars';
 
@@ -390,4 +391,10 @@ describe("a source tree's metadata", () => {
 
 		expect(mod.minecraft).toBe('1.21.4');
 	});
+});
+
+test('a side written in any case, as dedicated_server, or left unfilled is read as the side it means', () => {
+	expect(['Client', 'CLIENT', ' client '].map(environmentOf)).toEqual(['client', 'client', 'client']);
+	expect(['SERVER', 'dedicated_server'].map(environmentOf)).toEqual(['server', 'server']);
+	expect(['*', '', '${environment}', undefined, 3].map(environmentOf)).toEqual(['*', '*', '*', '*', '*']);
 });
