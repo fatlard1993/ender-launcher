@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { listEntries, readEntryJson } from '../src/archive';
 import { packFrom, parseEnderPack } from '../src/instance/enderPack';
 import { detectPack, readPack, recordOverrides, unpackInto, updateOverrides } from '../src/instance/pack';
+import { writeZip } from '../src/zipWriter';
 import { zipped } from './jars';
 
 let directory;
@@ -686,5 +687,47 @@ describe("a pack's files on update", () => {
 		const third = await updateOverrides(second, await readPack(second, {}), gameDir, update.record);
 
 		expect(third.written).toEqual([]);
+	});
+});
+
+describe('a pack that names paths outside where they belong', () => {
+	const hostile = async (name, entries) => {
+		const path = join(directory, `${name}.zip`);
+
+		await Bun.write(
+			path,
+			writeZip(
+				Object.entries(entries).map(([entry, text]) => ({ name: entry, bytes: new TextEncoder().encode(text) })),
+			),
+		);
+
+		return path;
+	};
+
+	test('is refused when its loose files would climb out of the game directory, on import and on update', async () => {
+		const gameDir = join(directory, 'hostile-game');
+		const path = await hostile('hostile-overrides', {
+			'modrinth.index.json': JSON.stringify({ dependencies: { minecraft: '26.3' }, files: [] }),
+			'overrides/../../escaped.txt': 'out',
+		});
+		const pack = await readPack(path, {});
+
+		await expect(unpackInto(path, pack, gameDir)).rejects.toThrow('escapes');
+		await expect(updateOverrides(path, pack, gameDir, {})).rejects.toThrow('escapes');
+		expect(await Bun.file(join(directory, 'escaped.txt')).exists()).toBe(false);
+	});
+
+	test('has each listed file land in its own folder by its name alone, whatever path the pack gives', async () => {
+		const file = path => ({ path, downloads: [`https://cdn.modrinth.com/${encodeURIComponent(path)}`] });
+		const path = await hostile('hostile-files', {
+			'modrinth.index.json': JSON.stringify({
+				dependencies: { minecraft: '26.3' },
+				files: [file('mods/../../../bin/evil.jar'), file('resourcepacks/../../options.zip'), file('/etc/x.jar')],
+			}),
+		});
+		const { manifest } = await readPack(path, {});
+
+		expect(manifest.mods.map(mod => mod.file)).toEqual(['evil.jar']);
+		expect(manifest.resourcepacks.map(entry => entry.file)).toEqual(['options.zip']);
 	});
 });
