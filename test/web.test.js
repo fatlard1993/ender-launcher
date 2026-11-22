@@ -486,6 +486,128 @@ describe('ender web', () => {
 		}
 	});
 
+	describe('every write it takes, as a hostile page would send it', () => {
+		const WRITES = [
+			['POST', '/api/instances', { name: 'x', minecraft: '26.3', loader: 'fabric', specs: ['gh:a/b'] }],
+			['POST', '/api/instances/family/add', { specs: ['gh:a/b'], build: true }],
+			['POST', '/api/instances/family/drop', { specs: ['gh:a/b'] }],
+			['POST', '/api/instances/family/update', {}],
+			['POST', '/api/instances/family/launch', { update: true }],
+			['POST', '/api/instances/family/gist', {}],
+			['PUT', '/api/instances/family/player', { player: 'Steve' }],
+			['DELETE', '/api/instances/family', {}],
+			['POST', '/api/import', { source: 'gist:a1db98319884288ad3d83a0db854291f' }],
+			['POST', '/api/gists', { pack: { name: 'p', minecraft: '26.3', loader: 'fabric', mods: ['gh:a/b'] } }],
+			['POST', '/api/trust', { sha256: 'ab'.repeat(32) }],
+			['POST', '/api/builds', { key: 'github:a/b', commit: 'beef000000' }],
+			['POST', '/api/players', { name: 'Steve' }],
+			['POST', '/api/players/Steve/use', {}],
+			['DELETE', '/api/players/Steve', {}],
+			['POST', '/api/upgrade', {}],
+			['POST', '/api/restart', {}],
+			['POST', '/api/terminal', {}],
+			['POST', '/api/asks', { kind: 'fund', mod: 'github:a/b' }],
+			['POST', '/api/listings', { mod: 'gh:a/b' }],
+			['PUT', '/api/stars/a/b', {}],
+			['DELETE', '/api/stars/a/b', {}],
+		];
+		const HOSTILE = [
+			['another site', { origin: 'https://evil.example' }, 403],
+			['another port of this machine', { origin: 'http://localhost:3000' }, 403],
+			['a null origin', { origin: 'null' }, 403],
+			['no origin', {}, 403],
+			['a rebound name', { host: 'evil.example:7460', origin: 'http://evil.example:7460' }, 403],
+			['a plain-text form from this page', { origin: ORIGIN, 'content-type': 'text/plain' }, 415],
+			[
+				'a url-encoded form from this page',
+				{ origin: ORIGIN, 'content-type': 'application/x-www-form-urlencoded' },
+				415,
+			],
+		];
+
+		test("reaches a route for each from this machine's own page, which is what each refusal is measured against", async () => {
+			const { jobs } = await fakeJobs(0);
+			const quiet = async () => ({ code: 0, stdout: '[]', stderr: '' });
+			const handle = serving({
+				answer: webApi({
+					jobs,
+					run: quiet,
+					publish: async () => ({ id: 'a', url: 'u', line: 'l', updated: false }),
+					fileIssue: async () => ({ number: 1, url: 'u' }),
+					account: async () => 'me',
+					stars: { list: async () => [], set: async () => {} },
+					trust: async () => {},
+					builds: { allow: async () => true, diff: async () => '' },
+					restart: async () => {},
+					linkTerminal: async () => ({}),
+					terminal: async () => ({ linked: true }),
+					upgradedBy: async () => ({}),
+				}),
+				files: site,
+			});
+			const unrouted = [];
+
+			for (const [method, path, body] of WRITES) {
+				const response = await handle(
+					new Request(`http://localhost:7460${path}`, {
+						method,
+						headers: { 'content-type': 'application/json', host: 'localhost:7460', origin: ORIGIN },
+						body: JSON.stringify(body),
+					}),
+				);
+
+				if ([403, 404, 415].includes(response.status)) unrouted.push(`${method} ${path} ${response.status}`);
+			}
+
+			expect(unrouted).toEqual([]);
+		});
+
+		for (const [what, headers, status] of HOSTILE) {
+			test(`refuses each from ${what}, doing nothing`, async () => {
+				const done = [];
+				const { jobs, started } = await fakeJobs(0);
+				const did =
+					name =>
+					async (...args) => (done.push([name, ...args]), { code: 0, stdout: '[]', stderr: '' });
+				const handle = serving({
+					answer: webApi({
+						jobs,
+						run: did('run'),
+						publish: did('publish'),
+						fileIssue: did('fileIssue'),
+						stars: { list: did('stars.list'), set: did('stars.set') },
+						trust: did('trust'),
+						builds: { allow: did('builds.allow'), diff: did('builds.diff') },
+						restart: did('restart'),
+						linkTerminal: did('linkTerminal'),
+						terminal: did('terminal'),
+						upgradedBy: did('upgradedBy'),
+					}),
+					files: site,
+				});
+
+				for (const [method, path, body] of WRITES) {
+					const response = await handle(
+						new Request(`http://${headers.host ?? 'localhost:7460'}${path}`, {
+							method,
+							headers: Object.fromEntries(
+								Object.entries({ 'content-type': 'application/json', host: 'localhost:7460', ...headers }).filter(
+									([, value]) => value !== undefined,
+								),
+							),
+							body: JSON.stringify(body),
+						}),
+					);
+
+					expect({ method, path, status: response.status }).toEqual({ method, path, status });
+				}
+
+				expect(done).toEqual([]);
+				expect(started).toEqual([]);
+			});
+		}
+	});
+
 	test('runs one job on an instance at a time, and says which one holds it', async () => {
 		let release;
 		const jobs = jobRunner({
