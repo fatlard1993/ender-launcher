@@ -5,7 +5,7 @@ import { readConfig } from '../config';
 import { fetchJson, fetchWithRetry } from '../download';
 import * as instances from '../instance';
 import { ENDER_PACK } from '../instance/enderPack';
-import { detectPack, readPack } from '../instance/pack';
+import { detectPack, readPack, updateOverrides } from '../instance/pack';
 import { placeServers } from '../instance/servers';
 import { LOADER_SERVICES } from '../meta/resolve';
 import { entryKey } from '../mods';
@@ -152,9 +152,8 @@ const newestLoader = async (type, minecraft) => LOADER_SERVICES[type]?.latestLoa
  */
 export const refreshFromPack = async (manifest, config) => {
 	const local = !isRemote(manifest.pack.source);
-	const pack = await readPack(local ? manifest.pack.source : await fetchPack(manifest.pack.source), {
-		name: manifest.name,
-	});
+	const path = local ? manifest.pack.source : await fetchPack(manifest.pack.source);
+	const pack = await readPack(path, { name: manifest.name });
 
 	if (pack.kind !== 'ender') throw new Error(`${manifest.pack.source} is no longer an ender pack, but ${pack.kind}`);
 
@@ -206,6 +205,14 @@ export const refreshFromPack = async (manifest, config) => {
 	manifest.resourcepacks = offered.resourcepacks;
 	manifest.shaderpacks = offered.shaderpacks;
 	if (chosen.size > 0) manifest.chosen = [...chosen];
+	if ((pack.overridePrefixes ?? []).length > 0 && manifest.gameDir) {
+		const lock = await instances.readLock(manifest.name);
+		const files = await updateOverrides(path, pack, manifest.gameDir, lock.overrides);
+
+		await instances.writeLock(manifest.name, { ...lock, overrides: files.record });
+		if (files.written.length > 0 || files.kept.length > 0) changes.files = { written: files.written, kept: files.kept };
+	}
+
 	const servers = await placeServers(manifest.gameDir, pack.servers ?? [], { before: manifest.pack.servers ?? [] });
 
 	if (servers.added.length > 0 || servers.removed.length > 0) changes.servers = servers;

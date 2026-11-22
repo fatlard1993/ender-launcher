@@ -89,7 +89,11 @@ export const syncInstance = async (manifest, config, { withDependencies = true, 
 			})
 		: { assets: undefined, installed: [], removed: [], failures: [] };
 
-	await instances.writeLock(manifest.name, { ...result.lock, ...(assets.assets ? { assets: assets.assets } : {}) });
+	await instances.writeLock(manifest.name, {
+		...lock,
+		...result.lock,
+		...(assets.assets ? { assets: assets.assets } : {}),
+	});
 
 	reportSync({ ...result, modsDir: directory });
 	reportAssets(assets);
@@ -243,13 +247,29 @@ export const updateInstance = async (manifest, config, { targeted, flags = {} } 
 	if (manifest.mods.some(entry => INDEXED.has(entry.source))) listing({ index: config.index }).catch(() => {});
 
 	if (manifest.pack) {
-		const { added, dropped, moved } = await refreshFromPack(manifest, config);
+		const { added, dropped, moved, files, servers } = await refreshFromPack(manifest, config);
 
-		packChanges = added.length + dropped.length + (moved ? 1 : 0);
+		packChanges =
+			added.length +
+			dropped.length +
+			(moved ? 1 : 0) +
+			(files?.written.length ?? 0) +
+			(servers ? servers.added.length + servers.removed.length : 0);
 
 		if (moved) info(`  the pack moved to ${paint.green(moved)}`);
 		for (const key of added) info(`  ${paint.green('+')} ${key}`);
 		for (const key of dropped) info(`  ${paint.red('-')} ${key}`);
+		for (const file of files?.written ?? []) info(`  ${paint.green('~')} ${file}`);
+		for (const server of servers?.added ?? []) info(`  ${paint.green('+')} server ${server.name} (${server.address})`);
+		for (const address of servers?.removed ?? []) info(`  ${paint.red('-')} server ${address}`);
+
+		if (files?.kept.length > 0) {
+			info(
+				paint.dim(
+					`  kept your own ${plural(files.kept.length, 'file')} the pack changed: ${files.kept.join(', ')}; delete one to take the pack's`,
+				),
+			);
+		}
 	}
 
 	const { mods, unpinned } = releasePins(manifest, targeted);

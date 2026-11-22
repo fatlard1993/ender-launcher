@@ -6,7 +6,7 @@ import { readConfig, updateConfig } from '../config';
 import * as instances from '../instance';
 import { fromPrism, identifyMods } from '../instance/import';
 import { packFrom } from '../instance/enderPack';
-import { readPack, unpackInto } from '../instance/pack';
+import { readPack, recordOverrides, unpackInto } from '../instance/pack';
 import { placeServers, serversIn } from '../instance/servers';
 import { entryKey, resolveAll, takeChosen } from '../mods';
 import { resolveVersionId } from '../meta/mojang';
@@ -407,6 +407,14 @@ const importPack = async (path, flags, target = path) => {
 	});
 
 	const written = await unpackInto(path, pack, manifest.gameDir);
+
+	// What each file was as the pack laid it down, so an update can tell the pack's copy from a player's edit
+	if (pack.kind === 'ender' && written.length > 0) {
+		await instances.writeLock(manifest.name, {
+			...(await instances.readLock(manifest.name)),
+			overrides: await recordOverrides(manifest.gameDir, written),
+		});
+	}
 
 	if (pack.servers?.length > 0) {
 		const { added } = await placeServers(manifest.gameDir, pack.servers);

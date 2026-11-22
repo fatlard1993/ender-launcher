@@ -1,5 +1,5 @@
 import { mkdir } from 'node:fs/promises';
-import { basename, extname, join } from 'node:path';
+import { basename, dirname, extname, isAbsolute, join, normalize, relative } from 'node:path';
 
 import { extractArchive, listEntries, readEntry, readEntryJson } from '../archive';
 import { kindOfPath } from '../mods/assets';
@@ -334,6 +334,69 @@ export const readPack = async (path, options = {}) => {
 	step(`Reading ${kind === 'mods' ? 'mods archive' : `${kind} pack`} ${basename(path)}`);
 
 	return { kind, ...(await READERS[kind](path, options)) };
+};
+
+const sha256 = bytes => new Bun.CryptoHasher('sha256').update(bytes).digest('hex');
+
+/** The hash of each file a pack laid down, as it is on disk now: what a later update holds a player's copy to. */
+export const recordOverrides = async (gameDir, written) =>
+	Object.fromEntries(
+		await Promise.all(
+			written.map(async inner => [inner, sha256(new Uint8Array(await Bun.file(join(gameDir, inner)).arrayBuffer()))]),
+		),
+	);
+
+/**
+ * Bring the files a pack carries beside its list to its newest word, as packwiz's installer does: a file new to the
+ * instance is written, and one the pack changed is rewritten while the player's copy is still what the pack laid down.
+ * A file the player edited, or removed, is theirs and is kept as they left it. Answers what was written, what was kept
+ * for the player, and the record to hold the next update to.
+ */
+export const updateOverrides = async (path, pack, gameDir, recorded = {}) => {
+	const entries = await listEntries(path);
+	const record = { ...recorded };
+	const written = [];
+	const kept = [];
+
+	for (const prefix of pack.overridePrefixes ?? []) {
+		for (const name of entries.filter(entry => entry.startsWith(prefix) && !entry.endsWith('/'))) {
+			const inner = name.slice(prefix.length);
+
+			if (inner === '' || (pack.keepOverride && !pack.keepOverride(inner))) continue;
+
+			const destination = join(gameDir, normalize(inner));
+			const below = relative(gameDir, destination);
+
+			if (below === '' || below.startsWith('..') || isAbsolute(below)) {
+				throw new Error(`Archive entry escapes its directory: ${name}`);
+			}
+
+			const bytes = await readEntry(path, name);
+			const offered = sha256(bytes);
+			const file = Bun.file(destination);
+			const present = await file.exists();
+			const current = present ? sha256(new Uint8Array(await file.arrayBuffer())) : undefined;
+
+			if (current === offered) {
+				record[inner] = offered;
+				continue;
+			}
+
+			const untouched = present ? current === recorded[inner] : recorded[inner] === undefined;
+
+			if (!untouched) {
+				kept.push(inner);
+				continue;
+			}
+
+			await mkdir(dirname(destination), { recursive: true });
+			await Bun.write(destination, bytes);
+			record[inner] = offered;
+			written.push(inner);
+		}
+	}
+
+	return { written, kept, record };
 };
 
 /** Lay a pack's own files into the game directory, after the instance has been created. */

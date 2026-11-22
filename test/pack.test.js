@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 
 import { listEntries, readEntryJson } from '../src/archive';
 import { packFrom, parseEnderPack } from '../src/instance/enderPack';
-import { detectPack, readPack, unpackInto } from '../src/instance/pack';
+import { detectPack, readPack, recordOverrides, unpackInto, updateOverrides } from '../src/instance/pack';
 import { zipped } from './jars';
 
 let directory;
@@ -623,5 +623,68 @@ describe("a pack's pins and its byline", () => {
 			version: '3',
 			loaderVersion: '0.20.1',
 		});
+	});
+});
+
+describe("a pack's files on update", () => {
+	const packZip = async (name, files) =>
+		zip(name, async staging => {
+			await writeFile(
+				join(staging, 'ender.pack.json'),
+				JSON.stringify({ minecraft: '26.3', loader: 'fabric', mods: [] }),
+			);
+
+			for (const [path, text] of Object.entries(files)) {
+				await mkdir(join(staging, path, '..'), { recursive: true });
+				await writeFile(join(staging, path), text);
+			}
+		});
+
+	test("rewrites what the pack changed while the player's copy is the pack's, and keeps what the player edited or removed", async () => {
+		const gameDir = join(directory, 'overrides-game');
+		const first = await packZip('overrides-1', {
+			'config/a.json': 'a1',
+			'config/b.json': 'b1',
+			'config/c.json': 'c1',
+			'options.txt': 'o1',
+		});
+		const pack1 = await readPack(first, {});
+		const written = await unpackInto(first, pack1, gameDir);
+		const recorded = await recordOverrides(gameDir, written);
+
+		await writeFile(join(gameDir, 'config', 'b.json'), 'b-mine');
+		await rm(join(gameDir, 'config', 'c.json'));
+		await mkdir(join(gameDir, 'config'), { recursive: true });
+		await writeFile(join(gameDir, 'config', 'theirs.json'), 'theirs-before');
+
+		const second = await packZip('overrides-2', {
+			'config/a.json': 'a2',
+			'config/b.json': 'b2',
+			'config/c.json': 'c2',
+			'config/new.json': 'n1',
+			'config/theirs.json': 'pack-version',
+			'options.txt': 'o1',
+		});
+		const update = await updateOverrides(second, await readPack(second, {}), gameDir, recorded);
+		const read = path => Bun.file(join(gameDir, path)).text();
+
+		expect(update.written.toSorted()).toEqual(['config/a.json', 'config/new.json']);
+		expect(update.kept.toSorted()).toEqual(['config/b.json', 'config/c.json', 'config/theirs.json']);
+		expect(await read('config/a.json')).toBe('a2');
+		expect(await read('config/b.json')).toBe('b-mine');
+		expect(await Bun.file(join(gameDir, 'config', 'c.json')).exists()).toBe(false);
+		expect(await read('config/theirs.json')).toBe('theirs-before');
+		expect(Object.keys(update.record).toSorted()).toEqual([
+			'config/a.json',
+			'config/b.json',
+			'config/c.json',
+			'config/new.json',
+			'options.txt',
+		]);
+
+		// The next update holds the player to what they have now, which is still theirs
+		const third = await updateOverrides(second, await readPack(second, {}), gameDir, update.record);
+
+		expect(third.written).toEqual([]);
 	});
 });
