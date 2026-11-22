@@ -85,6 +85,52 @@ describe('updating from a pack', () => {
 		expect(manifest.minecraft).toBe('1.21.4');
 	});
 
+	test("moves to a loader the pack pins, follows its memory until a player sets their own, and keeps a player's choices", async () => {
+		const { refreshFromPack } = await import('../src/commands/packSource');
+		const file = join(home, 'pinned.pack.json');
+		const manifest = {
+			name: 'pinned',
+			type: 'client',
+			minecraft: '1.21.1',
+			loader: { type: 'fabric', version: '0.16.0' },
+			mods: [{ source: 'modrinth', id: 'zoom', optional: true }],
+			chosen: [],
+			pack: { source: file, mods: ['modrinth:zoom'], memory: 4096 },
+			memory: { min: 512, max: 4096 },
+		};
+
+		await write(file, {
+			minecraft: '1.21.1',
+			loader: 'fabric',
+			loaderVersion: '0.16.9',
+			memory: 6144,
+			version: '2.0',
+			author: 'Ada',
+			mods: [
+				{ spec: 'mr:zoom', optional: true, default: true },
+				{ spec: 'mr:minimap', optional: true, default: true },
+			],
+			resourcepacks: ['mr:faithful-32x'],
+		});
+
+		const changes = await refreshFromPack(manifest, {});
+
+		expect(changes.moved).toBe('fabric 0.16.9');
+		expect(manifest.loader).toEqual({ type: 'fabric', version: '0.16.9' });
+		expect(manifest.memory).toEqual({ min: 512, max: 6144 });
+		// zoom was offered before and left off by the player; minimap is new, and on by the pack's default
+		expect(manifest.chosen).toEqual(['modrinth:minimap']);
+		expect(manifest.resourcepacks).toEqual([{ source: 'modrinth', id: 'faithful-32x' }]);
+		expect(manifest.pack).toMatchObject({ version: '2.0', author: 'Ada', memory: 6144 });
+
+		manifest.memory = { min: 512, max: 8192 };
+		await write(file, { minecraft: '1.21.1', loader: 'fabric', loaderVersion: '0.16.9', memory: 3072, mods: [] });
+		await refreshFromPack(manifest, {});
+
+		expect(manifest.memory).toEqual({ min: 512, max: 8192 });
+		expect(manifest.pack).not.toHaveProperty('version');
+	});
+
 	test("following a pack gives an instance's own choices way to the pack's, unless kept, and following it again changes nothing", async () => {
 		const { startFollowing } = await import('../src/commands/mods');
 		const own = () => ({

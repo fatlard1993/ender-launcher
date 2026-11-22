@@ -384,7 +384,17 @@ const importPack = async (path, flags, target = path) => {
 	const manifest = await instances.create(pack.manifest.name, {
 		...pack.manifest,
 		type: side,
-		...(pack.kind === 'ender' ? { pack: { source: sourceOf(target), mods: pack.manifest.mods.map(entryKey) } } : {}),
+		...(pack.kind === 'ender'
+			? {
+					pack: {
+						source: sourceOf(target),
+						mods: pack.manifest.mods.map(entryKey),
+						...Object.fromEntries(Object.entries(pack.about ?? {}).filter(([, value]) => value !== undefined)),
+					},
+				}
+			: {}),
+		// The memory a pack asks for, as the most the game may take; the least stays this machine's own
+		...(pack.about?.memory ? { memory: { min: (await readConfig()).memory?.min ?? 512, max: pack.about.memory } } : {}),
 		...(flags.gameDir ? { gameDir: resolve(flags.gameDir) } : {}),
 	});
 
@@ -405,6 +415,14 @@ const importPack = async (path, flags, target = path) => {
 		`Imported ${manifest.name} :: Minecraft ${manifest.minecraft}, ${manifest.loader.type} ${manifest.loader.version ?? ''}`,
 	);
 
+	const byline = [
+		pack.about?.version && `version ${pack.about.version}`,
+		pack.about?.author && `by ${pack.about.author}`,
+	]
+		.filter(Boolean)
+		.join(', ');
+
+	if (byline) info(paint.dim(`  ${byline}`));
 	if (pack.summary) info(paint.dim(`  ${pack.summary}`));
 
 	info(paint.dim(`  game dir  ${manifest.gameDir}`));
@@ -484,7 +502,11 @@ export const exportPack = async ({ positionals, flags }) => {
 	if (only.length > 0 && !flags.gist)
 		throw new Error(`--${only[0]} goes with --gist: ender export --gist --${only[0]}`);
 
-	const { pack, left } = packFrom(manifest);
+	const { pack, left } = packFrom(manifest, {
+		pinLoader: flags['pin-loader'] ?? false,
+		version: flags.version,
+		author: flags.author,
+	});
 	const text = `${JSON.stringify(pack, null, '\t')}\n`;
 
 	for (const entry of left) {

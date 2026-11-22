@@ -113,6 +113,7 @@ const fromMrpack = async (path, { name, side = 'client' }) => {
 			),
 		},
 		summary: index.summary,
+		about: { version: index.versionId },
 		overridePrefixes: ['overrides/', `${side}-overrides/`],
 	};
 };
@@ -156,6 +157,7 @@ const fromCurseForge = async (path, { name }) => {
 				...(file.required === false ? { optional: true } : {}),
 			})),
 		},
+		about: { version: manifest.version, author: manifest.author },
 		overridePrefixes: [`${manifest.overrides ?? 'overrides'}/`],
 	};
 };
@@ -198,13 +200,14 @@ const fromEnder = async (path, { name }) => {
 		manifest: {
 			name: name ?? pack.name ?? nameFrom(path),
 			minecraft: pack.minecraft,
-			loader: { type: pack.loader },
+			loader: { type: pack.loader, ...(pack.loaderVersion ? { version: pack.loaderVersion } : {}) },
 			mods: [],
 			...(pack.resourcepacks ? { resourcepacks: pack.resourcepacks } : {}),
 			...(pack.shaderpacks ? { shaderpacks: pack.shaderpacks } : {}),
 		},
 		specs: pack.mods,
 		summary: pack.summary,
+		about: { version: pack.version, author: pack.author, memory: pack.memory },
 		overridePrefixes: alone ? [] : [file.slice(0, -ENDER_PACK.length)],
 		keepOverride: isGameFile,
 	};
@@ -303,6 +306,7 @@ const fromPackwiz = async (path, { name, side = 'client', byHash }) => {
 					summary: `${plural(moved, 'CurseForge mod')} come from Modrinth instead, the same file by its checksum`,
 				}
 			: {}),
+		about: { version: pack.version, author: pack.author },
 		manifest: {
 			...kept,
 			name: name ?? pack.name ?? nameFrom(path),

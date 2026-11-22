@@ -140,6 +140,9 @@ export const resolveSpecs = async (specs, config) => {
 	return entries;
 };
 
+/** The newest loader of a type for a game version, or undefined for one ender keeps no service for. */
+const newestLoader = async (type, minecraft) => LOADER_SERVICES[type]?.latestLoader(minecraft);
+
 /**
  * The instance's mods after its pack's newest word: what the pack names now, as it pins it, and the mods added beside
  * it kept. A mod the pack dropped goes; one added beside the pack that the pack now names becomes the pack's. A new
@@ -167,10 +170,19 @@ export const refreshFromPack = async (manifest, config) => {
 	if (minecraft !== manifest.minecraft || loader.type !== manifest.loader?.type) {
 		changes.moved = `Minecraft ${minecraft}, ${loader.type}`;
 		manifest.minecraft = minecraft;
-		manifest.loader = {
-			type: loader.type,
-			...(LOADER_SERVICES[loader.type] ? { version: await LOADER_SERVICES[loader.type].latestLoader(minecraft) } : {}),
-		};
+		manifest.loader = { type: loader.type, version: loader.version ?? (await newestLoader(loader.type, minecraft)) };
+		if (manifest.loader.version === undefined) delete manifest.loader.version;
+	} else if (loader.version && loader.version !== manifest.loader?.version) {
+		// A pack that pins its loader moves every player to the version it names
+		changes.moved = `${loader.type} ${loader.version}`;
+		manifest.loader = { ...manifest.loader, version: loader.version };
+	}
+
+	// The memory a pack asks for follows it, while this instance's is still the pack's and not a player's own
+	const about = pack.about ?? {};
+
+	if (about.memory && (manifest.memory === undefined || manifest.memory.max === manifest.pack.memory)) {
+		manifest.memory = { min: manifest.memory?.min ?? config.memory?.min ?? 512, max: about.memory };
 	}
 
 	// An optional entry the pack turns on by default is turned on when it is new; one already known keeps its choice
@@ -193,7 +205,13 @@ export const refreshFromPack = async (manifest, config) => {
 	manifest.resourcepacks = offered.resourcepacks;
 	manifest.shaderpacks = offered.shaderpacks;
 	if (chosen.size > 0) manifest.chosen = [...chosen];
-	manifest.pack = { ...manifest.pack, mods: [...named.keys()] };
+	const { version: _version, author: _author, memory: _memory, ...followed } = manifest.pack;
+
+	manifest.pack = {
+		...followed,
+		mods: [...named.keys()],
+		...Object.fromEntries(Object.entries(about).filter(([, value]) => value !== undefined)),
+	};
 
 	await instances.write(manifest);
 

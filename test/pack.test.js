@@ -578,3 +578,50 @@ describe('what a pack carries beside its mods', () => {
 		}
 	});
 });
+
+describe("a pack's pins and its byline", () => {
+	const pack = extra => JSON.stringify({ name: 'P', minecraft: '26.3', loader: 'fabric', mods: [], ...extra });
+
+	test('pins a loader version, names its version and author, and asks for memory in megabytes', () => {
+		expect(parseEnderPack(pack({ loaderVersion: '0.20.1', version: '3', author: 'Ada', memory: 6144 }))).toMatchObject({
+			loaderVersion: '0.20.1',
+			version: '3',
+			author: 'Ada',
+			memory: 6144,
+		});
+
+		for (const [extra, said] of [
+			[{ loaderVersion: 7 }, 'loaderVersion'],
+			[{ loader: 'vanilla', loaderVersion: '1' }, 'no loader'],
+			[{ memory: '6G' }, 'memory'],
+			[{ memory: 100 }, 'memory'],
+		]) {
+			expect(() => parseEnderPack(pack(extra))).toThrow(said);
+		}
+	});
+
+	test('writes the loader version only when asked to pin it, and the memory an instance asks for', () => {
+		const manifest = {
+			name: 'P',
+			minecraft: '26.3',
+			loader: { type: 'fabric', version: '0.20.1' },
+			memory: { min: 512, max: 6144 },
+			mods: [],
+			pack: { version: '2', author: 'Ada' },
+		};
+
+		expect(packFrom(manifest).pack).toEqual({
+			name: 'P',
+			version: '2',
+			author: 'Ada',
+			minecraft: '26.3',
+			loader: 'fabric',
+			memory: 6144,
+			mods: [],
+		});
+		expect(packFrom(manifest, { pinLoader: true, version: '3' }).pack).toMatchObject({
+			version: '3',
+			loaderVersion: '0.20.1',
+		});
+	});
+});

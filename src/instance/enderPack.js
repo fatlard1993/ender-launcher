@@ -124,6 +124,15 @@ export const parseEnderPack = (json, { file = ENDER_PACK } = {}) => {
 		};
 	});
 
+	const text = key => (typeof pack?.[key] === 'string' && pack[key].trim() !== '' ? pack[key].trim() : undefined);
+
+	if (pack?.loaderVersion !== undefined && text('loaderVersion') === undefined)
+		problems.push('"loaderVersion" is not a version');
+	if (pack?.loaderVersion !== undefined && pack?.loader === 'vanilla')
+		problems.push('pins a "loaderVersion" with no loader');
+	if (pack?.memory !== undefined && !(Number.isInteger(pack.memory) && pack.memory >= 1024 && pack.memory <= 65_536))
+		problems.push('"memory" is not megabytes between 1024 and 65536');
+
 	const resourcepacks = assetsIn(pack, 'resourcepacks', problems);
 	const shaderpacks = assetsIn(pack, 'shaderpacks', problems);
 
@@ -132,8 +141,12 @@ export const parseEnderPack = (json, { file = ENDER_PACK } = {}) => {
 	return {
 		...(typeof pack.name === 'string' ? { name: pack.name } : {}),
 		...(typeof pack.summary === 'string' ? { summary: pack.summary } : {}),
+		...(text('version') ? { version: text('version') } : {}),
+		...(text('author') ? { author: text('author') } : {}),
+		...(pack.memory !== undefined ? { memory: pack.memory } : {}),
 		minecraft: pack.minecraft.trim(),
 		loader: pack.loader,
+		...(text('loaderVersion') ? { loaderVersion: text('loaderVersion') } : {}),
 		mods,
 		...(resourcepacks.length > 0 ? { resourcepacks } : {}),
 		...(shaderpacks.length > 0 ? { shaderpacks } : {}),
@@ -154,7 +167,7 @@ const SHAREABLE = new Set(['github', 'codeberg', 'gitlab', 'modrinth', 'cursefor
  * mean nothing on another machine. Only what was chosen is listed; what it needs is resolved where it is installed.
  * An optional entry stays optional, on by default where this instance has it on.
  */
-export const packFrom = manifest => {
+export const packFrom = (manifest, { pinLoader = false, version, author } = {}) => {
 	const chosen = new Set(manifest.chosen ?? []);
 	const shareable = manifest.mods.filter(entry => SHAREABLE.has(entry.source));
 	const assets = Object.fromEntries(
@@ -166,8 +179,12 @@ export const packFrom = manifest => {
 	return {
 		pack: {
 			name: manifest.name,
+			...((version ?? manifest.pack?.version) ? { version: version ?? manifest.pack.version } : {}),
+			...((author ?? manifest.pack?.author) ? { author: author ?? manifest.pack.author } : {}),
 			minecraft: manifest.minecraft,
 			loader: manifest.loader?.type ?? 'vanilla',
+			...(pinLoader && manifest.loader?.version ? { loaderVersion: manifest.loader.version } : {}),
+			...(manifest.memory?.max ? { memory: manifest.memory.max } : {}),
 			mods: shareable.map(entry => written(specFor(entry.source, entry.id), entry, chosen)),
 			...assets,
 		},

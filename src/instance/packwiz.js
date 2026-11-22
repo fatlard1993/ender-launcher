@@ -17,6 +17,8 @@ export const packwizPack = (source, { file = 'pack.toml' } = {}) => {
 
 	return {
 		name: pack.name,
+		...(typeof pack.version === 'string' ? { version: pack.version } : {}),
+		...(typeof pack.author === 'string' ? { author: pack.author } : {}),
 		minecraft: versions.minecraft,
 		loader: loader ? { type: LOADERS[loader], version: versions[loader] } : { type: 'vanilla' },
 		index: pack.index?.file ?? 'index.toml',
