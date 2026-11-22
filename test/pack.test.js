@@ -855,3 +855,44 @@ describe("what a pack's files hold beside configs", () => {
 		expect(leftOutLine([])).toBeUndefined();
 	});
 });
+
+describe("a packwiz pack's bundled jars", () => {
+	test('are laid down when its index lists them, and no other jar in mods/', async () => {
+		const path = await zip('wiz-jars', async staging => {
+			await mkdir(join(staging, 'mods'), { recursive: true });
+			await writeFile(
+				join(staging, 'pack.toml'),
+				'name = "W"\n[index]\nfile = "index.toml"\n[versions]\nminecraft = "26.3"\nfabric = "0.20.1"\n',
+			);
+			await writeFile(
+				join(staging, 'index.toml'),
+				'[[files]]\nfile = "mods/listed.jar"\nhash = "x"\n[[files]]\nfile = "config/a.json"\nhash = "y"\n',
+			);
+			await writeFile(join(staging, 'mods', 'listed.jar'), 'jar');
+			await writeFile(join(staging, 'mods', 'stray.jar'), 'not listed');
+			await mkdir(join(staging, 'config'), { recursive: true });
+			await writeFile(join(staging, 'config', 'a.json'), '{}');
+		});
+		const gameDir = join(directory, 'wiz-jars-game');
+		const pack = await readPack(path, {});
+		const written = await unpackInto(path, pack, gameDir);
+
+		expect(written.toSorted()).toEqual(['config/a.json', 'mods/listed.jar']);
+		expect(pack.leftOut).toEqual(['mods/stray.jar']);
+	});
+
+	test("an ender pack's jars stay out, named", async () => {
+		const path = await zip('ender-jars', async staging => {
+			await writeFile(
+				join(staging, 'ender.pack.json'),
+				JSON.stringify({ minecraft: '26.3', loader: 'fabric', mods: [] }),
+			);
+			await mkdir(join(staging, 'mods'), { recursive: true });
+			await writeFile(join(staging, 'mods', 'bundled.jar'), 'jar');
+		});
+		const pack = await readPack(path, {});
+
+		expect(await unpackInto(path, pack, join(directory, 'ender-jars-game'))).toEqual([]);
+		expect(pack.leftOut).toEqual(['mods/bundled.jar']);
+	});
+});

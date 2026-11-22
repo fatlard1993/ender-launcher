@@ -277,6 +277,11 @@ const fromPackwiz = async (path, { name, side = 'client', byHash }) => {
 	if (index === undefined) throw new Error(`${basename(path)} has no ${pack.index}, which its pack.toml names`);
 
 	const entries = await listEntries(path);
+	const bundled = new Set(
+		(Bun.TOML.parse(index).files ?? [])
+			.filter(file => !file.metafile && /^mods\/[^/]+\.jar$/.test(file.file ?? ''))
+			.map(file => file.file),
+	);
 	const listed = packwizMetafiles(index);
 	const metafiles =
 		listed.length > 0
@@ -328,7 +333,8 @@ const fromPackwiz = async (path, { name, side = 'client', byHash }) => {
 			mods,
 		},
 		overridePrefixes: [folder],
-		keepOverride: isGameFile,
+		// The jars its index lists in mods/ come too, as packwiz-installer installs them; import matches each by hash
+		keepOverride: inner => isGameFile(inner) || bundled.has(inner),
 	};
 };
 

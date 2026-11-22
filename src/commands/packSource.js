@@ -5,6 +5,7 @@ import { readConfig } from '../config';
 import { fetchJson, fetchWithRetry } from '../download';
 import * as instances from '../instance';
 import { ENDER_PACK } from '../instance/enderPack';
+import { identifyMods } from '../instance/import';
 import { detectPack, readPack, updateOverrides } from '../instance/pack';
 import { placeServers } from '../instance/servers';
 import { LOADER_SERVICES } from '../meta/resolve';
@@ -286,6 +287,14 @@ export const refreshFromPack = async (manifest, config) => {
 		const files = await updateOverrides(path, pack, manifest.gameDir, lock.overrides);
 
 		await instances.writeLock(manifest.name, { ...lock, overrides: files.record });
+
+		// A jar the pack bundles that arrived now is matched by its hash, as on import, so it is declared and updated
+		if (files.written.some(inner => /^mods\/[^/]+\.jar$/.test(inner))) {
+			const { entries: identified } = await identifyMods(instances.modsDir(manifest));
+			const declared = new Set(manifest.mods.map(entryKey));
+
+			manifest.mods.push(...identified.filter(entry => !declared.has(entryKey(entry))));
+		}
 		if (files.written.length > 0 || files.kept.length > 0) changes.files = { written: files.written, kept: files.kept };
 	}
 

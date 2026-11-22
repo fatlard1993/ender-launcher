@@ -142,7 +142,7 @@ Only `minecraft`, `loader` and `mods` are needed.
 - **One pack for several game versions.** A pack is a set of mods tested together on one version; another version is another pack.
 - **Worlds, and a world's own data packs.** They belong to a world, not to an instance, and a world download is not a pack. Data packs meant for every world travel as files: in `datapacks/` or `global_packs/`, as Global Packs, Data Loader and Global Datapacks read them, or under `config/`, as Paxi and Open Loader do.
 - **A repository's own files.** A pack kept in a repository carries its readme, license, docs and tooling too; ender lays down only the folders the game and its mods read, such as `config/`, `kubejs/`, `datapacks/`, `journeymap/` or `fancymenu_data/`, and says on import which it left out.
-- **Jars beside an ender or packwiz pack.** A jar committed into a pack's `mods/` is left out and said, as an ender pack names its mods by where they are published, so each is checked and updated. An `.mrpack` or CurseForge pack's bundled jars are laid down and offered to Modrinth by hash, as their formats expect.
+- **Jars beside an ender pack.** A jar committed into an ender pack's `mods/` is left out and said, as an ender pack names its mods by where they are published, so each is checked and updated. A packwiz pack brings the jars its index lists in `mods/`, as packwiz-installer does, and an `.mrpack` or CurseForge pack its bundled ones; each is offered to Modrinth by hash, becoming a declared, updatable mod where Modrinth has it and listed where it does not.
 - **A side written for each mod.** Each jar already says whether it runs on the client, the server or both, and ender reads that rather than ask a pack author to repeat it.
 
 ## Accounts
