@@ -141,6 +141,10 @@ describe("building a repository's source", () => {
 		expect(diff).toContain("+exec { 'curl' }");
 		expect(diff).toContain('b/b@beef000/mod.gradle');
 		expect(await heldScriptsDiff('github:a/b', 'abc1234')).toBeUndefined();
+		for (const key of ['github:../b', 'github:a/..', 'github:./b', 'github:a/../../x']) {
+			expect(await allowHeldScripts(key, 'beef000000')).toBe(false);
+			expect(await heldScriptsDiff(key, 'beef000000')).toBeUndefined();
+		}
 		expect(await allowHeldScripts('github:a/b', 'abc1234')).toBe(false);
 		expect(await allowHeldScripts('github:a/b', 'beef000000')).toBe(true);
 		expect(await allowanceOf('github:a/b')).toEqual({

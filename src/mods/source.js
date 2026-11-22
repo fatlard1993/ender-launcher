@@ -121,7 +121,12 @@ export const HELD_KEY = /^(github|codeberg|gitlab):[\w.-]+(\/[\w.-]+)+$/;
 export const HELD_COMMIT = /^[0-9a-f]{7,64}$/;
 
 const heldOf = async (key, commit) => {
-	if (!HELD_KEY.test(key ?? '') || !HELD_COMMIT.test(commit ?? '') || key.split('/').includes('..')) return undefined;
+	if (
+		!HELD_KEY.test(key ?? '') ||
+		!HELD_COMMIT.test(commit ?? '') ||
+		key.split(/[:/]/).some(part => part === '.' || part === '..')
+	)
+		return undefined;
 
 	const file = Bun.file(`${pendingCopy(key, commit)}.json`);
 	const held = (await file.exists()) ? await file.json() : undefined;
