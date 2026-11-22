@@ -1,4 +1,4 @@
-import { specFor } from '../mods/spec';
+import { namesThisMachine, specFor } from '../mods/spec';
 
 /** The file a pack is: at the root of a repository or a zip, or anywhere by itself. */
 export const ENDER_PACK = 'ender.pack.json';
@@ -35,6 +35,14 @@ export const parseEnderPack = (json, { file = ENDER_PACK } = {}) => {
 
 		if (typeof spec !== 'string' || spec.trim() === '') {
 			problems.push(`mods[${at}] is neither a spec nor { "spec": ... }`);
+
+			return undefined;
+		}
+
+		if (namesThisMachine(spec.trim())) {
+			problems.push(
+				`mods[${at}] names a jar or project on this machine (${spec.trim()}); a pack names mods where they are published`,
+			);
 
 			return undefined;
 		}
