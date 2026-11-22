@@ -7,8 +7,8 @@ Minecraft instances, mods, modpacks and servers from one small program, `ender`.
 - **Instances.** Make one for any Minecraft version with Fabric, Quilt, Forge, NeoForge or none; clone it, move it to another version, delete it with its worlds kept aside. ender fetches the Java each version needs.
 - **Mods from their source.** `ender add gh:owner/repo` installs a mod from its own releases on GitHub, Codeberg or GitLab, with what it depends on; Modrinth and CurseForge mods too (`mr:`, `cf:`), and a mod you are writing is built from its Gradle project. `ender update` moves each to its newest compatible build, and `ender scan` shows what a jar's code can reach before you trust it: running programs, the network, native code.
 - **Search.** `ender search` looks through the [ender index](https://fatlard1993.github.io/ender-index/), mods found where their source lives and read from their own jars, beside Modrinth and CurseForge.
-- **Any modpack.** `ender import` takes a Modrinth `.mrpack`, a CurseForge zip, a packwiz pack, a Prism instance or an ender pack, from a file or a link. A packwiz pack's CurseForge mods come from Modrinth where it has the very same file.
-- **A pack everyone follows.** An ender pack is one small file naming the mods chosen. `ender export --gist` publishes one, and publishing again updates the same gist; `ender follow` puts any instance on it, and `ender launch --update` reads it again before every launch, so every client in the house runs the same mods without anyone copying jars.
+- **Any modpack.** `ender import` takes a Modrinth `.mrpack`, a CurseForge zip, a packwiz pack, a Prism instance or an ender pack, from a file or a link, resource packs, shader packs and optional mods included. A packwiz pack's CurseForge mods come from Modrinth where it has the very same file, and `ender export --mrpack` writes a pack any launcher reads.
+- **A pack everyone follows.** An ender pack is one small file naming the mods chosen. `ender export --gist` publishes one, and publishing again updates the same gist; `ender follow` puts any instance on it, and `ender launch --update` reads it again before every launch, so every client in the house runs the same mods, packs, settings and servers without anyone copying jars.
 - **Servers.** A server instance is made and filled the same way, and `ender server start --update` takes new releases each time it starts.
 - **Accounts.** Microsoft sign-in, on this machine or from a phone by scanning a code, the accounts Prism already signed in, or offline identities; each instance plays as the account it is given.
 - **In the browser.** `ender web` opens the index with your instances beside it: install a mod with a button, make instances from what you collected or from a pack, watch an import or update as it runs, launch, publish a pack, sign in players, and update ender itself.
@@ -77,14 +77,16 @@ To browse mods rather than name them, `ender web` opens the [index](https://fatl
 
 | Shape | What it carries | What import does |
 | --- | --- | --- |
-| Modrinth `.mrpack` | `modrinth.index.json` + `overrides/` | version, loader, and each referenced file as a checksummed mod entry |
-| CurseForge `.zip` | `manifest.json` + `overrides/` | version, loader, and each mod by project and file id; one marked `required: false` is left out, as the CurseForge app leaves it out |
-| packwiz | `pack.toml`, `index.toml` and a `.pw.toml` per mod | version, loader, and each mod by its Modrinth or CurseForge id or its link; an `[option]` opt-in whose default is off is left out, as packwiz-installer leaves it out |
+| Modrinth `.mrpack` | `modrinth.index.json` + `overrides/` | version, loader, and each listed file as a checksummed entry in `mods/`, `resourcepacks/` or `shaderpacks/`; a file marked optional is offered, off |
+| CurseForge `.zip` | `manifest.json` + `overrides/` | version, loader, and each mod by project and file id; one marked `required: false` is offered, off |
+| packwiz | `pack.toml`, `index.toml` and a `.pw.toml` per mod or pack | version, loader, and each mod, resource pack or shader pack by its Modrinth or CurseForge id or its link; an `[option]` is offered with its description, on when its default is |
 | A plain zip of jars | jars, and nothing else | lays them in `mods/`; needs `--minecraft`, because nothing in it says |
 
 A pack can also come by link, from a gist, or from a repository: `ender import gh:owner/repo` reads an `ender.pack.json` or packwiz `pack.toml` at its root, or else the newest release's `.mrpack`.
 
-Whatever a pack carries as loose files is unpacked into the game directory, then offered to Modrinth by hash. A bundled jar that turns out to be a published mod becomes a declared, updatable entry; one that does not is listed and left alone, the same as any jar you dropped in yourself. A pack's `client`/`server` markings are honored: `ender import pack.mrpack --server` makes a server instance and leaves out what the pack says is client-only.
+Whatever a pack carries as loose files is unpacked into the game directory, then offered to Modrinth by hash. A bundled jar that turns out to be a published mod becomes a declared, updatable entry; one that does not is listed and left alone, the same as any jar you dropped in yourself. A pack's `client`/`server` markings are honored: `ender import pack.mrpack --server` makes a server instance and leaves out what the pack says is client-only. A server instance also leaves out any jar whose own metadata says it runs on the client alone, from any pack or source.
+
+What a pack offers as optional stays off until a player turns it on, unless the pack turns it on by default. `ender optional` lists each, with what it adds, and `ender optional on zoomify` or `off` changes one; the choice holds through updates. `ender web` shows the same switches on the instance.
 
 ### Keeping clients on a pack
 
@@ -96,6 +98,50 @@ ender launch family --update
 ```
 
 An instance already set up follows one with `ender follow <pack> --instance <name>`: its game directory and worlds stay, and its own mods give way to the pack's (`--keep` keeps them beside it). A jar copied into `mods/` by hand that is another copy of a mod the pack installs would stop the game loading, so sync moves it to `mods-displaced/` and says so. An instance imported from an ender pack remembers where it came from too. `ender update` reads the pack again first: mods it added come in, mods it dropped go, its pins hold, and mods added beside it stay. `ender launch --update` does that before every launch, and when the update cannot run, says why and launches what is installed. A gist is read through GitHub's API, so an edit reaches the next update at once, whichever of the gist's links was imported.
+
+An instance imported from a packwiz pack, from a repository or a file, follows it the same way: its update takes the pack's mods, loader version, optional choices and files.
+
+### The ender pack format
+
+```json
+{
+	"name": "Family",
+	"version": "3",
+	"author": "Ada",
+	"summary": "What we play on Fridays",
+	"minecraft": "1.21.1",
+	"loader": "fabric",
+	"loaderVersion": "0.16.9",
+	"memory": 6144,
+	"mods": [
+		"sodium",
+		"gh:CaffeineMC/lithium",
+		{ "spec": "mr:zoomify", "optional": true, "description": "Zoom with C", "default": true }
+	],
+	"resourcepacks": ["mr:faithful-32x"],
+	"shaderpacks": [{ "spec": "mr:complementary-reimagined", "optional": true }],
+	"servers": [{ "name": "Ours", "address": "play.family.example:25570" }]
+}
+```
+
+Only `minecraft`, `loader` and `mods` are needed.
+
+- **`mods`** are specs as `ender add` takes them, each a string or `{ "spec", "version" }` to pin one. What they need is resolved where the pack is installed, from the index.
+- **`resourcepacks` and `shaderpacks`** are Modrinth (`mr:`) or CurseForge (`cf:`) projects, or https links. They go into their own folders, and ones new to an instance are turned on: in `options.txt`, and for Iris when it has no settings yet.
+- **`optional`** makes any entry a choice for the player, with a `description` of what it adds; `default: true` has it on until they turn it off.
+- **`loaderVersion`** pins the loader, so every player runs the one the pack was tested with; without it, each gets the newest. `ender export --pin-loader` writes the instance's.
+- **`memory`** is megabytes, the most the game may take, kept until a player sets their own.
+- **`servers`** are added to the game's multiplayer list after a player's own, and taken off when the pack drops them. `ender export --servers` writes an instance's list.
+- **Files beside the pack** in a repository or a zip, such as `config/`, `kubejs/` or `options.txt`, are laid down on import. On update, a file the pack changed is rewritten while the player's copy is still the pack's; one they edited is kept, and the update says so. A pack in a gist is one file and carries none.
+
+`ender export --mrpack` writes an instance as a Modrinth `.mrpack` of what it installed, with each file's hashes from disk, for any launcher that reads them.
+
+### What packs leave out, and why
+
+- **Commands run before or after the game, and JVM arguments.** A pack from a stranger would run them on your machine, and a `-javaagent` argument is code. `memory` is the part of those settings a pack can safely ask for.
+- **One pack for several game versions.** A pack is a set of mods tested together on one version; another version is another pack.
+- **Worlds and datapacks.** They belong to a world, not to an instance, and a world download is not a pack.
+- **A side written for each mod.** Each jar already says whether it runs on the client, the server or both, and ender reads that rather than ask a pack author to repeat it.
 
 ## Accounts
 
