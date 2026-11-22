@@ -39,9 +39,13 @@ export const allowed = (request, port = PORT) => {
 	const local = [`localhost:${port}`, `127.0.0.1:${port}`];
 
 	if (!local.includes(request.headers.get('host'))) return false;
-	if (request.method === 'GET') return true;
 
-	return local.map(host => `http://${host}`).includes(request.headers.get('origin'));
+	const origin = request.headers.get('origin');
+
+	// A link followed or this page's own read names no origin; another site's read names its own, and is refused
+	if (request.method === 'GET' && origin === null) return true;
+
+	return local.map(host => `http://${host}`).includes(origin);
 };
 
 /**

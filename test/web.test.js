@@ -386,12 +386,20 @@ describe('ender web', () => {
 		expect((await api(request('/api/ender/anything'))).status).toBe(404);
 	});
 
-	describe('trusting a jar and installing it, as a hostile page would try them', () => {
+	describe('trusting a jar, allowing build scripts and installing, as a hostile page would try them', () => {
 		const hash = 'ef'.repeat(32);
 		const attempt = async headers => {
 			const { jobs, started } = await fakeJobs(1);
 			const trusted = [];
-			const handle = serving({ answer: webApi({ jobs, trust: async sha256 => trusted.push(sha256) }), files: site });
+			const allowed = [];
+			const handle = serving({
+				answer: webApi({
+					jobs,
+					trust: async sha256 => trusted.push(sha256),
+					builds: { allow: async (key, commit) => (allowed.push([key, commit]), true), diff: async () => 'diff' },
+				}),
+				files: site,
+			});
 			const failed = await jobs.start(['add', 'gh:me/mod', '--instance', 'family'], {
 				title: 'Adding to family',
 				instance: 'family',
@@ -415,20 +423,39 @@ describe('ender web', () => {
 			const statuses = [
 				(await send('/api/trust', JSON.stringify({ sha256: hash }))).status,
 				(await send(`/api/jobs/${failed.id}/again`, '{}')).status,
+				(await send('/api/builds', JSON.stringify({ key: 'github:a/b', commit: 'beef000000' }))).status,
 			];
 
-			return { statuses, trusted, started };
+			return { statuses, trusted, allowed, started };
 		};
 
 		test("this machine's own page is answered, which is what every refusal below is measured against", async () => {
-			const { statuses, trusted, started } = await attempt({ origin: ORIGIN });
+			const { statuses, trusted, allowed, started } = await attempt({ origin: ORIGIN });
 
-			expect(statuses).toEqual([200, 202]);
+			expect(statuses).toEqual([200, 202, 200]);
 			expect(trusted).toEqual([hash]);
+			expect(allowed).toEqual([['github:a/b', 'beef000000']]);
 			expect(started).toHaveLength(1);
 		});
 
-		for (const [what, headers, status] of [
+		test("refuses another site reading a held build's diff, which would show it the project's scripts", async () => {
+			const handle = serving({
+				answer: webApi({ builds: { allow: async () => true, diff: async () => 'diff' } }),
+				files: site,
+			});
+			const read = origin =>
+				handle(
+					new Request('http://localhost:7460/api/builds?key=github:a/b&commit=beef000000', {
+						headers: { host: 'localhost:7460', ...(origin ? { origin } : {}) },
+					}),
+				);
+
+			expect((await read('https://evil.example')).status).toBe(403);
+			expect((await read('null')).status).toBe(403);
+			expect(await (await read(ORIGIN)).json()).toEqual({ diff: 'diff' });
+		});
+
+		for (const [what, headers, status, builds] of [
 			['another site posting across to it', { origin: 'https://evil.example' }, 403],
 			['a page on another port of this machine', { origin: 'http://localhost:3000' }, 403],
 			['a sandboxed frame or a file, whose origin is null', { origin: 'null' }, 403],
@@ -445,13 +472,15 @@ describe('ender web', () => {
 			],
 			['a form, which cannot send JSON, even from this page', { origin: ORIGIN, 'content-type': 'text/plain' }, 415],
 			['a form posted url-encoded', { origin: ORIGIN, 'content-type': 'application/x-www-form-urlencoded' }, 415],
-			['a link followed, which only reads', { method: 'GET' }, 404],
+			// A read names no held build in its body, so the builds route has nothing to show it
+			['a link followed, which only reads', { method: 'GET' }, 404, 400],
 		]) {
-			test(`refuses ${what}, trusting and starting nothing`, async () => {
-				const { statuses, trusted, started } = await attempt(headers);
+			test(`refuses ${what}, trusting, allowing and starting nothing`, async () => {
+				const { statuses, trusted, allowed, started } = await attempt(headers);
 
-				expect(statuses).toEqual([status, status]);
+				expect(statuses).toEqual([status, status, builds ?? status]);
 				expect(trusted).toEqual([]);
+				expect(allowed).toEqual([]);
 				expect(started).toEqual([]);
 			});
 		}
