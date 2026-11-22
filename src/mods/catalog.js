@@ -14,7 +14,10 @@ export const DEFAULT_INDEX = 'https://raw.githubusercontent.com/fatlard1993/ende
 const loaded = new Map();
 
 /** Index files are read once per process; this forgets them, as a new process would. */
-export const forgetLoaded = () => loaded.clear();
+export const forgetLoaded = () => {
+	loaded.clear();
+	warnedShapes.clear();
+};
 
 const copyOf = url => join(paths.cache, 'index', `${new Bun.CryptoHasher('sha1').update(url).digest('hex')}.json`);
 
@@ -96,8 +99,32 @@ const load = (base, path) => {
 	return loaded.get(key);
 };
 
+/** The version of the index's data shape this ender reads: data/index.json says which one an index publishes. */
+export const KNOWN_SCHEMA = 1;
+
+const warnedShapes = new Set();
+
+/**
+ * Whether the index publishes a shape this ender knows. A newer one is said once, and read anyway: the index adds fields
+ * without raising it, so a raise means something ender relies on may have changed. An index from before it named a
+ * version, or one that cannot say, is read as it is.
+ */
+export const checkShape = async context => {
+	const base = indexBase(context);
+	const schema = (await load(base, 'index.json').catch(() => undefined))?.schema;
+
+	if (!Number.isInteger(schema) || schema <= KNOWN_SCHEMA || warnedShapes.has(base)) return schema;
+
+	warnedShapes.add(base);
+	warn(
+		`The mod index at ${base} publishes data shape ${schema}, and this ender reads shape ${KNOWN_SCHEMA}: some of what it shows or installs may be wrong until ender is upgraded (ender upgrade)`,
+	);
+
+	return schema;
+};
+
 export const listing = async context => {
-	const entries = await load(indexBase(context), 'search.json');
+	const [entries] = await Promise.all([load(indexBase(context), 'search.json'), checkShape(context)]);
 
 	if (entries === undefined) throw new Error(`No mod index at ${indexBase(context)}`);
 

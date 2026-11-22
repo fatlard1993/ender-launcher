@@ -4,7 +4,17 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 
 import { parseModSpec, refineModSpec } from '../src/commands/context';
-import { ESTABLISHED, claimantsOf, fit, forgetLoaded, providerOf, requiredIds } from '../src/mods/catalog';
+import {
+	ESTABLISHED,
+	KNOWN_SCHEMA,
+	checkShape,
+	claimantsOf,
+	fit,
+	forgetLoaded,
+	listing as loadListing,
+	providerOf,
+	requiredIds,
+} from '../src/mods/catalog';
 import { RESOLVE_CONCURRENCY, resolveAll } from '../src/mods';
 import { standing } from '../src/mods/rank';
 import { hosted, resolveFromRecord, search } from '../src/mods/indexed';
@@ -513,6 +523,9 @@ describe('a published index', () => {
 		server = Bun.serve({
 			port: 0,
 			fetch: request => {
+				// An index from before it named its data shape; these tests count what the listing costs
+				if (new URL(request.url).pathname.endsWith('/index.json')) return new Response('no', { status: 404 });
+
 				const status = answer(request);
 
 				served.push(status);
@@ -760,5 +773,49 @@ describe('a mod whose requirement nothing installs', () => {
 
 	test('goes in alone with --no-deps', () => {
 		expect(() => refuseUnplaced([resolution], [], { deps: false }, 'ender add iris')).not.toThrow();
+	});
+});
+
+describe("the index's data shape", () => {
+	const indexAt = async manifest => {
+		const directory = await mkdtemp(join(tmpdir(), 'ender-shape-'));
+
+		await Bun.write(join(directory, 'search.json'), '[]');
+		if (manifest !== undefined) await Bun.write(join(directory, 'index.json'), JSON.stringify(manifest));
+
+		return directory;
+	};
+
+	test('is said once when the index publishes a newer one than this ender reads, and read anyway', async () => {
+		const index = await indexAt({ schema: KNOWN_SCHEMA + 1, files: {} });
+		const warned = spyOn(console, 'warn').mockImplementation(() => {});
+
+		try {
+			forgetLoaded();
+			expect(await loadListing({ index })).toEqual([]);
+			expect(await loadListing({ index })).toEqual([]);
+			expect(warned).toHaveBeenCalledTimes(1);
+			expect(String(warned.mock.calls[0][0])).toContain(`publishes data shape ${KNOWN_SCHEMA + 1}`);
+		} finally {
+			warned.mockRestore();
+			await rm(index, { recursive: true, force: true });
+		}
+	});
+
+	test('says nothing for the shape it knows, or an index that names none', async () => {
+		const known = await indexAt({ schema: KNOWN_SCHEMA, files: {} });
+		const unnamed = await indexAt(undefined);
+		const warned = spyOn(console, 'warn').mockImplementation(() => {});
+
+		try {
+			forgetLoaded();
+			expect(await checkShape({ index: known })).toBe(KNOWN_SCHEMA);
+			expect(await checkShape({ index: unnamed })).toBeUndefined();
+			expect(warned).not.toHaveBeenCalled();
+		} finally {
+			warned.mockRestore();
+			await rm(known, { recursive: true, force: true });
+			await rm(unnamed, { recursive: true, force: true });
+		}
 	});
 });
