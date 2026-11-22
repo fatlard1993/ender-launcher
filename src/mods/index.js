@@ -4,7 +4,7 @@ import { basename, dirname, join, resolve as resolvePath } from 'node:path';
 import { checksumOf, checksumText, ensureFile, pool } from '../download';
 import { version as enderVersion } from '../../package.json';
 import { readJson, writeJson } from '../json';
-import { detail, fail, plural, progress, step, warn } from '../out';
+import { detail, fail, info, paint, plural, progress, step, warn } from '../out';
 import { readConfig, updateConfig } from '../config';
 import { gainedSince, scanJar } from './capabilities';
 import * as curseforge from './curseforge';
@@ -265,6 +265,13 @@ export const duplicateMods = resolutions => {
 	return { kept: resolutions.filter(resolution => kept.includes(resolution)), dropped };
 };
 
+/** Whether every mod a jar declares runs on the client alone; a jar that declares none is not taken for one. */
+const clientOnly = async path => {
+	const mods = await readMods(path).catch(() => []);
+
+	return mods.length > 0 && mods.every(mod => mod.environment === 'client');
+};
+
 const withModIds = async (resolution, modsDir) => {
 	const mods = await readMods(join(modsDir, resolution.file.filename)).catch(() => []);
 
@@ -486,8 +493,26 @@ const displaceCopies = async (files, installed, modsDir) => {
  * Only files a previous sync recorded in the lock are ever removed, so a jar dropped in by hand
  * stays where it was put, unless it is another copy of a mod this sync installs.
  */
-export const syncMods = async ({ entries, modsDir, lock, context, withDependencies = true, modIdCache, scanCache }) => {
-	const all = await resolveAll(entries, context, { withDependencies });
+export const syncMods = async ({
+	entries,
+	modsDir,
+	lock,
+	context,
+	withDependencies = true,
+	modIdCache,
+	scanCache,
+	clientOnlyCache,
+}) => {
+	const serving = context.side === 'server';
+	const clientOnlyKnown = serving && clientOnlyCache ? new Set(await readJson(clientOnlyCache, [])) : new Set();
+	const leftForClients = [];
+	const all = (await resolveAll(entries, context, { withDependencies })).filter(resolution => {
+		const known = clientOnlyKnown.has(checksumText(resolution.file.checksum));
+
+		if (known) leftForClients.push(resolution);
+
+		return !known;
+	});
 
 	// The same mod can be declared by slug and arrive again by project id. Two keys, one file:
 	// installing both concurrently means two writers racing for one destination.
@@ -542,7 +567,21 @@ export const syncMods = async ({ entries, modsDir, lock, context, withDependenci
 			idsOf(resolution)?.length > 0 ? { ...resolution, modIds: idsOf(resolution) } : withModIds(resolution, modsDir),
 		),
 	);
-	const { kept, dropped: late } = duplicateMods(identified);
+	const { kept: oneEach, dropped: late } = duplicateMods(identified);
+	// A server leaves out a jar whose every mod says it runs on the client alone, as its loader would ignore or refuse it
+	const kept = [];
+
+	for (const resolution of oneEach) {
+		if (serving && (await clientOnly(join(modsDir, resolution.file.filename)))) {
+			await unlink(join(modsDir, resolution.file.filename)).catch(() => {});
+			leftForClients.push(resolution);
+			if (resolution.file.checksum) clientOnlyKnown.add(checksumText(resolution.file.checksum));
+		} else kept.push(resolution);
+	}
+
+	if (serving && clientOnlyCache && leftForClients.length > 0) {
+		await writeJson(clientOnlyCache, [...clientOnlyKnown].filter(Boolean).toSorted());
+	}
 	const duplicates = [...early, ...late];
 
 	for (const { resolution } of late) await unlink(join(modsDir, resolution.file.filename)).catch(() => {});
@@ -610,6 +649,7 @@ export const syncMods = async ({ entries, modsDir, lock, context, withDependenci
 		removed,
 		unmanaged,
 		displaced,
+		leftForClients,
 		lock: {
 			mods: [
 				...installed.map(resolution => ({
@@ -645,6 +685,7 @@ export const reportSync = ({
 	removed,
 	unmanaged,
 	displaced = [],
+	leftForClients = [],
 	modsDir,
 }) => {
 	for (const resolution of resolved) {
@@ -654,6 +695,14 @@ export const reportSync = ({
 	step(`${plural(resolved.length, 'mod')} in place${removed.length > 0 ? `, ${removed.length} removed` : ''}`);
 
 	if (unmanaged.length > 0) warn(`Left alone (not in the manifest): ${unmanaged.join(', ')}`);
+
+	if (leftForClients.length > 0) {
+		info(
+			paint.dim(
+				`   ${plural(leftForClients.length, 'mod')} left out, as ${leftForClients.length === 1 ? 'it runs' : 'they run'} on the client alone: ${leftForClients.map(resolution => resolution.name ?? resolution.id).join(', ')}`,
+			),
+		);
+	}
 
 	for (const { file, id } of displaced) {
 		warn(`${file} was another copy of ${id}, which ender installs, so it was moved to ${displacedDir(modsDir)}`);

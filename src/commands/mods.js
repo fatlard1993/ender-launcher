@@ -42,6 +42,7 @@ const contextFor = (manifest, config, flags = {}) => ({
 	buildMissing: flags.build ?? false,
 	rebuild: flags.build ?? false,
 	trustSecrets: flags.trust ?? false,
+	side: manifest.type === 'server' ? 'server' : 'client',
 });
 
 /**
@@ -71,6 +72,7 @@ export const syncInstance = async (manifest, config, { withDependencies = true, 
 		withDependencies,
 		modIdCache: join(paths.cache, 'mod-ids.json'),
 		scanCache: join(paths.cache, 'scans'),
+		clientOnlyCache: join(paths.cache, 'client-only.json'),
 	});
 
 	const declaresAssets = KINDS.some(

@@ -59,6 +59,47 @@ describe('syncMods', () => {
 		expect(result.removed).toEqual([]);
 	});
 
+	test('leaves out of a server a jar whose every mod runs on the client alone, and keeps it on a client', async () => {
+		const fabricJar = async (name, id, environment) => {
+			const built = await jarIn(root, { 'fabric.mod.json': JSON.stringify({ id, version: '1', environment }) });
+			const path = join(root, name);
+
+			await writeFile(path, await Bun.file(built).bytes());
+
+			return { source: 'local', path };
+		};
+		const entries = [
+			await fabricJar('zoom.jar', 'zoom', 'client'),
+			await fabricJar('lib.jar', 'lib', '*'),
+			await fabricJar('Hud.jar', 'hud', 'CLIENT'),
+		];
+		const serving = await syncMods({
+			entries,
+			modsDir,
+			lock: { mods: [] },
+			context: { side: 'server' },
+			withDependencies: false,
+		});
+
+		expect(await readdir(modsDir)).toEqual(['lib.jar']);
+		expect(serving.leftForClients.map(resolution => resolution.file.filename).toSorted()).toEqual([
+			'Hud.jar',
+			'zoom.jar',
+		]);
+		expect(serving.lock.mods.map(mod => mod.filename)).toEqual(['lib.jar']);
+
+		const playing = await syncMods({
+			entries,
+			modsDir,
+			lock: serving.lock,
+			context: { side: 'client' },
+			withDependencies: false,
+		});
+
+		expect((await readdir(modsDir)).toSorted()).toEqual(['Hud.jar', 'lib.jar', 'zoom.jar']);
+		expect(playing.leftForClients).toEqual([]);
+	});
+
 	test('moves aside a jar it never installed that is another copy of a mod it installs, which would stop the game', async () => {
 		const fabricJar = async (path, id) => {
 			const built = await jarIn(root, { 'fabric.mod.json': JSON.stringify({ id, version: '1' }) });
