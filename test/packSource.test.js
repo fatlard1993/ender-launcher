@@ -1,7 +1,10 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+
+import { zipped } from './jars';
 
 let home;
 let previousHome;
@@ -129,6 +132,65 @@ describe('updating from a pack', () => {
 
 		expect(manifest.memory).toEqual({ min: 512, max: 8192 });
 		expect(manifest.pack).not.toHaveProperty('version');
+	});
+
+	test('follows a packwiz pack as it follows an ender pack: its mods, its loader version and its files', async () => {
+		const { refreshFromPack } = await import('../src/commands/packSource');
+		const packwiz = async (name, { fabric, mods, options }) => {
+			const staging = join(home, name);
+
+			await mkdir(join(staging, 'mods'), { recursive: true });
+			await mkdir(join(staging, 'config'), { recursive: true });
+			await writeFile(
+				join(staging, 'pack.toml'),
+				`name = "Wiz"\nversion = "${fabric}"\n[index]\nfile = "index.toml"\n[versions]\nminecraft = "1.21.1"\nfabric = "${fabric}"\n`,
+			);
+			await writeFile(
+				join(staging, 'index.toml'),
+				mods.map(mod => `[[files]]\nfile = "mods/${mod}.pw.toml"\nmetafile = true\n`).join(''),
+			);
+
+			for (const mod of mods) {
+				await writeFile(
+					join(staging, 'mods', `${mod}.pw.toml`),
+					`name = "${mod}"\n[update.modrinth]\nmod-id = "${mod}"\nversion = "1"\n`,
+				);
+			}
+
+			await writeFile(join(staging, 'config', 'options.json'), options);
+
+			const archive = join(home, `${name}.zip`);
+
+			await zipped(staging, archive);
+
+			return archive;
+		};
+		const file = join(home, 'wiz.zip');
+		const manifest = {
+			name: 'wiz',
+			type: 'client',
+			minecraft: '1.21.1',
+			loader: { type: 'fabric', version: '0.16.0' },
+			gameDir: join(home, 'wiz-game'),
+			mods: [{ source: 'modrinth', id: 'sodium', version: '1' }],
+			pack: { source: file, mods: ['modrinth:sodium'] },
+		};
+
+		await Bun.write(
+			file,
+			Bun.file(await packwiz('wiz-1', { fabric: '0.16.9', mods: ['sodium', 'lithium'], options: 'two' })),
+		);
+
+		const changes = await refreshFromPack(manifest, {});
+
+		expect(changes.added).toEqual(['modrinth:lithium']);
+		expect(changes.moved).toBe('fabric 0.16.9');
+		expect(changes.files.written).toEqual(['config/options.json']);
+		expect(manifest.pack).toMatchObject({
+			source: file,
+			mods: ['modrinth:sodium', 'modrinth:lithium'],
+			version: '0.16.9',
+		});
 	});
 
 	test("following a pack gives an instance's own choices way to the pack's, unless kept, and following it again changes nothing", async () => {

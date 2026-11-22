@@ -335,7 +335,7 @@ export const updateBeforeStart = async (manifest, config, flags) => {
 };
 
 const FOLLOW_USAGE =
-	'ender follow <pack> [--instance name] [--keep]: a gist link or gist:id, gh:owner/repo, an https link, or an ender pack file';
+	'ender follow <pack> [--instance name] [--keep]: a gist link or gist:id, gh:owner/repo, an https link, or an ender or packwiz pack file';
 
 /**
  * An instance set to follow a pack: its own choices give way to the pack's unless kept. Following the pack it already

@@ -16,7 +16,7 @@ import { publishPack } from '../gist';
 import { fileIndexIssue } from '../indexIssues';
 import { paths } from '../paths';
 import { parseModSpec, refineModSpec, refuseUnplaced, syncInstance } from './mods';
-import { fetchPack, isRemote, resolveSpecs, sourceOf } from './packSource';
+import { FOLLOWED, fetchPack, isRemote, resolveSpecs, sourceOf } from './packSource';
 import { NO_INSTANCES, targetInstance } from './context';
 
 const instanceSummary = (manifest, config) => ({
@@ -392,7 +392,7 @@ const importPack = async (path, flags, target = path) => {
 	const manifest = await instances.create(pack.manifest.name, {
 		...pack.manifest,
 		type: side,
-		...(pack.kind === 'ender'
+		...(FOLLOWED.has(pack.kind)
 			? {
 					pack: {
 						source: sourceOf(target),
@@ -409,7 +409,7 @@ const importPack = async (path, flags, target = path) => {
 	const written = await unpackInto(path, pack, manifest.gameDir);
 
 	// What each file was as the pack laid it down, so an update can tell the pack's copy from a player's edit
-	if (pack.kind === 'ender' && written.length > 0) {
+	if (FOLLOWED.has(pack.kind) && written.length > 0) {
 		await instances.writeLock(manifest.name, {
 			...(await instances.readLock(manifest.name)),
 			overrides: await recordOverrides(manifest.gameDir, written),

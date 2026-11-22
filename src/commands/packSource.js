@@ -141,6 +141,9 @@ export const resolveSpecs = async (specs, config) => {
 	return entries;
 };
 
+/** The kinds of pack an instance follows on update: those that name what they choose and are read again by link. */
+export const FOLLOWED = new Set(['ender', 'packwiz']);
+
 /** The newest loader of a type for a game version, or undefined for one ender keeps no service for. */
 const newestLoader = async (type, minecraft) => LOADER_SERVICES[type]?.latestLoader(minecraft);
 
@@ -155,9 +158,14 @@ export const refreshFromPack = async (manifest, config) => {
 	const path = local ? manifest.pack.source : await fetchPack(manifest.pack.source);
 	const pack = await readPack(path, { name: manifest.name });
 
-	if (pack.kind !== 'ender') throw new Error(`${manifest.pack.source} is no longer an ender pack, but ${pack.kind}`);
+	if (!FOLLOWED.has(pack.kind)) {
+		throw new Error(
+			`${manifest.pack.source} is no longer a pack ender follows (an ender or packwiz pack), but ${pack.kind}`,
+		);
+	}
 
-	const entries = await resolveSpecs(pack.specs, config);
+	// An ender pack names its mods by spec, resolved here; a packwiz pack's are entries already
+	const entries = pack.specs ? await resolveSpecs(pack.specs, config) : pack.manifest.mods;
 	const before = new Set(manifest.pack.mods);
 	const named = new Map(entries.map(entry => [entryKey(entry), entry]));
 	const beside = manifest.mods.filter(entry => !before.has(entryKey(entry)) && !named.has(entryKey(entry)));
