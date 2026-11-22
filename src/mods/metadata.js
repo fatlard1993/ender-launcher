@@ -145,7 +145,10 @@ const toml = (source, loader, manifest) => {
 	const parsed = Bun.TOML.parse(source);
 
 	return (parsed.mods ?? []).map(mod => {
-		const dependencies = parsed.dependencies?.[mod.modId] ?? [];
+		// An entry naming no mod is a slip in the file that Forge skips too; kept, it would read as a mod named null
+		const dependencies = [parsed.dependencies?.[mod.modId] ?? []]
+			.flat()
+			.filter(dependency => typeof dependency?.modId === 'string' && dependency.modId !== '');
 		const minecraft = dependencies.find(dependency => dependency.modId === 'minecraft');
 		const version =
 			mod.version === '${file.jarVersion}'
