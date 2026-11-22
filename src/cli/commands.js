@@ -125,7 +125,8 @@ export const commands = {
 	},
 	export: {
 		summary: 'Write an instance as an ender pack of the mods it chose',
-		usage: 'ender export [name] [--out ender.pack.json] [--gist [--new] [--list] [--json]]',
+		usage:
+			'ender export [name] [--out ender.pack.json] [--gist [--new] [--list] [--json]] [--mrpack [--out name.mrpack]]',
 		flags: {
 			...instanceFlag,
 			out: { alias: 'o', description: 'Write it to this file instead of printing it' },
@@ -137,6 +138,10 @@ export const commands = {
 			list: { type: 'boolean', description: 'With --gist, ask the index to list it, as your GitHub account' },
 			json: { type: 'boolean', description: 'With --gist, print where it went as JSON' },
 			servers: { type: 'boolean', description: "Put the instance's multiplayer list in the pack" },
+			mrpack: {
+				type: 'boolean',
+				description: 'Write a Modrinth pack (.mrpack) of what is installed, for other launchers',
+			},
 			'pin-loader': {
 				type: 'boolean',
 				description: 'Pin the loader version this instance runs, so every player gets it',

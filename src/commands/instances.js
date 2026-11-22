@@ -6,6 +6,7 @@ import { readConfig, updateConfig } from '../config';
 import * as instances from '../instance';
 import { fromPrism, identifyMods } from '../instance/import';
 import { packFrom } from '../instance/enderPack';
+import { mrpackFrom } from '../instance/mrpack';
 import { readPack, recordOverrides, unpackInto } from '../instance/pack';
 import { placeServers, serversIn } from '../instance/servers';
 import { entryKey, resolveAll, takeChosen } from '../mods';
@@ -524,6 +525,31 @@ export const exportPack = async ({ positionals, flags }) => {
 
 	if (only.length > 0 && !flags.gist)
 		throw new Error(`--${only[0]} goes with --gist: ender export --gist --${only[0]}`);
+
+	if (flags.mrpack) {
+		if (flags.gist) throw new Error('--mrpack writes a file; a gist holds an ender pack: ender export --gist');
+
+		const { archive, index, left, outside } = await mrpackFrom({
+			manifest,
+			lock: await instances.readLock(manifest.name),
+			version: flags.version,
+		});
+		const out = resolve(flags.out ?? `${manifest.name}.mrpack`);
+
+		for (const file of left) warn(`${file} came from this machine, not a link, so it is not in the pack`);
+		if (outside.length > 0) {
+			warn(
+				`${plural(outside.length, 'file')} ${outside.length === 1 ? 'is' : 'are'} linked from outside Modrinth, GitHub and GitLab, which Modrinth does not host and some launchers refuse: ${outside.join(', ')}`,
+			);
+		}
+
+		await Bun.write(out, archive);
+		done(`Wrote ${manifest.name} as a Modrinth pack of ${plural(index.files.length, 'file')} to ${out}`);
+		if (index.files.length === 0)
+			info(paint.dim(`  ender sync -i ${manifest.name} first: a Modrinth pack lists what is installed`));
+
+		return 0;
+	}
 
 	const { pack, left } = packFrom(manifest, {
 		servers: flags.servers ? await serversOf(manifest.gameDir) : [],

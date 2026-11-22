@@ -76,6 +76,7 @@ module.exports = {
 		'gif',
 		'gists',
 		'github',
+		'githubusercontent',
 		'gitlab',
 		'gl',
 		'gradle',

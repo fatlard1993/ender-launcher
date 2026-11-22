@@ -82,7 +82,7 @@ export const syncAssets = async ({ manifest, lock, context, resolve = resolveEnt
 				const { filename, url, checksum, size } = resolution.file;
 
 				await fetchFile({ url, path: join(directory, filename), checksum, size });
-				now.push({ key: entryKey(entry), filename, version: resolution.version });
+				now.push({ key: entryKey(entry), filename, version: resolution.version, url });
 
 				if (!known.has(filename)) installed.push({ kind, filename });
 			} catch (error) {

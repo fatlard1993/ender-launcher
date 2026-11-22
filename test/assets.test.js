@@ -54,7 +54,9 @@ describe("an instance's resource and shader packs", () => {
 		expect(await readdir(join(gameDir, 'shaderpacks'))).toEqual(['complementary.zip']);
 		expect(await Bun.file(join(gameDir, 'options.txt')).text()).toBe('resourcePacks:["vanilla","file/faithful.zip"]\n');
 		expect(await Bun.file(join(gameDir, 'config', 'iris.properties')).text()).toContain('shaderPack=complementary.zip');
-		expect(result.assets.resourcepacks).toEqual([{ key: 'modrinth:faithful', filename: 'faithful.zip', version: '1' }]);
+		expect(result.assets.resourcepacks).toEqual([
+			{ key: 'modrinth:faithful', filename: 'faithful.zip', version: '1', url: 'https://x/faithful.zip' },
+		]);
 	});
 
 	test("remove only what ender put there, leave a player's own, and keep one it cannot reach now", async () => {
