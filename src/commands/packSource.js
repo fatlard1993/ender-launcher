@@ -14,7 +14,8 @@ import { paths } from '../paths';
 import { parseModSpec, refineModSpec } from './context';
 
 /** A repository named as `gh:owner/repo`. */
-export const REPOSITORY = /^(?:gh:|github:)([\w.-]+\/[\w.-]+)$/;
+/** A pack's repository on GitHub, neither part dots alone, which would climb out of the address it is put in. */
+export const REPOSITORY = /^(?:gh:|github:)((?!\.+\/)[\w.-]+\/(?!\.+$)[\w.-]+)$/;
 
 /** A gist by `gist:id`, `gist:owner/id`, or any of its links: its page, or a raw file at any revision. */
 const GIST =

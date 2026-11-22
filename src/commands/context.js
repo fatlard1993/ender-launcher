@@ -2,7 +2,7 @@ import { readConfig } from '../config';
 import * as instances from '../instance';
 import { claimantsOf, listing, providerOf } from '../mods/catalog';
 import { isProject } from '../mods/gradle';
-import { specFor } from '../mods/spec';
+import { safeId, specFor } from '../mods/spec';
 import { info, paint } from '../out';
 
 export const NO_INSTANCES =
@@ -107,6 +107,14 @@ export const parseModSpec = spec => {
 	if (source === 'index' && remainder.includes('/')) source = 'github';
 
 	const at = remainder.lastIndexOf('@');
+	const parsed =
+		at > 0 ? { source, id: remainder.slice(0, at), version: remainder.slice(at + 1) } : { source, id: remainder };
 
-	return at > 0 ? { source, id: remainder.slice(0, at), version: remainder.slice(at + 1) } : { source, id: remainder };
+	if (!safeId(parsed.id)) {
+		throw new Error(
+			`"${spec}" names no mod: an id is a slug or owner/repo, with no empty, "." or ".." part and no backslash`,
+		);
+	}
+
+	return parsed;
 };
