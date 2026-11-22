@@ -12,6 +12,7 @@ import { entryKey } from '../mods';
 import { newestAsset } from '../mods/github';
 import { step } from '../out';
 import { paths } from '../paths';
+import { writeZip } from '../zipWriter';
 import { parseModSpec, refineModSpec } from './context';
 
 /** A repository named as `gh:owner/repo`. */
@@ -106,6 +107,72 @@ const gistPack = async id => {
 	return path;
 };
 
+/** The hashes packwiz records that a file can be checked by here; its CurseForge murmur2 is not one. */
+const PACKWIZ_HASHES = new Set(['sha1', 'sha256', 'sha512', 'md5']);
+
+/**
+ * A packwiz pack served as files, named by its pack.toml's link, as packwiz-installer reads one: its index, by the
+ * pack.toml's link to it and checked by its hash, then every file the index lists, from beside the pack.toml and
+ * checked by its own, kept as a zip import reads. A path the index gives that would climb out of the pack is refused.
+ */
+export const packwizFromLink = async (
+	url,
+	{ fetchBytes = async address => new Uint8Array(await (await fetchWithRetry(address)).arrayBuffer()) } = {},
+) => {
+	const base = new URL('.', url);
+	const text = bytes => new TextDecoder().decode(bytes);
+	const checked = (bytes, format, hash, path) => {
+		if (!hash || !PACKWIZ_HASHES.has(format)) return bytes;
+
+		const got = new Bun.CryptoHasher(format).update(bytes).digest('hex');
+
+		if (got !== hash.toLowerCase())
+			throw new Error(`${path} is not the file the pack records (${format} ${got}, not ${hash})`);
+
+		return bytes;
+	};
+	const inside = path => {
+		const resolved = new URL(path, base);
+
+		if (!resolved.href.startsWith(base.href) || resolved.origin !== base.origin) {
+			throw new Error(`The pack lists ${path}, which is outside it`);
+		}
+
+		return resolved;
+	};
+	const packBytes = await fetchBytes(url);
+	const pack = Bun.TOML.parse(text(packBytes));
+	const indexPath = pack.index?.file ?? 'index.toml';
+	const indexBytes = checked(
+		await fetchBytes(inside(indexPath).href),
+		pack.index?.['hash-format'],
+		pack.index?.hash,
+		indexPath,
+	);
+	const index = Bun.TOML.parse(text(indexBytes));
+	const files = [
+		{ name: 'pack.toml', bytes: packBytes },
+		{ name: indexPath, bytes: indexBytes },
+	];
+
+	step(`Reading the packwiz pack at ${url}: ${(index.files ?? []).length} files`);
+
+	for (const file of index.files ?? []) {
+		const target = inside(file.file);
+		const name = decodeURIComponent(target.href.slice(base.href.length));
+		const bytes = await fetchBytes(target.href);
+
+		files.push({ name, bytes: checked(bytes, file['hash-format'] ?? index['hash-format'], file.hash, file.file) });
+	}
+
+	const path = join(paths.cache, 'packs', `packwiz-${new Bun.CryptoHasher('sha1').update(url).digest('hex')}.zip`);
+
+	await mkdir(join(paths.cache, 'packs'), { recursive: true });
+	await Bun.write(path, writeZip(files));
+
+	return path;
+};
+
 /** A pack named by a gist, a link or a GitHub repository, downloaded where import reads files from. */
 export const fetchPack = target => {
 	const gist = gistOf(target);
@@ -113,6 +180,7 @@ export const fetchPack = target => {
 
 	if (gist) return gistPack(gist);
 	if (repository) return repositoryPack(repository);
+	if (/^https:\/\/\S+\/pack\.toml(\?\S*)?$/.test(target)) return packwizFromLink(target);
 
 	return download(target, basename(new URL(target).pathname) || 'pack.zip');
 };

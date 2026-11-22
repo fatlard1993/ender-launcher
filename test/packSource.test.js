@@ -243,3 +243,59 @@ describe('updating from a pack', () => {
 		expect(updatedLine({ changed: [{}, {}], current: false })).toBe('2 mods updated');
 	});
 });
+
+describe('a packwiz pack by its pack.toml link', () => {
+	const sha256 = text => new Bun.CryptoHasher('sha256').update(text).digest('hex');
+	const served = files => async address => {
+		const path = new URL(address).pathname.replace('/pack/', '');
+
+		if (!(path in files)) throw Object.assign(new Error(`404 ${path}`), { status: 404 });
+
+		return new TextEncoder().encode(files[path]);
+	};
+	const site = ({ mod = 'name = "Sodium"\n[update.modrinth]\nmod-id = "AANobbMI"\nversion = "1"\n', listed } = {}) => {
+		const files = {
+			'mods/sodium.pw.toml': mod,
+			'config/sodium.json': '{"a":1}',
+		};
+		const index = (listed ?? Object.keys(files))
+			.map(
+				path =>
+					`[[files]]\nfile = "${path}"\nhash = "${sha256(files[path] ?? '')}"\n${path.endsWith('.pw.toml') ? 'metafile = true\n' : ''}`,
+			)
+			.join('');
+
+		return {
+			...files,
+			'index.toml': `hash-format = "sha256"\n${index}`,
+			'pack.toml': `name = "Wiz"\n[index]\nfile = "index.toml"\nhash-format = "sha256"\nhash = "${sha256(`hash-format = "sha256"\n${index}`)}"\n[versions]\nminecraft = "1.21.1"\nfabric = "0.16.9"\n`,
+		};
+	};
+
+	test('is read as packwiz-installer reads it, each file checked by its hash, into a pack import reads', async () => {
+		const { packwizFromLink } = await import('../src/commands/packSource');
+		const { readPack } = await import('../src/instance/pack');
+		const path = await packwizFromLink('https://example.com/pack/pack.toml', { fetchBytes: served(site()) });
+		const pack = await readPack(path, {});
+
+		expect(pack.kind).toBe('packwiz');
+		expect(pack.manifest.mods).toEqual([{ source: 'modrinth', id: 'AANobbMI', version: '1' }]);
+		expect(pack.manifest.loader).toEqual({ type: 'fabric', version: '0.16.9' });
+	});
+
+	test('refuses a file that is not what the pack records, and a path that climbs out of the pack', async () => {
+		const { packwizFromLink } = await import('../src/commands/packSource');
+		const tampered = site();
+
+		tampered['config/sodium.json'] = '{"a":2}';
+		await expect(
+			packwizFromLink('https://example.com/pack/pack.toml', { fetchBytes: served(tampered) }),
+		).rejects.toThrow('config/sodium.json is not the file the pack records');
+
+		await expect(
+			packwizFromLink('https://example.com/pack/pack.toml', {
+				fetchBytes: served(site({ listed: ['mods/sodium.pw.toml', '../secret.toml'] })),
+			}),
+		).rejects.toThrow('outside it');
+	});
+});

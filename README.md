@@ -99,7 +99,7 @@ ender launch family --update
 
 An instance already set up follows one with `ender follow <pack> --instance <name>`: its game directory and worlds stay, and its own mods give way to the pack's (`--keep` keeps them beside it). A jar copied into `mods/` by hand that is another copy of a mod the pack installs would stop the game loading, so sync moves it to `mods-displaced/` and says so. An instance imported from an ender pack remembers where it came from too. `ender update` reads the pack again first: mods it added come in, mods it dropped go, its pins hold, and mods added beside it stay. `ender launch --update` does that before every launch, and when the update cannot run, says why and launches what is installed. A gist is read through GitHub's API, so an edit reaches the next update at once, whichever of the gist's links was imported.
 
-An instance imported from a packwiz pack, from a repository or a file, follows it the same way: its update takes the pack's mods, loader version, optional choices and files.
+An instance imported from a packwiz pack follows it the same way, from a repository, a file, or the link to its `pack.toml` that packwiz-installer is given: its update takes the pack's mods, loader version, optional choices and files. A pack read by its link is fetched file by file, each checked against the hash its index records.
 
 ### The ender pack format
 
