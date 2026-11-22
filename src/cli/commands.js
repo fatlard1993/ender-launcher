@@ -136,6 +136,7 @@ export const commands = {
 			new: { type: 'boolean', description: 'With --gist, publish to a new gist rather than the one before' },
 			list: { type: 'boolean', description: 'With --gist, ask the index to list it, as your GitHub account' },
 			json: { type: 'boolean', description: 'With --gist, print where it went as JSON' },
+			servers: { type: 'boolean', description: "Put the instance's multiplayer list in the pack" },
 			'pin-loader': {
 				type: 'boolean',
 				description: 'Pin the loader version this instance runs, so every player gets it',

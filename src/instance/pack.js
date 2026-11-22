@@ -208,6 +208,7 @@ const fromEnder = async (path, { name }) => {
 		specs: pack.mods,
 		summary: pack.summary,
 		about: { version: pack.version, author: pack.author, memory: pack.memory },
+		servers: pack.servers ?? [],
 		overridePrefixes: alone ? [] : [file.slice(0, -ENDER_PACK.length)],
 		keepOverride: isGameFile,
 	};

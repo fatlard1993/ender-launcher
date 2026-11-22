@@ -7,6 +7,7 @@ import * as instances from '../instance';
 import { fromPrism, identifyMods } from '../instance/import';
 import { packFrom } from '../instance/enderPack';
 import { readPack, unpackInto } from '../instance/pack';
+import { placeServers, serversIn } from '../instance/servers';
 import { entryKey, resolveAll, takeChosen } from '../mods';
 import { resolveVersionId } from '../meta/mojang';
 import { LOADER_SERVICES, assertKnownLoader } from '../meta/resolve';
@@ -354,6 +355,13 @@ const activateIfFirst = async name => {
 	return activeInstance === undefined || activeInstance === name;
 };
 
+/** The servers an instance's multiplayer list holds, to write into a pack; none before the game has made one. */
+const serversOf = async gameDir => {
+	const file = Bun.file(join(gameDir, 'servers.dat'));
+
+	return (await file.exists()) ? serversIn(new Uint8Array(await file.arrayBuffer())) : [];
+};
+
 const importPack = async (path, flags, target = path) => {
 	const side = flags.server ? 'server' : 'client';
 	const pack = await readPack(path, {
@@ -399,6 +407,13 @@ const importPack = async (path, flags, target = path) => {
 	});
 
 	const written = await unpackInto(path, pack, manifest.gameDir);
+
+	if (pack.servers?.length > 0) {
+		const { added } = await placeServers(manifest.gameDir, pack.servers);
+
+		manifest.pack.servers = pack.servers.map(server => server.address);
+		if (added.length > 0) info(paint.dim(`  ${plural(added.length, 'server')} added to the multiplayer list`));
+	}
 
 	// Whatever the pack carried as loose files is asked about by hash, the same way an imported
 	// Prism instance is, so a bundled jar that is really a published mod becomes updatable.
@@ -503,6 +518,7 @@ export const exportPack = async ({ positionals, flags }) => {
 		throw new Error(`--${only[0]} goes with --gist: ender export --gist --${only[0]}`);
 
 	const { pack, left } = packFrom(manifest, {
+		servers: flags.servers ? await serversOf(manifest.gameDir) : [],
 		pinLoader: flags['pin-loader'] ?? false,
 		version: flags.version,
 		author: flags.author,

@@ -6,6 +6,7 @@ import { fetchJson, fetchWithRetry } from '../download';
 import * as instances from '../instance';
 import { ENDER_PACK } from '../instance/enderPack';
 import { detectPack, readPack } from '../instance/pack';
+import { placeServers } from '../instance/servers';
 import { LOADER_SERVICES } from '../meta/resolve';
 import { entryKey } from '../mods';
 import { newestAsset } from '../mods/github';
@@ -205,12 +206,17 @@ export const refreshFromPack = async (manifest, config) => {
 	manifest.resourcepacks = offered.resourcepacks;
 	manifest.shaderpacks = offered.shaderpacks;
 	if (chosen.size > 0) manifest.chosen = [...chosen];
-	const { version: _version, author: _author, memory: _memory, ...followed } = manifest.pack;
+	const servers = await placeServers(manifest.gameDir, pack.servers ?? [], { before: manifest.pack.servers ?? [] });
+
+	if (servers.added.length > 0 || servers.removed.length > 0) changes.servers = servers;
+
+	const { version: _version, author: _author, memory: _memory, servers: _servers, ...followed } = manifest.pack;
 
 	manifest.pack = {
 		...followed,
 		mods: [...named.keys()],
 		...Object.fromEntries(Object.entries(about).filter(([, value]) => value !== undefined)),
+		...(pack.servers?.length > 0 ? { servers: pack.servers.map(server => server.address) } : {}),
 	};
 
 	await instances.write(manifest);
