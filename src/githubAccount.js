@@ -28,6 +28,20 @@ export const refused = async (response, doing, missing) => {
 	);
 };
 
+/**
+ * The organizations the account ender signs in with belongs to, private memberships too, as its own token sees them.
+ * None when the token may not read them, as a fine-grained one without that permission, or GitHub will not say.
+ */
+export const organizationsOf = async ({ fetcher = fetch, configured } = {}) => {
+	const response = await fetcher(`${API}/user/orgs?per_page=100`, { headers: await authorized(configured) }).catch(
+		() => undefined,
+	);
+
+	if (!response?.ok) return [];
+
+	return (await response.json()).map(org => org.login).filter(Boolean);
+};
+
 /** The login of the account ender signs in with. */
 export const signedInAs = async ({ fetcher = fetch, configured } = {}) => {
 	const response = await fetcher(`${API}/user`, { headers: await authorized(configured) });

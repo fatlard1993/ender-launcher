@@ -14,7 +14,7 @@ import { detach, jobRunner, shown } from '../jobs';
 import { dataRoot, paths } from '../paths';
 import { KNOWN_LOADERS } from '../meta/resolve';
 import { done, info, paint, plural } from '../out';
-import { signedInAs } from '../githubAccount';
+import { organizationsOf, signedInAs } from '../githubAccount';
 import { fileIndexIssue, modLink } from '../indexIssues';
 import { setStar, starredRepositories } from '../stars';
 import { REPOSITORY, gistOf } from './packSource';
@@ -173,6 +173,7 @@ export const webApi = ({
 	publish = publishPack,
 	stars = { list: starredRepositories, set: setStar },
 	account = signedInAs,
+	organizations = organizationsOf,
 	fileIssue = fileIndexIssue,
 	newest = cached(async () => (await latestRelease()).version, 10 * 60_000),
 	upgradedBy = whoUpgrades,
@@ -340,7 +341,9 @@ export const webApi = ({
 
 		if (area === 'account' && name === undefined && method === 'GET') {
 			try {
-				return json({ login: await account() });
+				const login = await account();
+
+				return json({ login, organizations: await organizations() });
 			} catch (error) {
 				return json({ error: error.message }, error.status ?? 502);
 			}

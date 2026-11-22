@@ -171,6 +171,7 @@ module.exports = {
 		'nogui',
 		'oauth',
 		'opcode',
+		'orgs',
 		'os',
 		'osascript',
 		'otc',

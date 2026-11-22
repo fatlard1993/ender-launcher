@@ -19,6 +19,7 @@ import {
 	webApi,
 } from '../src/commands/web';
 import { commandLine } from '../src/cli/index';
+import { organizationsOf } from '../src/githubAccount';
 import { KEPT_JOBS, detach, jobRunner } from '../src/jobs';
 
 const ORIGIN = 'http://localhost:7460';
@@ -677,11 +678,39 @@ describe('stars', () => {
 	});
 });
 
+describe('the signed-in account', () => {
+	test('names its organizations as its own token sees them, and none when the token may not read them', async () => {
+		const asked = [];
+		const fetcher = async (url, { headers }) => {
+			asked.push([url, headers.authorization]);
+
+			return url.endsWith('/user/orgs?per_page=100')
+				? Response.json([{ login: 'our-team' }, { login: 'Other' }])
+				: new Response('', { status: 404 });
+		};
+
+		expect(await organizationsOf({ fetcher, configured: 'token' })).toEqual(['our-team', 'Other']);
+		expect(asked).toEqual([['https://api.github.com/user/orgs?per_page=100', 'Bearer token']]);
+		expect(
+			await organizationsOf({ fetcher: async () => new Response('', { status: 403 }), configured: 'token' }),
+		).toEqual([]);
+		expect(
+			await organizationsOf({
+				fetcher: async () => {
+					throw new Error('offline');
+				},
+				configured: 'token',
+			}),
+		).toEqual([]);
+	});
+});
+
 describe('issues on the index', () => {
 	test('are filed as the signed-in account for an ask or a pack, and only in the shapes the index reads', async () => {
 		const filed = [];
 		const api = webApi({
 			account: async () => 'me',
+			organizations: async () => ['our-team'],
 			fileIssue: async (kind, answer) => {
 				filed.push([kind, answer]);
 
@@ -690,7 +719,10 @@ describe('issues on the index', () => {
 		});
 		const post = (path, body) => api(request(path, { method: 'POST', origin: ORIGIN, body: JSON.stringify(body) }));
 
-		expect(await (await api(request('/api/account', { origin: ORIGIN }))).json()).toEqual({ login: 'me' });
+		expect(await (await api(request('/api/account', { origin: ORIGIN }))).json()).toEqual({
+			login: 'me',
+			organizations: ['our-team'],
+		});
 		expect((await post('/api/asks', { kind: 'fund', mod: 'github:a/b' })).status).toBe(201);
 		expect((await post('/api/asks', { kind: 'release', mod: 'gitlab:g/sub/p' })).status).toBe(201);
 		expect(
