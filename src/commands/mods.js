@@ -169,7 +169,9 @@ export const add = async ({ positionals, flags }) => {
 
 	await syncInstance(manifest, config, { withDependencies: flags.deps !== false, flags });
 
-	const { authors } = authorsOf(added, await listing({ index: config.index }).catch(() => []));
+	// The listing only says who the index's own mods are by: one added from elsewhere needs no download for it
+	const fromIndex = added.some(entry => INDEXED.has(entry.source));
+	const { authors } = authorsOf(added, fromIndex ? await listing({ index: config.index }).catch(() => []) : []);
 
 	if (authors.length > 0) {
 		info(

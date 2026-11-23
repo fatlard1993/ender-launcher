@@ -54,7 +54,7 @@ export const refineModSpec = async (entry, context) => {
 
 /** A bare name is a mod id, found in the index as the repository whose jars declare it. */
 const fromIndex = async (entry, context) => {
-	const entries = await listing(context);
+	const entries = await listing(context, { fresh: true });
 	const provider = providerOf(entry.id, entries);
 
 	if (provider === undefined && claimantsOf(entry.id, entries).length > 0) {

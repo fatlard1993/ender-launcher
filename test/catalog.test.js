@@ -581,6 +581,37 @@ describe('a published index', () => {
 		expect(hits.map(hit => hit.id)).toEqual(['TerraformersMC/ModMenu']);
 	});
 
+	test('places dependencies by a listing kept within a day, asking nothing, while a search asks for the newest', async () => {
+		const index = base('kept-day');
+		const url = `${index}/search.json`;
+		const tag = join(home, 'cache', 'index', `${new Bun.CryptoHasher('sha1').update(url).digest('hex')}.tag.json`);
+
+		answer = request => (request.headers.get('if-none-match') === '"v1"' ? 304 : 200);
+		served.length = 0;
+		forgetLoaded();
+		await loadListing({ index });
+
+		expect(served).toEqual([200]);
+
+		served.length = 0;
+		forgetLoaded();
+		await loadListing({ index });
+
+		expect(served).toEqual([]);
+
+		await loadListing({ index }, { fresh: true });
+
+		expect(served).toEqual([304]);
+
+		// A day on, the kept copy is asked about again even for placing dependencies
+		await Bun.write(tag, JSON.stringify({ etag: '"v1"', fetched: new Date(Date.now() - 25 * 3600_000).toISOString() }));
+		served.length = 0;
+		forgetLoaded();
+		await loadListing({ index });
+
+		expect(served).toEqual([304]);
+	});
+
 	test('unreachable, the kept copy is used and that is said', async () => {
 		answer = () => 200;
 

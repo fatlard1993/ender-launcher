@@ -194,7 +194,7 @@ export const resolveFromSource = async (record, entry, context) => {
 
 /** Search the index: repositories whose own jars declare a loader and game version the instance can use. */
 export const search = async (query, { minecraft, loader, limit = 10, index } = {}) =>
-	rank(await catalog.listing({ index }), query, { minecraft, loader })
+	rank(await catalog.listing({ index }, { fresh: true }), query, { minecraft, loader })
 		.slice(0, limit)
 		.map(({ entry, sharing, unproven, author }) => ({
 			source: entry.host ?? 'github',

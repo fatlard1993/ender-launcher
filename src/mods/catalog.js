@@ -51,8 +51,16 @@ const keep = async (url, etag, text) => {
  * Fetch an index file, keeping a copy to ask about with If-None-Match, so an unchanged index costs
  * one small answer rather than the whole file. Unreachable, the copy is used and that is said.
  */
-const fetchKept = async url => {
+const fetchKept = async (url, { within = 0, now = Date.now() } = {}) => {
 	const kept = await keptTag(url);
+
+	// A copy fetched within the window is taken as it is, asking nothing: the listing a dependency is placed by
+	// changes every crawl, but which repository provides a mod id hardly ever does
+	if (within > 0 && kept.etag !== undefined && now - Date.parse(kept.fetched) < within) {
+		const body = await kept.body();
+
+		if (body !== undefined) return body;
+	}
 
 	try {
 		const response = await fetchWithRetry(url, kept.etag ? { headers: { 'if-none-match': kept.etag } } : {});
@@ -80,24 +88,29 @@ const fetchKept = async url => {
 
 export const indexBase = context => context?.index ?? DEFAULT_INDEX;
 
-const load = (base, path) => {
+const load = (base, path, { within = 0 } = {}) => {
 	const key = `${base}/${path}`;
+	const held = loaded.get(key);
 
-	if (!loaded.has(key)) {
-		loaded.set(
-			key,
-			(async () => {
-				if (/^https?:\/\//.test(base)) return fetchKept(key);
+	// Fetched once a run; a run that took a kept copy and then wants the newest asks again
+	if (!held || (within === 0 && held.within > 0)) {
+		loaded.set(key, {
+			within,
+			body: (async () => {
+				if (/^https?:\/\//.test(base)) return fetchKept(key, { within });
 
 				const file = Bun.file(join(base, path));
 
 				return (await file.exists()) ? file.json() : undefined;
 			})(),
-		);
+		});
 	}
 
-	return loaded.get(key);
+	return loaded.get(key).body;
 };
+
+/** How old a kept listing may be when it only places dependencies: a day, as the crawl rewrites it every hour. */
+export const LISTING_KEPT = 24 * 60 * 60 * 1000;
 
 /** The version of the index's data shape this ender reads: data/index.json says which one an index publishes. */
 export const KNOWN_SCHEMA = 1;
@@ -123,8 +136,15 @@ export const checkShape = async context => {
 	return schema;
 };
 
-export const listing = async context => {
-	const [entries] = await Promise.all([load(indexBase(context), 'search.json'), checkShape(context)]);
+/**
+ * The index's listing. By default a kept copy up to LISTING_KEPT old is used as it is, which is all placing a mod's
+ * dependencies needs; `fresh` asks for the newest, as a search or a mod named by its id alone wants new mods.
+ */
+export const listing = async (context, { fresh = false } = {}) => {
+	const [entries] = await Promise.all([
+		load(indexBase(context), 'search.json', { within: fresh ? 0 : LISTING_KEPT }),
+		checkShape(context),
+	]);
 
 	if (entries === undefined) throw new Error(`No mod index at ${indexBase(context)}`);
 
