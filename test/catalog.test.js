@@ -1243,3 +1243,56 @@ describe("records by the index's change file", () => {
 		}
 	});
 });
+
+describe("a record's releases file", () => {
+	test('is read in place of the record where the index publishes one, and the record where it has none yet', async () => {
+		const home = await mkdtemp(join(tmpdir(), 'ender-releases-'));
+		const previousHome = process.env.ENDER_HOME;
+		const asked = [];
+		let manifest = { schema: 1, files: { releases: { path: 'releases/{owner}/{repo}.json' } } };
+		const server = Bun.serve({
+			port: 0,
+			fetch: request => {
+				const path = new URL(request.url).pathname.replace(/^\/data\//, '');
+
+				asked.push(path);
+
+				if (path === 'index.json') return Response.json(manifest);
+				if (path === 'releases/a/slim.json') return Response.json({ releases: [], from: 'releases' });
+				if (path.startsWith('mods/')) return Response.json({ releases: [], from: 'record', stars: 3 });
+
+				return new Response('none', { status: 404 });
+			},
+		});
+		const index = `http://localhost:${server.port}/data`;
+		const read = async name => {
+			forgetLoaded();
+			asked.length = 0;
+
+			return { from: (await loadRecord(name, { index }))?.from, asked: asked.filter(path => path !== 'index.json') };
+		};
+
+		process.env.ENDER_HOME = home;
+
+		try {
+			expect(await read('a/slim')).toEqual({ from: 'releases', asked: ['changes.json', 'releases/a/slim.json'] });
+			expect(await read('a/new')).toEqual({
+				from: 'record',
+				asked: ['changes.json', 'releases/a/new.json', 'mods/a/new.json'],
+			});
+
+			// An index from before it published them names none, and is asked for the record alone
+			manifest = { schema: 1, files: {} };
+
+			expect(await read('a/slim')).toEqual({ from: 'record', asked: ['changes.json', 'mods/a/slim.json'] });
+		} finally {
+			server.stop();
+			forgetLoaded();
+
+			if (previousHome === undefined) delete process.env.ENDER_HOME;
+			else process.env.ENDER_HOME = previousHome;
+
+			await rm(home, { recursive: true, force: true });
+		}
+	});
+});

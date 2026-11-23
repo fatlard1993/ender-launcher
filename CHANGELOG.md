@@ -2,6 +2,13 @@
 
 Each release's notes, newest first. A release is published with its section here as its notes.
 
+## 0.4.1
+
+### The index
+
+- A record is read as its releases alone where the index publishes them, a third of its size: an update downloads a third of what it did for each mod whose releases changed, and a new instance a third for each of its mods.
+- An update no longer refreshes `providers.json` every day for an instance requiring something nothing can place: an id a table a day old could not place is remembered for the week the table is kept. Adding mods still asks the newest table, as a library may be as new as the mod.
+
 ## 0.4.0
 
 ### Before you upgrade

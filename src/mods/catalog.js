@@ -319,17 +319,24 @@ const changeList = async base => {
 		: undefined;
 };
 
+/** Whether the index publishes each record's releases alone, which its manifest names; one from before it does not. */
+const publishesReleases = async base =>
+	(await load(base, 'index.json').catch(() => undefined))?.files?.releases !== undefined;
+
 /**
- * A repository's record. From an index publishing changes.json, a kept copy is asked for only when the file lists the
- * record as changed after the copy was known current, or the copy is older than the file reaches back; otherwise each
- * is asked whether it changed, as before.
+ * A repository's record, as far as picking a jar needs: its releases alone where the index publishes them, a third of
+ * the record's size, and the whole record where it does not or has not yet. From an index publishing changes.json, a
+ * kept copy is asked for only when the file lists the record as changed after the copy was known current, or the copy
+ * is older than the file reaches back; otherwise each is asked whether it changed, as before.
  */
 export const record = async (fullName, context, host = 'github') => {
 	const base = await indexBase(context);
 	const path = `mods/${DIRECTORIES[host]}${fullName}.json`;
+	const slim = (await publishesReleases(base)) ? path.replace(/^mods\//, 'releases/') : undefined;
+	const read = async (options = {}) => (slim && (await load(base, slim, options))) ?? load(base, path, options);
 	const list = /^https?:\/\//.test(base) ? await changeList(base) : undefined;
 
-	if (list === undefined) return load(base, path);
+	if (list === undefined) return read();
 
 	const changed = list.records[path];
 	const current = ({ asOf }) =>
@@ -337,5 +344,5 @@ export const record = async (fullName, context, host = 'github') => {
 		Date.parse(asOf) >= Date.parse(list.since) &&
 		!(readable(changed) && Date.parse(changed) > Date.parse(asOf));
 
-	return load(base, path, { current, asOf: new Date(Date.parse(list.generated) - SERVED_STALE).toISOString() });
+	return read({ current, asOf: new Date(Date.parse(list.generated) - SERVED_STALE).toISOString() });
 };
