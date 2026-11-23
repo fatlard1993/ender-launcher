@@ -6,7 +6,7 @@ Each release's notes, newest first. A release is published with its section here
 
 ### Before you upgrade
 
-- **The index's data moved.** ender now reads it from `https://raw.githubusercontent.com/fatlard1993/ender-index/data/`, the index's `data` branch. ender 0.3 and earlier read `.../main/data/`, which the index copies there once a day until **22 December 2026** and then stops updating. An older ender keeps working after that, but from data frozen on that day: no new mods, releases or known-bad jars. `ender upgrade` before then.
+- **The index's data moved.** ender now reads it from `https://raw.githubusercontent.com/fatlard1993/ender-index/data/`, the index's `data` branch. ender 0.3 and earlier read `.../main/data/`, which the index copies there once a day until **22 December 2026** and then stops updating. An older ender keeps working after that, but from data frozen on that day: no new mods, releases or known-bad jars. `ender upgrade` before then. From 0.4, ender asks the index where its data is served, so a later move needs no upgrade.
 - **A jar whose code names where other programs keep logins** (Discord's token store, a browser's saved passwords, a wallet) is held back until you trust it with `--trust`, or from `ender web`. Every other finding stays a warning.
 - **A source build's allowance covers the build scripts it was given for.** A later commit whose Gradle wrapper, scripts, properties or build logic changed is held, naming each file and printing the diff, until `ender add <repo> --build` allows it again. An allowance from 0.3 is asked for once more, since 0.3 did not keep which scripts it covered.
 - **A jar on the index's known-bad list is refused from any source**: Modrinth, CurseForge, a link or a pack. One listed after you installed it is taken out on the next sync.
@@ -40,8 +40,9 @@ Each release's notes, newest first. A release is published with its section here
 
 ### The index
 
-- Dependencies are placed from a copy of the index's listing kept for up to a day, or from its much smaller `providers.json`, so an update no longer downloads the 5 MB listing each time.
-- ender reads the index's `index.json` and says once when the index publishes a newer data shape than it reads.
+- An update asks only for what changed. It reads the index's `changes.json`, the records whose releases changed in the last week, and fetches only those, instead of asking about every installed mod. It no longer downloads the 5 MB listing, and places dependencies from the index's `providers.json`, kept for up to a week, or a day when something it requires cannot be placed. For a 100-mod instance, the day's first update went from about 110 requests and 7 MB to about 5 requests and under 1.5 MB, and later updates that day to a few kilobytes.
+- ender reads the index's data wherever its `index.json` says it is served, over https, and remembers that for when the manifest cannot be read, so the data can move to another host without a new ender. An address set with `ender config index` is read as it is.
+- ender says once when the index publishes a newer data shape than it reads.
 
 ### Fixes
 
