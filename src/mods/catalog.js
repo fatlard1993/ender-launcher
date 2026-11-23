@@ -17,6 +17,7 @@ const loaded = new Map();
 export const forgetLoaded = () => {
 	loaded.clear();
 	warnedShapes.clear();
+	bases.clear();
 };
 
 const copyOf = url => join(paths.cache, 'index', `${new Bun.CryptoHasher('sha1').update(url).digest('hex')}.json`);
@@ -86,7 +87,61 @@ const fetchKept = async (url, { within = 0, now = Date.now() } = {}) => {
 	}
 };
 
-export const indexBase = context => context?.index ?? DEFAULT_INDEX;
+/** Where each published index last said its data is served, for a run that cannot read its manifest at all. */
+const movedPath = () => join(paths.cache, 'index', 'moved.json');
+
+/** The address a manifest names in `data`, without a trailing slash, when it is one ender follows: https only. */
+const servedAt = manifest => {
+	if (typeof manifest?.data !== 'string') return undefined;
+
+	try {
+		return new URL(manifest.data).protocol === 'https:' ? manifest.data.replace(/\/+$/, '') : undefined;
+	} catch {
+		return undefined;
+	}
+};
+
+const bases = new Map();
+
+/**
+ * Where the index's data is read from. An address the player set with `ender config index` is read as it is.
+ * Otherwise the manifest at the address ender was built with is asked each run, and the address it names in `data` is
+ * where everything else is read, so the data can move, and move back, with no release. That address is remembered for
+ * a run that cannot read the manifest at all, as when the repository serving it is gone.
+ */
+export const indexBase = async context => {
+	if (context?.index !== undefined) return context.index;
+
+	// The address ender was built with; a test stands in its own
+	const published = context?.published ?? DEFAULT_INDEX;
+
+	if (!bases.has(published)) {
+		bases.set(
+			published,
+			(async () => {
+				const remembered = await readJson(movedPath(), {});
+				const manifest = await load(published, 'index.json').catch(() => undefined);
+
+				if (manifest === undefined) return remembered[published] ?? published;
+
+				const moved = servedAt(manifest);
+
+				if (moved !== remembered[published]) {
+					const kept = { ...remembered };
+
+					if (moved) kept[published] = moved;
+					else delete kept[published];
+
+					await writeJson(movedPath(), kept);
+				}
+
+				return moved ?? published;
+			})(),
+		);
+	}
+
+	return bases.get(published);
+};
 
 const load = (base, path, { within = 0 } = {}) => {
 	const key = `${base}/${path}`;
@@ -123,7 +178,7 @@ const warnedShapes = new Set();
  * version, or one that cannot say, is read as it is.
  */
 export const checkShape = async context => {
-	const base = indexBase(context);
+	const base = await indexBase(context);
 	const schema = (await load(base, 'index.json').catch(() => undefined))?.schema;
 
 	if (!Number.isInteger(schema) || schema <= KNOWN_SCHEMA || warnedShapes.has(base)) return schema;
@@ -141,19 +196,20 @@ export const checkShape = async context => {
  * day; undefined from an index that publishes none, which the listing then answers for.
  */
 export const providers = async context =>
-	load(indexBase(context), 'providers.json', { within: LISTING_KEPT }).catch(() => undefined);
+	load(await indexBase(context), 'providers.json', { within: LISTING_KEPT }).catch(() => undefined);
 
 /**
  * The index's listing. By default a kept copy up to LISTING_KEPT old is used as it is, which is all placing a mod's
  * dependencies needs; `fresh` asks for the newest, as a search or a mod named by its id alone wants new mods.
  */
 export const listing = async (context, { fresh = false } = {}) => {
+	const base = await indexBase(context);
 	const [entries] = await Promise.all([
-		load(indexBase(context), 'search.json', { within: fresh ? 0 : LISTING_KEPT }),
+		load(base, 'search.json', { within: fresh ? 0 : LISTING_KEPT }),
 		checkShape(context),
 	]);
 
-	if (entries === undefined) throw new Error(`No mod index at ${indexBase(context)}`);
+	if (entries === undefined) throw new Error(`No mod index at ${base}`);
 
 	return entries;
 };
@@ -163,7 +219,7 @@ export const listing = async (context, { fresh = false } = {}) => {
  * source. None when the index cannot be read for it, as an index from before it published one could not say.
  */
 export const knownBad = async context => {
-	const listed = await load(indexBase(context), 'known-bad.json').catch(() => undefined);
+	const listed = await load(await indexBase(context), 'known-bad.json').catch(() => undefined);
 
 	return new Map(
 		(Array.isArray(listed) ? listed : []).map(entry => [String(entry.sha256).toLowerCase(), entry.reason]),
@@ -171,10 +227,10 @@ export const knownBad = async context => {
 };
 
 /** The explanations mods' authors gave of their findings, by the index's key for each mod and then by finding. */
-export const explanations = async context => (await load(indexBase(context), 'explanations.json')) ?? {};
+export const explanations = async context => (await load(await indexBase(context), 'explanations.json')) ?? {};
 
 /** Where a host's records live in the index; a dotted directory cannot collide with a GitHub owner. */
 const DIRECTORIES = { github: '', codeberg: 'codeberg.org/', gitlab: 'gitlab.com/' };
 
-export const record = (fullName, context, host = 'github') =>
-	load(indexBase(context), `mods/${DIRECTORIES[host]}${fullName}.json`);
+export const record = async (fullName, context, host = 'github') =>
+	load(await indexBase(context), `mods/${DIRECTORIES[host]}${fullName}.json`);

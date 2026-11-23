@@ -12,6 +12,8 @@ import {
 	fit,
 	forgetLoaded,
 	fromProviders,
+	indexBase,
+	knownBad,
 	listing as loadListing,
 	providerOf,
 	requiredIds,
@@ -924,4 +926,100 @@ test('places a mod id by providers.json as providerOf would: the first claimant 
 	expect(fromProviders('mine', providers, undefined, onFabric).provider).toBeUndefined();
 	expect(fromProviders('mine', providers, { host: 'github', repo: 'me/app' }, onFabric).provider.repo).toBe('me/lib');
 	expect(fromProviders('unknown', providers, undefined, onFabric)).toEqual({ provider: undefined, claimants: [] });
+});
+
+describe('an index whose data moved', () => {
+	const published = 'https://index.example/data';
+	const cdn = 'https://cdn.example/ender';
+	let home;
+	let previousHome;
+	let realFetch;
+	let manifest;
+	let asked;
+
+	beforeAll(async () => {
+		home = await mkdtemp(join(tmpdir(), 'ender-moved-'));
+		previousHome = process.env.ENDER_HOME;
+		process.env.ENDER_HOME = home;
+		realFetch = globalThis.fetch;
+		// The manifest answers as each test sets it; every other file names where it was served from
+		globalThis.fetch = async url => {
+			asked.push(url);
+
+			if (url === `${published}/index.json`) return manifest();
+
+			return Response.json([{ sha256: 'AB', reason: `from ${new URL(url).host}` }], { headers: { etag: '"k"' } });
+		};
+	});
+
+	afterAll(async () => {
+		globalThis.fetch = realFetch;
+
+		if (previousHome === undefined) delete process.env.ENDER_HOME;
+		else process.env.ENDER_HOME = previousHome;
+
+		await rm(home, { recursive: true, force: true });
+	});
+
+	const run = async context => {
+		forgetLoaded();
+		asked = [];
+
+		return { base: await indexBase(context), bad: (await knownBad(context)).get('ab') };
+	};
+	const manifestNaming = data => () =>
+		Response.json({ schema: 1, ...(data ? { data } : {}) }, { headers: { etag: `"${data}"` } });
+	const remembered = async () => Bun.file(join(home, 'cache', 'index', 'moved.json')).json();
+
+	test('is read where the published manifest says it is now, which is remembered for when that manifest is gone', async () => {
+		manifest = manifestNaming(`${cdn}/`);
+
+		expect(await run({ published })).toEqual({ base: cdn, bad: 'from cdn.example' });
+		expect(asked).toEqual([`${published}/index.json`, `${cdn}/known-bad.json`]);
+		expect(await remembered()).toEqual({ [published]: cdn });
+
+		manifest = () => new Response('gone', { status: 404 });
+
+		expect(await run({ published })).toEqual({ base: cdn, bad: 'from cdn.example' });
+	});
+
+	test('moves back when the manifest stops naming another address', async () => {
+		manifest = manifestNaming(undefined);
+
+		expect(await run({ published })).toEqual({ base: published, bad: 'from index.example' });
+		expect(await remembered()).toEqual({});
+	});
+
+	test('follows only https, and never from an address the player set', async () => {
+		for (const data of ['http://cdn.example/ender', 'file:///etc', '../elsewhere', 7]) {
+			manifest = manifestNaming(data);
+
+			expect((await run({ published })).base).toBe(published);
+		}
+
+		manifest = manifestNaming(cdn);
+
+		expect(await run({ index: 'https://mine.example/data' })).toEqual({
+			base: 'https://mine.example/data',
+			bad: 'from mine.example',
+		});
+		expect(asked).toEqual(['https://mine.example/data/known-bad.json']);
+	});
+
+	test('unreachable, is read where the kept copy of its manifest says', async () => {
+		manifest = manifestNaming(cdn);
+		await run({ published });
+		await rm(join(home, 'cache', 'index', 'moved.json'));
+
+		manifest = () => {
+			throw new TypeError('network down');
+		};
+		const warned = spyOn(console, 'warn').mockImplementation(() => {});
+
+		try {
+			expect((await run({ published })).base).toBe(cdn);
+		} finally {
+			warned.mockRestore();
+		}
+	});
 });

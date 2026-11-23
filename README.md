@@ -325,7 +325,7 @@ A repository the index has not crawled, or whose watched releases do not fit, re
 
 `cb:` and `gl:` mods resolve only through the index, since ender asks no Codeberg or GitLab API directly; one the index has not crawled says so, and names the line that would get it crawled. Dependencies cross hosts freely: a Codeberg mod requiring Fabric API gets it from GitHub.
 
-`ender config index <url or directory>` points at another index, such as a local checkout's `data` directory.
+`ender config index <url or directory>` points at another index, such as a local checkout's `data` directory, and that address is read as it is. Without one, ender asks the published index's `index.json` where its data is served each run, and reads it there, so the data can move to another host without a new ender; the last address named is remembered for when that manifest cannot be read.
 
 Unauthenticated GitHub allows sixty requests an hour. `ender config githubToken <token>` raises that, `GITHUB_TOKEN` is read if set, and otherwise the `gh` CLI is asked for its own token. Reading the index spends none of them.
 
