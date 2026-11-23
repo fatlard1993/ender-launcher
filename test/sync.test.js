@@ -100,6 +100,40 @@ describe('syncMods', () => {
 		expect(playing.leftForClients).toEqual([]);
 	});
 
+	test('refuses a jar the index lists as known bad, from any source, newly installed or already there, with no trust to let it in', async () => {
+		const bad = await jar('bad.jar');
+		const fine = await jar('fine.jar');
+		const hashOf = async path =>
+			new Bun.CryptoHasher('sha256').update(await Bun.file(path).arrayBuffer()).digest('hex');
+		const listed = new Map([[await hashOf(bad.path), 'steals session tokens']]);
+		const context = { trustSecrets: true, knownBad: async () => listed };
+		const first = await syncMods({
+			entries: [bad, fine],
+			modsDir,
+			lock: { mods: [] },
+			context,
+			withDependencies: false,
+		});
+
+		expect(await readdir(modsDir)).toEqual(['fine.jar']);
+		expect(first.failures.map(({ error }) => error.message)).toEqual([
+			"bad.jar is on the index's known-bad list: steals session tokens",
+		]);
+
+		// Listed after it was installed: the next sync takes it out
+		const later = new Map([[await hashOf(fine.path), 'confirmed later']]);
+		const second = await syncMods({
+			entries: [fine],
+			modsDir,
+			lock: first.lock,
+			context: { knownBad: async () => later },
+			withDependencies: false,
+		});
+
+		expect(await readdir(modsDir)).toEqual([]);
+		expect(second.failures).toHaveLength(1);
+	});
+
 	test('moves aside a jar it never installed that is another copy of a mod it installs, which would stop the game', async () => {
 		const fabricJar = async (path, id) => {
 			const built = await jarIn(root, { 'fabric.mod.json': JSON.stringify({ id, version: '1' }) });

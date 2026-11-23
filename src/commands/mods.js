@@ -5,7 +5,7 @@ import { readConfig } from '../config';
 import { fileIndexIssue, modLink } from '../indexIssues';
 import * as instances from '../instance';
 import { scanJar } from '../mods/capabilities';
-import { explanations, listing } from '../mods/catalog';
+import { explanations, knownBad, listing } from '../mods/catalog';
 import { ownerName, supportOf } from '../mods/support';
 import {
 	entryKey,
@@ -43,6 +43,8 @@ const contextFor = (manifest, config, flags = {}) => ({
 	rebuild: flags.build ?? false,
 	trustSecrets: flags.trust ?? false,
 	side: manifest.type === 'server' ? 'server' : 'client',
+	// Read once a sync asks: the jars the index lists as known bad, refused from any source
+	knownBad: () => knownBad({ index: config.index }),
 });
 
 /**

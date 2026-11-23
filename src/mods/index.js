@@ -579,6 +579,26 @@ export const syncMods = async ({
 		} else kept.push(resolution);
 	}
 
+	// A jar the index lists as known bad is refused from any source, already installed or new, and no trust lets it in
+	const listedBad = context.knownBad ? await context.knownBad() : new Map();
+
+	if (listedBad.size > 0) {
+		for (const resolution of [...kept]) {
+			const path = join(modsDir, resolution.file.filename);
+			const sha256 = new Bun.CryptoHasher('sha256').update(await Bun.file(path).arrayBuffer()).digest('hex');
+			const reason = listedBad.get(sha256);
+
+			if (reason === undefined) continue;
+
+			await unlink(path).catch(() => {});
+			kept.splice(kept.indexOf(resolution), 1);
+			failures.push({
+				resolution,
+				error: new Error(`${resolution.file.filename} is on the index's known-bad list: ${reason}`),
+			});
+		}
+	}
+
 	if (serving && clientOnlyCache && leftForClients.length > 0) {
 		await writeJson(clientOnlyCache, [...clientOnlyKnown].filter(Boolean).toSorted());
 	}

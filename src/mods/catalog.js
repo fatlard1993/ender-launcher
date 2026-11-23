@@ -131,6 +131,18 @@ export const listing = async context => {
 	return entries;
 };
 
+/**
+ * The jars the index lists as confirmed to do harm, by sha256 with the reason: what ender refuses to install from any
+ * source. None when the index cannot be read for it, as an index from before it published one could not say.
+ */
+export const knownBad = async context => {
+	const listed = await load(indexBase(context), 'known-bad.json').catch(() => undefined);
+
+	return new Map(
+		(Array.isArray(listed) ? listed : []).map(entry => [String(entry.sha256).toLowerCase(), entry.reason]),
+	);
+};
+
 /** The explanations mods' authors gave of their findings, by the index's key for each mod and then by finding. */
 export const explanations = async context => (await load(indexBase(context), 'explanations.json')) ?? {};
 
