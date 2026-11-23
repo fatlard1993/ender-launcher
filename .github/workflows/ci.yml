@@ -1,0 +1,34 @@
+name: ci
+
+# The tests on every push and pull request, on each system ender ships for: the release builds binaries for macOS and
+# Windows too, and a test that passes on Linux alone has not shown it works where those run.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      # The tests build their jar and pack fixtures with zip, which Windows runners do not have
+      - name: zip on Windows
+        if: runner.os == 'Windows'
+        run: choco install zip --no-progress -y
+      - run: bun install
+      - run: bun run lint
+        if: runner.os == 'Linux'
+      - run: bun test
