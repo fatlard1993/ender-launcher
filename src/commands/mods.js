@@ -30,7 +30,7 @@ const INDEXED = new Set(['github', 'codeberg', 'gitlab', 'index']);
 /** The index's page saying what each finding of a scan means. */
 const FINDINGS_PAGE = 'https://fatlard1993.github.io/ender-index/findings';
 
-const contextFor = (manifest, config, flags = {}) => ({
+const contextFor = (manifest, config, flags = {}, { adding = false } = {}) => ({
 	minecraft: manifest.minecraft,
 	loader: manifest.loader?.type === 'vanilla' ? undefined : manifest.loader?.type,
 	key: config.curseforgeKey,
@@ -45,6 +45,9 @@ const contextFor = (manifest, config, flags = {}) => ({
 	side: manifest.type === 'server' ? 'server' : 'client',
 	// Read once a sync asks: the jars the index lists as known bad, refused from any source
 	knownBad: () => knownBad({ index: config.index }),
+	// A player adding mods places what they require by the newest providers.json, as one just published may need a library
+	// as new; an update keeps to the copy it has
+	adding,
 });
 
 /**
@@ -59,7 +62,7 @@ const leniently = async (spec, config) => {
 	}
 };
 
-export const syncInstance = async (manifest, config, { withDependencies = true, flags = {} } = {}) => {
+export const syncInstance = async (manifest, config, { withDependencies = true, flags = {}, adding = false } = {}) => {
 	const directory = instances.modsDir(manifest);
 
 	await mkdir(directory, { recursive: true });
@@ -70,7 +73,7 @@ export const syncInstance = async (manifest, config, { withDependencies = true, 
 		entries: manifest.mods.filter(wanted),
 		modsDir: directory,
 		lock,
-		context: contextFor(manifest, config, flags),
+		context: contextFor(manifest, config, flags, { adding }),
 		withDependencies,
 		modIdCache: join(paths.cache, 'mod-ids.json'),
 		scanCache: join(paths.cache, 'scans'),
@@ -167,7 +170,7 @@ export const add = async ({ positionals, flags }) => {
 
 	step(`Added ${plural(added.length, 'mod')} to ${manifest.name}`);
 
-	await syncInstance(manifest, config, { withDependencies: flags.deps !== false, flags });
+	await syncInstance(manifest, config, { withDependencies: flags.deps !== false, flags, adding: true });
 
 	// The listing only says who the index's own mods are by: one added from elsewhere needs no download for it
 	const fromIndex = added.some(entry => INDEXED.has(entry.source));

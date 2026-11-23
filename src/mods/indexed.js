@@ -37,11 +37,19 @@ const dependenciesOf = async (entry, mods, context) => {
 			? catalog.fromProviders(modId, table, requiring, fits)
 			: { provider: catalog.providerOf(modId, entries, requiring, fits) };
 
-		// A kept table up to a week old places what it can; an id it cannot is asked of one a day old at most
-		if (placed.provider === undefined && table && !asked) {
+		// A kept table up to a week old places what it can. An id it cannot is asked of the newest when a player adds mods,
+		// and in an update of one a day old at most, unless such a table could not place it either within the week
+		if (
+			placed.provider === undefined &&
+			table &&
+			!asked &&
+			(context.adding || !(await catalog.knownUnplaced(modId, context)))
+		) {
 			asked = true;
-			table = (await catalog.providers(context, { within: catalog.LISTING_KEPT })) ?? table;
+			table = (await catalog.providers(context, { within: context.adding ? 0 : catalog.LISTING_KEPT })) ?? table;
 			placed = catalog.fromProviders(modId, table, requiring, fits);
+
+			if (placed.provider === undefined) await catalog.rememberUnplaced(modId, context);
 		}
 
 		const { provider } = placed;

@@ -126,7 +126,11 @@ export const create = async ({ positionals, flags }) => {
 		return 0;
 	}
 
-	const { failures } = await syncInstance(manifest, config, { withDependencies: flags.deps !== false, flags });
+	const { failures } = await syncInstance(manifest, config, {
+		withDependencies: flags.deps !== false,
+		flags,
+		adding: true,
+	});
 
 	if (failures.length === 0) info(paint.dim(`  next: ${next}`));
 

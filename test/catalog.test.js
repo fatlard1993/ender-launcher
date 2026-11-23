@@ -1086,12 +1086,12 @@ describe('placing dependencies by a kept providers.json', () => {
 		const requiring = (...ids) => ({
 			releases: [release('1.0', [asset('app-1.0.jar', [mod('app', { depends: [...ids, 'minecraft'] })])])],
 		});
-		const placed = async record =>
+		const placed = async (record, extra = {}) =>
 			(
 				await resolveFromRecord(
 					record,
 					{ source: 'github', id: 'me/app' },
-					{ minecraft: '26.3', loader: 'fabric', index },
+					{ minecraft: '26.3', loader: 'fabric', index, ...extra },
 				)
 			).dependencies;
 
@@ -1113,23 +1113,36 @@ describe('placing dependencies by a kept providers.json', () => {
 			forgetLoaded();
 			asked = 0;
 
-			// Fetched within the day: what it places, it places; what it cannot, waits, asking nothing
+			// Fetched within the day: what it places, it places; what it cannot, waits, asking nothing, and is remembered
 			expect(await placed(requiring('old-lib'))).toEqual([{ source: 'github', id: 'a/old-lib' }]);
-			expect(await placed(requiring('old-lib', 'new-lib', 'nobody-has-this'))).toEqual([
-				{ source: 'github', id: 'a/old-lib' },
-			]);
+			expect(await placed(requiring('old-lib', 'new-lib'))).toEqual([{ source: 'github', id: 'a/old-lib' }]);
 			expect(asked).toBe(0);
 
-			// Two days old, it still places what it can as it is; an id it cannot asks again, once a run
+			// Two days on, an update asks nothing about what a table that fresh could not place
 			await ageKept(48);
 			forgetLoaded();
 
-			expect(await placed(requiring('old-lib'))).toEqual([{ source: 'github', id: 'a/old-lib' }]);
+			expect(await placed(requiring('new-lib'))).toEqual([]);
 			expect(asked).toBe(0);
-			expect(await placed(requiring('new-lib', 'nobody-has-this'))).toEqual([{ source: 'github', id: 'b/new-lib' }]);
+
+			// A player adding mods asks the newest for what the copy cannot place, as a library may be as new as the mod
+			forgetLoaded();
+
+			expect(await placed(requiring('new-lib'), { adding: true })).toEqual([{ source: 'github', id: 'b/new-lib' }]);
 			expect(asked).toBe(1);
+
+			// Something nothing provides is asked about once, then remembered for the week the table is kept
+			await ageKept(48);
+			forgetLoaded();
+
 			expect(await placed(requiring('nobody-has-this'))).toEqual([]);
-			expect(asked).toBe(1);
+			expect(asked).toBe(2);
+
+			await ageKept(48);
+			forgetLoaded();
+
+			expect(await placed(requiring('nobody-has-this'))).toEqual([]);
+			expect(asked).toBe(2);
 		} finally {
 			globalThis.fetch = realFetch;
 			forgetLoaded();

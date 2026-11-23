@@ -18,6 +18,7 @@ export const forgetLoaded = () => {
 	loaded.clear();
 	warnedShapes.clear();
 	bases.clear();
+	unplacedSeen = undefined;
 };
 
 const copyOf = url => join(paths.cache, 'index', `${new Bun.CryptoHasher('sha1').update(url).digest('hex')}.json`);
@@ -229,6 +230,40 @@ export const PROVIDERS_KEPT = 7 * 24 * 60 * 60 * 1000;
  * Each mod id's claimants, as the index works them out for placing dependencies, from a copy up to `within` old;
  * undefined from an index that publishes none, which the listing then answers for.
  */
+/**
+ * Mod ids a providers.json a day old at most could not place, by the index and the loader and game version they were
+ * wanted for, with when: one is not asked about again until a week on, as the table itself is not, or an instance with
+ * a requirement nothing can place would fetch the table every day.
+ */
+const unplacedPath = () => join(paths.cache, 'index', 'unplaced.json');
+
+let unplacedSeen;
+
+const readUnplaced = async () => {
+	unplacedSeen ??= readJson(unplacedPath(), {});
+
+	return unplacedSeen;
+};
+
+const unplacedKey = (modId, { loader, minecraft }) => `${modId}@${loader ?? '*'}/${minecraft ?? '*'}`;
+
+export const knownUnplaced = async (modId, context, now = Date.now()) => {
+	const at = (await readUnplaced())[await indexBase(context)]?.[unplacedKey(modId, context)];
+
+	return at !== undefined && now - Date.parse(at) < PROVIDERS_KEPT;
+};
+
+export const rememberUnplaced = async (modId, context, now = Date.now()) => {
+	const all = await readUnplaced();
+	const base = await indexBase(context);
+	const kept = Object.fromEntries(
+		Object.entries(all[base] ?? {}).filter(([, at]) => now - Date.parse(at) < PROVIDERS_KEPT),
+	);
+
+	all[base] = { ...kept, [unplacedKey(modId, context)]: new Date(now).toISOString() };
+	await writeJson(unplacedPath(), all);
+};
+
 export const providers = async (context, { within = PROVIDERS_KEPT } = {}) =>
 	load(await indexBase(context), 'providers.json', { within }).catch(() => undefined);
 
