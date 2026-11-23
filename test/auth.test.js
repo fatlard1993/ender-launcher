@@ -53,7 +53,8 @@ describe('account storage', () => {
 	});
 
 	// Refresh tokens are credentials; the file holding them should not be world readable.
-	test('is written with owner-only permissions', async () => {
+	// Windows keeps no Unix mode: a profile's files are its owner's by its access lists
+	test.skipIf(process.platform === 'win32')('is written with owner-only permissions', async () => {
 		const accounts = await accountsModule();
 
 		await accounts.writeAccounts({ active: undefined, accounts: {} });

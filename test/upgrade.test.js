@@ -118,7 +118,8 @@ describe('replacing the binary', () => {
 					);
 
 					expect(await Bun.file(me.execPath).text()).toBe('the new ender');
-					expect((await stat(me.execPath)).mode & 0o111).not.toBe(0);
+					// Windows keeps no execute bit: a file runs by its .exe
+					if (process.platform !== 'win32') expect((await stat(me.execPath)).mode & 0o111).not.toBe(0);
 				}
 			} finally {
 				quiet.mockRestore();

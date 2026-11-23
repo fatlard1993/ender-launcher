@@ -117,6 +117,11 @@ describe('building', () => {
 				`#!/bin/sh\necho "${name} start" >> "${log}"\nsleep 0.1\necho "${name} end" >> "${log}"\nexit ${exit}\n`,
 			);
 			await chmod(join(directory, 'gradlew'), 0o755);
+			// What ender runs on Windows, through cmd
+			await writeFile(
+				join(directory, 'gradlew.bat'),
+				`@echo off\r\necho ${name} start>> "${log}"\r\nping -n 2 127.0.0.1 >nul\r\necho ${name} end>> "${log}"\r\nexit /b ${exit}\r\n`,
+			);
 
 			return directory;
 		};

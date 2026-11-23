@@ -382,11 +382,12 @@ describe('ender web', () => {
 			expect((await post(bad)).status).toBe(400);
 		}
 
-		for (const job of [
-			await (await post({ key: 'modrinth:zoom', on: true })).json(),
-			await (await post({ key: 'github:a/b', on: false })).json(),
+		// One job an instance at a time: each finishes before the next is asked for, or it is answered busy
+		for (const body of [
+			{ key: 'modrinth:zoom', on: true },
+			{ key: 'github:a/b', on: false },
 		])
-			await jobs.get(job.job.id).finished;
+			await jobs.get((await (await post(body)).json()).job.id).finished;
 
 		expect(started).toEqual([
 			['optional', 'on', 'modrinth:zoom', '--instance', 'family'],
@@ -799,8 +800,17 @@ describe('every line the page has ender run', () => {
 				return { code: 0, stdout: '{}', stderr: '' };
 			},
 		});
-		const send = (method, path, body) =>
-			api(request(path, { method, origin: ORIGIN, body: body === undefined ? undefined : JSON.stringify(body) }));
+		// A job an instance at a time: each finishes before the next is sent, or it is answered busy
+		const send = async (method, path, body) => {
+			const answer = await api(
+				request(path, { method, origin: ORIGIN, body: body === undefined ? undefined : JSON.stringify(body) }),
+			);
+			const { job } = answer.status === 202 ? await answer.clone().json() : {};
+
+			if (job) await jobs.get(job.id).finished;
+
+			return answer;
+		};
 
 		await api(request('/api/instances'));
 		await api(request('/api/instances/family'));

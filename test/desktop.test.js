@@ -16,6 +16,9 @@ import {
 	terminalStatus,
 } from '../src/desktop';
 
+// A Mac's paths, as the code makes them where it runs: Windows would make them with its own separators and drive
+const WINDOWS = process.platform === 'win32';
+
 let home;
 
 beforeEach(async () => {
@@ -95,7 +98,7 @@ describe('the desktop icon', () => {
 		}
 	});
 
-	test('on macOS, an app in ~/Applications with an executable launcher and the icns', async () => {
+	test.skipIf(WINDOWS)('on macOS, an app in ~/Applications with an executable launcher and the icns', async () => {
 		const app = await addIcon({ command: ['/bin/ender'], platform: 'darwin', home });
 		const launcher = join(app, 'Contents/MacOS/Ender');
 
@@ -195,19 +198,22 @@ describe("a Mac's Terminal", () => {
 		expect((await terminalStatus(own, link)).linked).toBe(true);
 	});
 
-	test('names another ender at the link and never links over it, before asking for a password', async () => {
-		const own = join(home, 'Ender.app', 'Contents', 'MacOS', 'ender');
-		const link = join(home, 'ender');
-		const run = () => expect.unreachable();
+	test.skipIf(WINDOWS)(
+		'names another ender at the link and never links over it, before asking for a password',
+		async () => {
+			const own = join(home, 'Ender.app', 'Contents', 'MacOS', 'ender');
+			const link = join(home, 'ender');
+			const run = () => expect.unreachable();
 
-		await Bun.write(own, '');
-		await symlink('/usr/local/Cellar/ender/0.2.3/bin/ender', link);
+			await Bun.write(own, '');
+			await symlink('/usr/local/Cellar/ender/0.2.3/bin/ender', link);
 
-		expect((await terminalStatus(own, link)).occupied).toBe('/usr/local/Cellar/ender/0.2.3/bin/ender');
-		await expect(linkForTerminal(own, { run, link })).rejects.toMatchObject({ reason: 'occupied' });
-	});
+			expect((await terminalStatus(own, link)).occupied).toBe('/usr/local/Cellar/ender/0.2.3/bin/ender');
+			await expect(linkForTerminal(own, { run, link })).rejects.toMatchObject({ reason: 'occupied' });
+		},
+	);
 
-	test("replaces a link into another Ender.app, as that one is Ender's own", async () => {
+	test.skipIf(WINDOWS)("replaces a link into another Ender.app, as that one is Ender's own", async () => {
 		const own = join(home, 'Ender.app', 'Contents', 'MacOS', 'ender');
 		const link = join(home, 'ender');
 

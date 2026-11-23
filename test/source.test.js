@@ -19,6 +19,9 @@ import {
 	scriptChanges,
 } from '../src/mods/source';
 
+// A Mac's paths, as the code makes them where it runs: Windows would make them with its own separators and drive
+const WINDOWS = process.platform === 'win32';
+
 let home;
 let previous;
 
@@ -42,7 +45,7 @@ describe('a JDK', () => {
 		expect(() => adoptiumQuery(21, 'sunos', 'x64')).toThrow('sunos-x64');
 	});
 
-	test('on macOS keeps bin/ inside its bundle', () => {
+	test.skipIf(WINDOWS)('on macOS keeps bin/ inside its bundle', () => {
 		expect(jdkHomeIn('/j', 'darwin')).toBe('/j/Contents/Home');
 		expect(jdkHomeIn('/j', 'linux')).toBe('/j');
 	});
