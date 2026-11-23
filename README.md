@@ -396,6 +396,7 @@ Libraries and assets are shared across instances, under `~/.local/share/ender-la
 - **Loaders:** ender installs vanilla, Fabric, Quilt, Forge and NeoForge, and reads mods' metadata for each. The tests cover reading mods, packs, accounts and sync; they do not install a loader or start the game, which need Mojang's and the loaders' own servers.
 - **Minecraft:** there is no version floor. Before 1.19 a version's native libraries ship as jars, which ender unpacks; see [Older versions](#older-versions). Each version gets the Java it names; see [Java](#java).
 - **Played:** what ender's author plays on it is Minecraft 26.3 with Fabric, as a client and a server, on Linux. Other versions, loaders and systems are built and tested as above, not played day to day.
+- **Unsigned:** the macOS and Windows apps are not signed, which costs a yearly fee, so each system warns before opening one the first time. Signing them is the first thing donations go to.
 
 ## Stability
 
