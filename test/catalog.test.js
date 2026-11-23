@@ -22,7 +22,7 @@ import { RESOLVE_CONCURRENCY, resolveAll } from '../src/mods';
 import { standing } from '../src/mods/rank';
 import { hosted, resolveFromRecord, search } from '../src/mods/indexed';
 import { rank } from '../src/mods/rank';
-import { authorsOf, refuseUnplaced } from '../src/commands/mods';
+import { authorsOf, readAhead, refuseUnplaced } from '../src/commands/mods';
 
 const mod = (id, extra) => ({
 	loader: 'fabric',
@@ -1020,6 +1020,42 @@ describe('an index whose data moved', () => {
 			expect((await run({ published })).base).toBe(cdn);
 		} finally {
 			warned.mockRestore();
+		}
+	});
+});
+
+describe('an update', () => {
+	test('reads ahead what placing dependencies needs, and never the listing, five times its size', async () => {
+		const home = await mkdtemp(join(tmpdir(), 'ender-ahead-'));
+		const previousHome = process.env.ENDER_HOME;
+		const asked = [];
+		const server = Bun.serve({
+			port: 0,
+			fetch: request => {
+				asked.push(new URL(request.url).pathname);
+
+				return Response.json(request.url.endsWith('index.json') ? { schema: 1 } : [], { headers: { etag: '"e"' } });
+			},
+		});
+
+		process.env.ENDER_HOME = home;
+		forgetLoaded();
+
+		try {
+			const index = `http://localhost:${server.port}/data`;
+
+			readAhead({ mods: [{ source: 'modrinth', id: 'sodium' }] }, { index });
+			readAhead({ mods: [{ source: 'github', id: 'a/b' }] }, { index });
+			await Bun.sleep(100);
+
+			expect(asked.sort()).toEqual(['/data/index.json', '/data/providers.json']);
+		} finally {
+			server.stop();
+
+			if (previousHome === undefined) delete process.env.ENDER_HOME;
+			else process.env.ENDER_HOME = previousHome;
+
+			await rm(home, { recursive: true, force: true });
 		}
 	});
 });

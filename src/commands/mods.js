@@ -5,7 +5,7 @@ import { readConfig } from '../config';
 import { fileIndexIssue, modLink } from '../indexIssues';
 import * as instances from '../instance';
 import { scanJar } from '../mods/capabilities';
-import { explanations, knownBad, listing } from '../mods/catalog';
+import { checkShape, explanations, knownBad, listing, providers } from '../mods/catalog';
 import { ownerName, supportOf } from '../mods/support';
 import {
 	entryKey,
@@ -241,14 +241,27 @@ export const releasePins = (manifest, targeted) => {
 };
 
 /**
+ * Read, while an update's pack is, what placing indexed mods' dependencies needs: providers.json, the largest file an
+ * update reads, and the manifest naming the index's data shape. Never the listing, five times larger, which only a
+ * search or a mod named by its id alone needs, and which an index without providers.json is read for when it is.
+ */
+export const readAhead = (manifest, config) => {
+	if (!manifest.mods.some(entry => INDEXED.has(entry.source))) return;
+
+	const context = { index: config.index };
+
+	providers(context).catch(() => {});
+	checkShape(context).catch(() => {});
+};
+
+/**
  * Bring an instance's mods to the newest builds that fit: a pack-made instance first takes its pack's newest word, and
  * the pins released are those set beside the pack, never the pack's own, or `targeted` alone when given.
  */
 export const updateInstance = async (manifest, config, { targeted, flags = {} } = {}) => {
 	let packChanges = 0;
 
-	// Read while the pack is: every mod the index holds needs it, and it is the largest file an update reads.
-	if (manifest.mods.some(entry => INDEXED.has(entry.source))) listing({ index: config.index }).catch(() => {});
+	readAhead(manifest, config);
 
 	if (manifest.pack) {
 		const { added, dropped, moved, files, servers } = await refreshFromPack(manifest, config);
