@@ -129,7 +129,8 @@ describe('building', () => {
 		const outcomes = await Promise.allSettled([build(a), build(b), build(c)]);
 
 		expect(outcomes.map(({ status }) => status)).toEqual(['fulfilled', 'rejected', 'fulfilled']);
-		expect((await readFile(log, 'utf8')).trim().split('\n')).toEqual([
+		// cmd's echo ends a line with \r\n
+		expect((await readFile(log, 'utf8')).trim().split(/\r?\n/)).toEqual([
 			'a start',
 			'a end',
 			'b start',
