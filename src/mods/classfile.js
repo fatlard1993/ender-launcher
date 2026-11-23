@@ -157,7 +157,7 @@ export const readClass = bytes => {
 		else references.push(referenceAt(index));
 	}
 
-	let methods = {};
+	let methods;
 
 	try {
 		methods = methodsOf(bytes, offset, text, referenceAt);
