@@ -13,11 +13,16 @@ export const readJson = async (path, fallback) => {
 	return await file.json();
 };
 
-/** Write via a temp file and rename, so an interrupted write cannot leave a half-parsed manifest behind. */
+let writes = 0;
+
+/**
+ * Write via a temp file and rename, so an interrupted write cannot leave a half-parsed manifest behind. Each write has
+ * a temp file of its own: two at once to one file, as concurrent resolutions make, would otherwise rename one away.
+ */
 export const writeText = async (path, text) => {
 	await mkdir(dirname(path), { recursive: true });
 
-	const temporary = `${path}.${process.pid}.tmp`;
+	const temporary = `${path}.${process.pid}.${(writes += 1)}.tmp`;
 
 	await writeFile(temporary, text);
 	await rename(temporary, path);
