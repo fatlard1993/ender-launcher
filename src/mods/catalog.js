@@ -6,7 +6,7 @@ import { readJson, writeJson, writeText } from '../json';
 import { warn } from '../out';
 import { paths } from '../paths';
 
-export { ESTABLISHED, claimantsOf, fit, loaderFits, providerOf, requiredIds } from './rank';
+export { ESTABLISHED, claimantsOf, fit, fromProviders, loaderFits, providerOf, requiredIds } from './rank';
 
 /** The published ender-index. `ender config index` points elsewhere: another URL, or a local checkout's data directory. */
 export const DEFAULT_INDEX = 'https://raw.githubusercontent.com/fatlard1993/ender-index/main/data';
@@ -135,6 +135,13 @@ export const checkShape = async context => {
 
 	return schema;
 };
+
+/**
+ * Each mod id's claimants, as the index works them out for placing dependencies, kept like the listing for up to a
+ * day; undefined from an index that publishes none, which the listing then answers for.
+ */
+export const providers = async context =>
+	load(indexBase(context), 'providers.json', { within: LISTING_KEPT }).catch(() => undefined);
 
 /**
  * The index's listing. By default a kept copy up to LISTING_KEPT old is used as it is, which is all placing a mod's

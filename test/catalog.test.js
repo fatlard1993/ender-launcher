@@ -11,6 +11,7 @@ import {
 	claimantsOf,
 	fit,
 	forgetLoaded,
+	fromProviders,
 	listing as loadListing,
 	providerOf,
 	requiredIds,
@@ -230,6 +231,44 @@ describe('resolving from an index record', () => {
 			size: 1,
 		});
 		expect(resolved.dependencies).toEqual([{ source: 'github', id: 'FabricMC/fabric-api' }]);
+	});
+
+	test("places dependencies by the index's providers.json when it publishes one, rather than its listing", async () => {
+		const published = await mkdtemp(join(tmpdir(), 'ender-providers-'));
+
+		// A listing that would place the dependency elsewhere, to show which file answered
+		await Bun.write(join(published, 'search.json'), JSON.stringify(listing));
+		await Bun.write(
+			join(published, 'providers.json'),
+			JSON.stringify({
+				repositories: [
+					{ host: 'github', repo: 'Other/screen-lib', stars: 500, targets: [{ loader: 'fabric', minecraft: '~26.3' }] },
+				],
+				ids: { 'fabric-screen-api-v1': [0] },
+			}),
+		);
+
+		try {
+			forgetLoaded();
+
+			const record = {
+				releases: [
+					release('1.0', [
+						asset('modmenu-1.0.jar', [mod('modmenu', { depends: ['fabric-screen-api-v1', 'minecraft'] })]),
+					]),
+				],
+			};
+			const resolved = await resolveFromRecord(
+				record,
+				{ source: 'github', id: 'TerraformersMC/ModMenu' },
+				{ ...context(), index: published },
+			);
+
+			expect(resolved.dependencies).toEqual([{ source: 'github', id: 'Other/screen-lib' }]);
+		} finally {
+			forgetLoaded();
+			await rm(published, { recursive: true, force: true });
+		}
 	});
 
 	test('a declared match beats a range that cannot be read, even an older one', async () => {
@@ -858,4 +897,31 @@ test('weighs a repository that declares a mod with no id as providing nothing by
 	];
 
 	expect(claimantsOf('lib-api', entries).map(found => found.repo)).toEqual(['a/lib']);
+});
+
+test('places a mod id by providers.json as providerOf would: the first claimant that fits, trusted for its stars, its owner or its author', () => {
+	const fabric = [{ loader: 'fabric', minecraft: '~26.3' }];
+	const forge = [{ loader: 'forge', minecraft: '1.20.1' }];
+	const providers = {
+		repositories: [
+			{ host: 'github', repo: 'new/copy', targets: fabric },
+			{ host: 'github', repo: 'big/lib', established: true, targets: forge },
+			{ host: 'github', repo: 'known/lib', author: true, targets: fabric },
+			{ host: 'github', repo: 'me/lib', targets: fabric },
+		],
+		ids: { lib: [0, 1, 2], mine: [0, 3] },
+	};
+	const onFabric = { minecraft: '26.3', loader: 'fabric' };
+
+	expect(fromProviders('lib', providers, undefined, onFabric).provider.repo).toBe('known/lib');
+	expect(fromProviders('lib', providers, undefined, onFabric).claimants.map(found => found.repo)).toEqual([
+		'new/copy',
+		'known/lib',
+	]);
+	expect(fromProviders('lib', providers, undefined, { minecraft: '1.20.1', loader: 'forge' }).provider.repo).toBe(
+		'big/lib',
+	);
+	expect(fromProviders('mine', providers, undefined, onFabric).provider).toBeUndefined();
+	expect(fromProviders('mine', providers, { host: 'github', repo: 'me/app' }, onFabric).provider.repo).toBe('me/lib');
+	expect(fromProviders('unknown', providers, undefined, onFabric)).toEqual({ provider: undefined, claimants: [] });
 });

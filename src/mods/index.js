@@ -147,7 +147,10 @@ export const unplacedMessage = (unplaced, command) =>
 
 			return [
 				`${requiredBy} requires "${modId}", and no repository claiming it is established enough to install unasked. Name the one you trust beside it, or its own source:`,
-				...named.map(claimant => `  ${command} ${spellingOf(claimant)}   ${plural(claimant.stars ?? 0, 'star')}`),
+				...named.map(
+					claimant =>
+						`  ${command} ${spellingOf(claimant)}${claimant.stars === undefined ? '' : `   ${plural(claimant.stars, 'star')}`}`,
+				),
 			].join('\n');
 		})
 		.join('\n');

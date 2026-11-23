@@ -318,6 +318,26 @@ export const providerOf = (id, entries, requiring, fits) =>
 			authorOf(entry, entries) !== '',
 	);
 
+/**
+ * The repository the index's providers.json trusts to name a mod id, by providerOf's own rules, and every claimant that
+ * fits: the file holds each id's claimants in claimantsOf's order with what those rules weigh, established standing for
+ * the stars it takes, so a launcher places dependencies without the whole listing.
+ */
+export const fromProviders = (id, providers, requiring, fits = {}) => {
+	const claimants = (providers.ids?.[id] ?? [])
+		.map(at => providers.repositories[at])
+		.filter(claimant => claimant && ((!fits.minecraft && !fits.loader) || fit(claimant.targets, fits) > 0));
+	const provider = claimants.find(
+		claimant =>
+			claimant.established === true ||
+			(claimant.stars ?? 0) >= ESTABLISHED ||
+			(requiring !== undefined && ownerOf(claimant) === ownerOf(requiring)) ||
+			claimant.author === true,
+	);
+
+	return { provider, claimants };
+};
+
 /** The ids a jar's mods require from elsewhere: not the platform, and not what the jar already carries. */
 export const requiredIds = mods => {
 	const carried = new Set(mods.flatMap(mod => [mod.id, ...(mod.provides ?? [])]));

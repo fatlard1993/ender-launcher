@@ -23,16 +23,22 @@ const dependenciesOf = async (entry, mods, context) => {
 
 	if (required.length === 0) return { dependencies: [], unplaced: [] };
 
-	const entries = await catalog.listing(context);
+	// The index's providers.json where it publishes one, a fifth of the listing's size; the listing where it does not
+	const table = await catalog.providers(context);
+	const entries = table ? undefined : await catalog.listing(context);
 	const found = new Map();
 	const unplaced = [];
 
 	for (const modId of required) {
 		const fits = { minecraft: context.minecraft, loader: context.loader };
-		const provider = catalog.providerOf(modId, entries, { host: entry.source, repo: entry.id }, fits);
+		const requiring = { host: entry.source, repo: entry.id };
+		const placed = table
+			? catalog.fromProviders(modId, table, requiring, fits)
+			: { provider: catalog.providerOf(modId, entries, requiring, fits) };
+		const { provider } = placed;
 
 		if (provider === undefined) {
-			unplaced.push({ modId, claimants: catalog.claimantsOf(modId, entries, fits) });
+			unplaced.push({ modId, claimants: placed.claimants ?? catalog.claimantsOf(modId, entries, fits) });
 
 			continue;
 		}
