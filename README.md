@@ -390,6 +390,32 @@ Since 1.19 the game unpacks its own native libraries out of the classpath, and e
 
 Libraries and assets are shared across instances, under `~/.local/share/ender-launcher`. On the first install, any file another launcher already has is hardlinked rather than downloaded, so adopting a Prism setup costs close to nothing in either bandwidth or disk. Set `ENDER_HOME` to put everything somewhere else.
 
+## What ender runs on
+
+- **Systems:** each release is built for Linux on x64 and arm64, macOS 13 or later on Intel and Apple silicon, and Windows on x64. The tests run on all three systems on every push.
+- **Loaders:** ender installs vanilla, Fabric, Quilt, Forge and NeoForge, and reads mods' metadata for each. The tests cover reading mods, packs, accounts and sync; they do not install a loader or start the game, which need Mojang's and the loaders' own servers.
+- **Minecraft:** there is no version floor. Before 1.19 a version's native libraries ship as jars, which ender unpacks; see [Older versions](#older-versions). Each version gets the Java it names; see [Java](#java).
+- **Played:** what ender's author plays on it is Minecraft 26.3 with Fabric, as a client and a server, on Linux. Other versions, loaders and systems are built and tested as above, not played day to day.
+
+## Stability
+
+From 1.0, a release in the same major version will not break:
+
+- **The commands and their flags** as `ender help` lists them: none is taken away or changes what it does. New ones are added.
+- **What `--json` prints**, from `ender ls`, `info`, `optional`, `scan`, `submit`, `support`, `account ls` and `export --gist`: fields are added, never taken away or changed in meaning.
+- **The pack format**, `ender.pack.json`, which names its `format`: fields are added without raising it, a change an older ender would misread raises it, and ender reads every format before its own.
+- **An instance's files and `config.json`**, which name their `format` the same way: an ender reads every instance and config an older one wrote.
+- **The index's data**, which keeps [its own promise](https://github.com/fatlard1993/ender-index#stability).
+
+What may change in any release, said in its notes:
+
+- **`ender web`'s API**, under `/api/`. It serves the index's pages that ship inside the same ender, and nothing else is meant to call it.
+- **Output for people**: the wording of the lines ender prints without `--json`.
+- **Caches** under `~/.local/share/ender-launcher`, and how ender picks among mods claiming the same id.
+- **What the scanner finds**: new findings are added as it learns to read more.
+
+Until 1.0, a 0.x release may change any of these, and its notes say which.
+
 ## Working on ender
 
 Run it from a checkout with [Bun](https://bun.sh):
@@ -402,7 +428,7 @@ bun link            # puts `ender` on your PATH
 bun test
 ```
 
-`bun run compile` builds the single binary the releases carry. `ender web` from a checkout builds the pages of an ender-index checkout beside it each time it starts; `ENDER_SITE` names any other built site. When a command fails, `ENDER_DEBUG=1` prints the stack behind the error under it.
+`bun run compile` builds the single binary the releases carry. A release is a tag `v<version>` matching `package.json`, with that version's section in [CHANGELOG.md](CHANGELOG.md), which becomes its notes. `ender web` from a checkout builds the pages of an ender-index checkout beside it each time it starts; `ENDER_SITE` names any other built site. When a command fails, `ENDER_DEBUG=1` prints the stack behind the error under it.
 
 ## License
 

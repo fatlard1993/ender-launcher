@@ -19,11 +19,12 @@ jobs:
         with:
           bun-download-url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.0/bun-linux-x64.zip
       - run: bun install
-      - name: the tag is the package's version
+      - name: the tag is the package's version, with its notes
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           version="$(jq -r .version package.json)"
           [ "v$version" = "$GITHUB_REF_NAME" ] || { echo "Tag $GITHUB_REF_NAME, but package.json says $version"; exit 1; }
+          grep -qx "## $version" CHANGELOG.md || { echo "CHANGELOG.md has no section for $version, which is the release's notes"; exit 1; }
       - run: bun test
       # The index's pages for ender web, built from its newest code against this ender: ender-index finds ender at
       # ../ender-launcher, so this release is checked out again beside it
@@ -143,8 +144,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/* --title "ender $GITHUB_REF_NAME" --generate-notes \
-            --notes "ender web serves the index's pages as of fatlard1993/ender-index@$INDEX_COMMIT."
+          # The release's section of CHANGELOG.md, then which index pages it serves, before GitHub's list of commits
+          awk -v heading="## ${GITHUB_REF_NAME#v}" '$0 == heading { found = 1; next } found && /^## / { exit } found' CHANGELOG.md > notes.md
+          printf '\nender web serves the index'"'"'s pages as of fatlard1993/ender-index@%s.\n' "$INDEX_COMMIT" >> notes.md
+          gh release create "$GITHUB_REF_NAME" dist/* --title "ender $GITHUB_REF_NAME" --generate-notes --notes "$(cat notes.md)"
       - name: homebrew
         env:
           TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
