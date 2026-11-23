@@ -2,6 +2,24 @@
 
 Minecraft instances, mods, modpacks and servers from one small program, `ender`. It installs mods from where their source lives, keeps a household of clients and its server on one pack, and starts the game itself, with no launcher in between.
 
+<!-- A screenshot of ender web here: the index's search with an instance picked, and a mod's Install button beside its scan. -->
+
+```
+curl -fsSL https://raw.githubusercontent.com/fatlard1993/ender-launcher/main/install.sh | sh
+ender new survival && ender launch
+```
+
+That is Linux and macOS; Windows, Homebrew and the double-click apps are in [Getting started](#getting-started).
+
+|  | ender | Prism | Modrinth App, CurseForge app |
+| --- | --- | --- | --- |
+| Where mods come from | their own releases on GitHub, Codeberg or GitLab, through the [ender index](https://fatlard1993.github.io/ender-index/), and Modrinth and CurseForge | Modrinth and CurseForge | its own store |
+| What a mod's code can reach | shown on its index page and by `ender scan`; a jar that reads other programs' logins is held back until you say | not shown | not shown |
+| One pack across a household | `ender follow`, and every client and the server take its changes at launch | packwiz and a pre-launch command, set up per instance | a pack published to its store, which the app updates |
+| What it is | one program for the terminal, with a page in the browser | a desktop app | a desktop app |
+
+**What the index covers.** About three in five of the mods it lists are read from the jars on their releases, with their scans; the rest have only their source, and ender builds one of those when you allow it. Most popular mods put their jars on Modrinth or CurseForge, so a real pack is usually a mix: ender installs those from there too, and the scans come with the ones from the index.
+
 ## What it does
 
 - **Instances.** Make one for any Minecraft version with Fabric, Quilt, Forge, NeoForge or none; clone it, move it to another version, delete it with its worlds kept aside. ender fetches the Java each version needs.
