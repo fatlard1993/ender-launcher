@@ -14,6 +14,7 @@ import {
 	fromProviders,
 	indexBase,
 	knownBad,
+	providers as loadProviders,
 	listing as loadListing,
 	providerOf,
 	requiredIds,
@@ -1051,6 +1052,86 @@ describe('an update', () => {
 			expect(asked.sort()).toEqual(['/data/index.json', '/data/providers.json']);
 		} finally {
 			server.stop();
+
+			if (previousHome === undefined) delete process.env.ENDER_HOME;
+			else process.env.ENDER_HOME = previousHome;
+
+			await rm(home, { recursive: true, force: true });
+		}
+	});
+});
+
+describe('placing dependencies by a kept providers.json', () => {
+	test('takes a copy up to a week old as it is, and one a day old at most when it cannot place an id', async () => {
+		const home = await mkdtemp(join(tmpdir(), 'ender-kept-providers-'));
+		const previousHome = process.env.ENDER_HOME;
+		const realFetch = globalThis.fetch;
+		const index = 'https://index.example/data';
+		const lib = repo => ({ host: 'github', repo, stars: 500, targets: [{ loader: 'fabric', minecraft: '~26.3' }] });
+		const before = { repositories: [lib('a/old-lib')], ids: { 'old-lib': [0] } };
+		const after = { repositories: [lib('a/old-lib'), lib('b/new-lib')], ids: { 'old-lib': [0], 'new-lib': [1] } };
+		let published = before;
+		let asked = 0;
+
+		process.env.ENDER_HOME = home;
+		globalThis.fetch = async url => {
+			if (url.endsWith('/index.json')) return new Response('none', { status: 404 });
+
+			asked += 1;
+
+			return Response.json(published, { headers: { etag: `"${published.repositories.length}"` } });
+		};
+
+		const requiring = (...ids) => ({
+			releases: [release('1.0', [asset('app-1.0.jar', [mod('app', { depends: [...ids, 'minecraft'] })])])],
+		});
+		const placed = async record =>
+			(
+				await resolveFromRecord(
+					record,
+					{ source: 'github', id: 'me/app' },
+					{ minecraft: '26.3', loader: 'fabric', index },
+				)
+			).dependencies;
+
+		const ageKept = async hours => {
+			for (const file of new Bun.Glob('*.tag.json').scanSync(join(home, 'cache', 'index'))) {
+				const tag = await Bun.file(join(home, 'cache', 'index', file)).json();
+
+				await Bun.write(
+					join(home, 'cache', 'index', file),
+					JSON.stringify({ ...tag, fetched: new Date(Date.now() - hours * 3_600_000).toISOString() }),
+				);
+			}
+		};
+
+		try {
+			forgetLoaded();
+			await loadProviders({ index });
+			published = after;
+			forgetLoaded();
+			asked = 0;
+
+			// Fetched within the day: what it places, it places; what it cannot, waits, asking nothing
+			expect(await placed(requiring('old-lib'))).toEqual([{ source: 'github', id: 'a/old-lib' }]);
+			expect(await placed(requiring('old-lib', 'new-lib', 'nobody-has-this'))).toEqual([
+				{ source: 'github', id: 'a/old-lib' },
+			]);
+			expect(asked).toBe(0);
+
+			// Two days old, it still places what it can as it is; an id it cannot asks again, once a run
+			await ageKept(48);
+			forgetLoaded();
+
+			expect(await placed(requiring('old-lib'))).toEqual([{ source: 'github', id: 'a/old-lib' }]);
+			expect(asked).toBe(0);
+			expect(await placed(requiring('new-lib', 'nobody-has-this'))).toEqual([{ source: 'github', id: 'b/new-lib' }]);
+			expect(asked).toBe(1);
+			expect(await placed(requiring('nobody-has-this'))).toEqual([]);
+			expect(asked).toBe(1);
+		} finally {
+			globalThis.fetch = realFetch;
+			forgetLoaded();
 
 			if (previousHome === undefined) delete process.env.ENDER_HOME;
 			else process.env.ENDER_HOME = previousHome;

@@ -147,8 +147,8 @@ const load = (base, path, { within = 0 } = {}) => {
 	const key = `${base}/${path}`;
 	const held = loaded.get(key);
 
-	// Fetched once a run; a run that took a kept copy and then wants the newest asks again
-	if (!held || (within === 0 && held.within > 0)) {
+	// Fetched once a run; a run that took a kept copy and then wants a newer one asks again
+	if (!held || held.within > within) {
 		loaded.set(key, {
 			within,
 			body: (async () => {
@@ -192,11 +192,19 @@ export const checkShape = async context => {
 };
 
 /**
- * Each mod id's claimants, as the index works them out for placing dependencies, kept like the listing for up to a
- * day; undefined from an index that publishes none, which the listing then answers for.
+ * How old a kept providers.json may be when it places a dependency: a week, as which repository provides a mod id
+ * hardly ever changes. An id a kept copy cannot place is asked of one a day old at most, as a claimant may have been
+ * listed or released for the instance's version since; never of the newest, as many required ids cannot be placed at
+ * all, and each run would fetch it.
  */
-export const providers = async context =>
-	load(await indexBase(context), 'providers.json', { within: LISTING_KEPT }).catch(() => undefined);
+export const PROVIDERS_KEPT = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Each mod id's claimants, as the index works them out for placing dependencies, from a copy up to `within` old;
+ * undefined from an index that publishes none, which the listing then answers for.
+ */
+export const providers = async (context, { within = PROVIDERS_KEPT } = {}) =>
+	load(await indexBase(context), 'providers.json', { within }).catch(() => undefined);
 
 /**
  * The index's listing. By default a kept copy up to LISTING_KEPT old is used as it is, which is all placing a mod's

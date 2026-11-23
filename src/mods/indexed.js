@@ -24,17 +24,26 @@ const dependenciesOf = async (entry, mods, context) => {
 	if (required.length === 0) return { dependencies: [], unplaced: [] };
 
 	// The index's providers.json where it publishes one, a fifth of the listing's size; the listing where it does not
-	const table = await catalog.providers(context);
+	let table = await catalog.providers(context);
+	let asked = false;
 	const entries = table ? undefined : await catalog.listing(context);
 	const found = new Map();
 	const unplaced = [];
+	const fits = { minecraft: context.minecraft, loader: context.loader };
+	const requiring = { host: entry.source, repo: entry.id };
 
 	for (const modId of required) {
-		const fits = { minecraft: context.minecraft, loader: context.loader };
-		const requiring = { host: entry.source, repo: entry.id };
-		const placed = table
+		let placed = table
 			? catalog.fromProviders(modId, table, requiring, fits)
 			: { provider: catalog.providerOf(modId, entries, requiring, fits) };
+
+		// A kept table up to a week old places what it can; an id it cannot is asked of one a day old at most
+		if (placed.provider === undefined && table && !asked) {
+			asked = true;
+			table = (await catalog.providers(context, { within: catalog.LISTING_KEPT })) ?? table;
+			placed = catalog.fromProviders(modId, table, requiring, fits);
+		}
+
 		const { provider } = placed;
 
 		if (provider === undefined) {
