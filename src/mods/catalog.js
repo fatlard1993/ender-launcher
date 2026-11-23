@@ -9,7 +9,7 @@ import { paths } from '../paths';
 export { ESTABLISHED, claimantsOf, fit, fromProviders, loaderFits, providerOf, requiredIds } from './rank';
 
 /** The published ender-index. `ender config index` points elsewhere: another URL, or a local checkout's data directory. */
-export const DEFAULT_INDEX = 'https://raw.githubusercontent.com/fatlard1993/ender-index/main/data';
+export const DEFAULT_INDEX = 'https://raw.githubusercontent.com/fatlard1993/ender-index/data';
 
 const loaded = new Map();
 
