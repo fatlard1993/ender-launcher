@@ -39,21 +39,37 @@ const keptTag = async url => {
 	return { etag: kept.etag, fetched: kept.fetched, body: async () => kept.body };
 };
 
-/** Keep a fetched index file as it came. The tag goes first and returns last, so it never names a copy it is not. */
-const keep = async (url, etag, text) => {
+/**
+ * Keep a fetched index file as it came, with `asOf`, the time by the index's change file it is known current at. The
+ * tag goes first and returns last, so it never names a copy it is not.
+ */
+const keep = async (url, etag, text, asOf) => {
 	const fetched = new Date().toISOString();
 
 	await unlink(tagOf(url)).catch(() => {});
 	await writeText(copyOf(url), `{"etag":${JSON.stringify(etag)},"fetched":"${fetched}","body":${text}}\n`);
-	await writeJson(tagOf(url), { etag, fetched });
+	await writeJson(tagOf(url), { etag, fetched, ...(asOf ? { asOf } : {}) });
+};
+
+/** A file the index no longer has: its kept copy is not kept. */
+const forget = async url => {
+	await unlink(tagOf(url)).catch(() => {});
+	await unlink(copyOf(url)).catch(() => {});
 };
 
 /**
  * Fetch an index file, keeping a copy to ask about with If-None-Match, so an unchanged index costs
  * one small answer rather than the whole file. Unreachable, the copy is used and that is said.
  */
-const fetchKept = async (url, { within = 0, now = Date.now() } = {}) => {
+const fetchKept = async (url, { within = 0, now = Date.now(), current, asOf } = {}) => {
 	const kept = await keptTag(url);
+
+	// A copy the index's change file says is as the index has it now is taken without asking
+	if (current !== undefined && kept.etag !== undefined && current(kept)) {
+		const body = await kept.body();
+
+		if (body !== undefined) return body;
+	}
 
 	// A copy fetched within the window is taken as it is, asking nothing: the listing a dependency is placed by
 	// changes every crawl, but which repository provides a mod id hardly ever does
@@ -69,14 +85,24 @@ const fetchKept = async (url, { within = 0, now = Date.now() } = {}) => {
 		const body = JSON.parse(text);
 		const etag = response.headers.get('etag');
 
-		if (etag) await keep(url, etag, text);
+		if (etag) await keep(url, etag, text, asOf);
 
 		return body;
 	} catch (error) {
-		const body = error.status === 404 ? undefined : await kept.body();
+		if (error.status === 404) {
+			await forget(url);
 
-		if (error.status === 304 && body !== undefined) return body;
-		if (error.status === 404) return undefined;
+			return undefined;
+		}
+
+		const body = await kept.body();
+
+		if (error.status === 304 && body !== undefined) {
+			if (asOf) await writeJson(tagOf(url), { etag: kept.etag, fetched: kept.fetched, asOf });
+
+			return body;
+		}
+
 		const transient = error.status === undefined || error.status === 429 || error.status >= 500;
 
 		if (!transient || body === undefined) throw error;
@@ -143,7 +169,7 @@ export const indexBase = async context => {
 	return bases.get(published);
 };
 
-const load = (base, path, { within = 0 } = {}) => {
+const load = (base, path, { within = 0, current, asOf } = {}) => {
 	const key = `${base}/${path}`;
 	const held = loaded.get(key);
 
@@ -152,7 +178,7 @@ const load = (base, path, { within = 0 } = {}) => {
 		loaded.set(key, {
 			within,
 			body: (async () => {
-				if (/^https?:\/\//.test(base)) return fetchKept(key, { within });
+				if (/^https?:\/\//.test(base)) return fetchKept(key, { within, current, asOf });
 
 				const file = Bun.file(join(base, path));
 
@@ -240,5 +266,41 @@ export const explanations = async context => (await load(await indexBase(context
 /** Where a host's records live in the index; a dotted directory cannot collide with a GitHub owner. */
 const DIRECTORIES = { github: '', codeberg: 'codeberg.org/', gitlab: 'gitlab.com/' };
 
-export const record = async (fullName, context, host = 'github') =>
-	load(await indexBase(context), `mods/${DIRECTORIES[host]}${fullName}.json`);
+/**
+ * How much earlier than the change file's own time a record read beside it is taken as current: raw.githubusercontent.com
+ * serves a file up to five minutes old, so a record read just after a change may be the copy before it, and is asked
+ * for once more.
+ */
+const SERVED_STALE = 10 * 60 * 1000;
+
+const readable = time => typeof time === 'string' && !Number.isNaN(Date.parse(time));
+
+/** The index's change file, read once a run; undefined from an index without one, or with one this ender cannot read. */
+const changeList = async base => {
+	const list = await load(base, 'changes.json').catch(() => undefined);
+
+	return readable(list?.since) && readable(list?.generated) && list.records && typeof list.records === 'object'
+		? list
+		: undefined;
+};
+
+/**
+ * A repository's record. From an index publishing changes.json, a kept copy is asked for only when the file lists the
+ * record as changed after the copy was known current, or the copy is older than the file reaches back; otherwise each
+ * is asked whether it changed, as before.
+ */
+export const record = async (fullName, context, host = 'github') => {
+	const base = await indexBase(context);
+	const path = `mods/${DIRECTORIES[host]}${fullName}.json`;
+	const list = /^https?:\/\//.test(base) ? await changeList(base) : undefined;
+
+	if (list === undefined) return load(base, path);
+
+	const changed = list.records[path];
+	const current = ({ asOf }) =>
+		readable(asOf) &&
+		Date.parse(asOf) >= Date.parse(list.since) &&
+		!(readable(changed) && Date.parse(changed) > Date.parse(asOf));
+
+	return load(base, path, { current, asOf: new Date(Date.parse(list.generated) - SERVED_STALE).toISOString() });
+};

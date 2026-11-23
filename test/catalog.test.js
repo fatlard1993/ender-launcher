@@ -15,6 +15,7 @@ import {
 	indexBase,
 	knownBad,
 	providers as loadProviders,
+	record as loadRecord,
 	listing as loadListing,
 	providerOf,
 	requiredIds,
@@ -1131,6 +1132,95 @@ describe('placing dependencies by a kept providers.json', () => {
 			expect(asked).toBe(1);
 		} finally {
 			globalThis.fetch = realFetch;
+			forgetLoaded();
+
+			if (previousHome === undefined) delete process.env.ENDER_HOME;
+			else process.env.ENDER_HOME = previousHome;
+
+			await rm(home, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("records by the index's change file", () => {
+	test('are asked for only when listed as changed since they were known current, or kept from before it reaches', async () => {
+		const home = await mkdtemp(join(tmpdir(), 'ender-changes-'));
+		const previousHome = process.env.ENDER_HOME;
+		const hour = 3_600_000;
+		const at = hours => new Date(Date.parse('2026-11-23T00:00:00.000Z') + hours * hour).toISOString();
+		const records = { 'a/one': { releases: [], v: 1 }, 'a/two': { releases: [], v: 1 } };
+		let changes;
+		const asked = [];
+		const server = Bun.serve({
+			port: 0,
+			fetch: request => {
+				const path = new URL(request.url).pathname.replace(/^\/data\//, '');
+
+				if (path === 'index.json') return new Response('none', { status: 404 });
+				if (path === 'changes.json') return changes ? Response.json(changes) : new Response('none', { status: 404 });
+
+				asked.push(path);
+
+				const name = path.replace(/^mods\//, '').replace(/\.json$/, '');
+				const found = records[name];
+
+				if (!found) return new Response('none', { status: 404 });
+
+				const etag = `"${found.v}"`;
+
+				return request.headers.get('if-none-match') === etag
+					? new Response(undefined, { status: 304 })
+					: Response.json(found, { headers: { etag } });
+			},
+		});
+		const index = `http://localhost:${server.port}/data`;
+		const run = async (...names) => {
+			forgetLoaded();
+			asked.length = 0;
+
+			const read = await Promise.all(names.map(name => loadRecord(name, { index })));
+
+			return { asked: asked.sort(), read: read.map(found => found?.v) };
+		};
+
+		process.env.ENDER_HOME = home;
+
+		try {
+			changes = { since: at(-168), generated: at(0), records: {} };
+
+			expect(await run('a/one', 'a/two')).toEqual({ asked: ['mods/a/one.json', 'mods/a/two.json'], read: [1, 1] });
+			expect(await run('a/one', 'a/two')).toEqual({ asked: [], read: [1, 1] });
+
+			// a/two changes; read just after, it is asked for once more in case the copy read was the one before
+			records['a/two'] = { releases: [], v: 2 };
+			changes = { since: at(-167), generated: at(1), records: { 'mods/a/two.json': at(1) } };
+
+			expect(await run('a/one', 'a/two')).toEqual({ asked: ['mods/a/two.json'], read: [1, 2] });
+			expect(await run('a/one', 'a/two')).toEqual({ asked: ['mods/a/two.json'], read: [1, 2] });
+
+			changes = { since: at(-166), generated: at(2), records: { 'mods/a/two.json': at(1) } };
+
+			expect(await run('a/one', 'a/two')).toEqual({ asked: ['mods/a/two.json'], read: [1, 2] });
+			expect(await run('a/one', 'a/two')).toEqual({ asked: [], read: [1, 2] });
+
+			// A player away longer than the file reaches asks for what it kept from before
+			changes = { since: at(3), generated: at(171), records: {} };
+
+			expect((await run('a/one', 'a/two')).asked).toEqual(['mods/a/one.json', 'mods/a/two.json']);
+
+			// A record the index removed answers 404, and its copy is not kept
+			delete records['a/one'];
+			changes = { since: at(4), generated: at(172), records: { 'mods/a/one.json': at(172) } };
+
+			expect(await run('a/one', 'a/two')).toEqual({ asked: ['mods/a/one.json'], read: [undefined, 2] });
+
+			// An index with no change file is asked about each record, as before
+			changes = undefined;
+
+			expect((await run('a/two')).asked).toEqual(['mods/a/two.json']);
+			expect((await run('a/two')).asked).toEqual(['mods/a/two.json']);
+		} finally {
+			server.stop();
 			forgetLoaded();
 
 			if (previousHome === undefined) delete process.env.ENDER_HOME;
