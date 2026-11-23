@@ -115,7 +115,7 @@ ender import gist:aa5e1f0c9b2d4e6f8a1b3c5d7e9f0a2b
 ender launch family --update
 ```
 
-An instance already set up follows one with `ender follow <pack> --instance <name>`: its game directory and worlds stay, and its own mods give way to the pack's (`--keep` keeps them beside it). A jar copied into `mods/` by hand that is another copy of a mod the pack installs would stop the game loading, so sync moves it to `mods-displaced/` and says so. An instance imported from an ender pack remembers where it came from too. `ender update` reads the pack again first: mods it added come in, mods it dropped go, its pins hold, and mods added beside it stay. `ender launch --update` does that before every launch, and when the update cannot run, says why and launches what is installed. A gist is read through GitHub's API, so an edit reaches the next update at once, whichever of the gist's links was imported.
+An instance already set up follows an ender or packwiz pack with `ender follow <pack> --instance <name>`; an `.mrpack` or CurseForge pack is imported once rather than followed: its game directory and worlds stay, and its own mods give way to the pack's (`--keep` keeps them beside it). A jar copied into `mods/` by hand that is another copy of a mod the pack installs would stop the game loading, so sync moves it to `mods-displaced/` and says so. An instance imported from an ender pack remembers where it came from too. `ender update` reads the pack again first: mods it added come in, mods it dropped go, its pins hold, and mods added beside it stay. `ender launch --update` does that before every launch, and when the update cannot run, says why and launches what is installed. A gist is read through GitHub's API, so an edit reaches the next update at once, whichever of the gist's links was imported.
 
 An instance imported from a packwiz pack follows it the same way, from a repository, a file, or the link to its `pack.toml` that packwiz-installer is given: its update takes the pack's mods, loader version, optional choices and files. A pack read by its link is fetched file by file, each checked against the hash its index records.
 
@@ -144,15 +144,15 @@ An instance imported from a packwiz pack follows it the same way, from a reposit
 
 Only `minecraft`, `loader` and `mods` are needed.
 
-- **`mods`** are specs as `ender add` takes them, each a string or `{ "spec", "version" }` to pin one. What they need is resolved where the pack is installed, from the index.
+- **`mods`** are specs as `ender add` takes them, each a string or `{ "spec", "version" }` to pin one, naming where a mod is published: never a jar or a gradle project on the machine that made the pack, which another machine has not got. What they need is resolved where the pack is installed, from the index.
 - **`resourcepacks` and `shaderpacks`** are Modrinth (`mr:`) or CurseForge (`cf:`) projects, or https links. They go into their own folders, and ones new to an instance are turned on: in `options.txt`, and for Iris when it has no settings yet.
 - **`optional`** makes any entry a choice for the player, with a `description` of what it adds; `default: true` has it on until they turn it off.
-- **`loaderVersion`** pins the loader, so every player runs the one the pack was tested with; without it, each gets the newest. `ender export --pin-loader` writes the instance's.
-- **`memory`** is megabytes, the most the game may take, kept until a player sets their own.
+- **`loaderVersion`** pins the loader, and goes only with a loader, not `vanilla`, so every player runs the one the pack was tested with; without it, each gets the newest. `ender export --pin-loader` writes the instance's.
+- **`memory`** is whole megabytes, from 1024 to 65536: the most the game may take, kept until a player sets their own.
 - **`servers`** are added to the game's multiplayer list after a player's own, and taken off when the pack drops them. `ender export --servers` writes an instance's list.
 - **Files beside the pack** in a repository or a zip, such as `config/`, `kubejs/`, `datapacks/` or `options.txt`, are laid down on import. On update, a file the pack changed is rewritten while the player's copy is still the pack's; one they edited is kept, and the update says so. A pack in a gist is one file and carries none.
 
-`ender export --mrpack` writes an instance as a Modrinth `.mrpack` of what it installed, with each file's hashes from disk, for any launcher that reads them.
+`ender export --mrpack` writes an instance as a Modrinth `.mrpack` of what it installed, with each file's hashes from disk and the files its pack laid down as overrides, for any launcher that reads them; an optional entry goes in only when this instance has it on. `--version` and `--author` name the pack, in either format.
 
 ### What packs leave out, and why
 

@@ -23,7 +23,7 @@ const depsFlag = {
 	build: {
 		type: 'boolean',
 		description:
-			'Build mods from source: a gradle project on disk, or a repository with no built release, allowed from then on',
+			'Build mods from source: a gradle project on disk, or a repository with no built release, allowed for its build scripts as they are; a commit that changes them waits for --build again',
 	},
 	trust: {
 		type: 'boolean',
@@ -124,7 +124,7 @@ export const commands = {
 		run: instanceCommands.importAny,
 	},
 	export: {
-		summary: 'Write an instance as an ender pack of the mods it chose',
+		summary: 'Write an instance as an ender pack of what it chose, or as a Modrinth pack with --mrpack',
 		usage:
 			'ender export [name] [--out ender.pack.json] [--gist [--new] [--list] [--json]] [--mrpack [--out name.mrpack]]',
 		flags: {
@@ -231,7 +231,7 @@ export const commands = {
 		run: modCommands.optional,
 	},
 	scan: {
-		summary: 'Show what mods can reach: exec, classloading, native, network, unsafe',
+		summary: 'Show what mods can reach and what they warn of: the network, other programs, native code, logins',
 		usage: 'ender scan [jar|mod...]',
 		flags: { ...instanceFlag, json: { type: 'boolean', description: 'Print the findings as JSON' } },
 		run: modCommands.scan,
@@ -288,8 +288,8 @@ export const commands = {
 		run: modCommands.update,
 	},
 	follow: {
-		summary: 'Have an instance follow a pack, which every update then reads first',
-		usage: 'ender follow <gist | gh:owner/repo | https link> [--instance name] [--keep]',
+		summary: 'Have an instance follow an ender or packwiz pack, which every update then reads first',
+		usage: 'ender follow <gist | gh:owner/repo | https link | pack file> [--instance name] [--keep]',
 		flags: {
 			...instanceFlag,
 			...depsFlag,
