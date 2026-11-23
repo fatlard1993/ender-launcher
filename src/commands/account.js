@@ -13,7 +13,13 @@ export const ls = async ({ flags = {} } = {}) => {
 		info(
 			JSON.stringify({
 				fallback: DEFAULT_PLAYER,
-				accounts: found.map(({ name, kind, uuid, active }) => ({ name, kind, uuid, active })),
+				accounts: found.map(({ name, kind, uuid, active, signInOnce }) => ({
+					name,
+					kind,
+					uuid,
+					active,
+					...(signInOnce ? { signInOnce } : {}),
+				})),
 			}),
 		);
 
@@ -41,6 +47,14 @@ export const ls = async ({ flags = {} } = {}) => {
 		info(
 			`${account.active ? paint.green('*') : ' '} ${paint.bold(account.name.padEnd(18))} ${kind.padEnd(19)} ${paint.dim(account.uuid)}`,
 		);
+
+		if (account.signInOnce) {
+			info(
+				paint.yellow(
+					`    signed in through another launcher's app: "ender account add" signs it in through ender's own`,
+				),
+			);
+		}
 	}
 
 	return 0;
@@ -77,15 +91,19 @@ export const add = async ({ positionals, flags }) => {
 	return 0;
 };
 
-export const importAccounts = async ({ positionals }) => {
+export const importAccounts = async ({ positionals, flags = {} }) => {
 	const [file = join(instances.PRISM_ROOT, 'accounts.json')] = positionals;
-	const results = await accounts.importPrism(file);
+	const results = await accounts.importPrism(file, {
+		signInOnce: () => accounts.add({ qr: flags.qr !== false }),
+		asking: name => info(`Prism signed in ${name}; sign in as ${name} once more, through ender's own app:`),
+	});
 
 	if (results.length === 0) info(`Prism has no Microsoft accounts in ${file}`);
 
-	for (const { name, error } of results) {
-		if (error) warn(`${name} was not taken over: ${error}`);
-		else done(`Took over ${name} from Prism`);
+	for (const { name, signedIn, error } of results) {
+		if (error) warn(`${name} was not signed in: ${error}`);
+		else if (signedIn === name) done(`Signed in as ${name}`);
+		else warn(`Signed in as ${signedIn}, not ${name}, which Prism had; both are kept as Microsoft signed them in`);
 	}
 
 	return results.some(result => result.error) ? 1 : 0;

@@ -4,7 +4,7 @@ import { readJson, writeJson } from '../json';
 import { detail } from '../out';
 import { paths } from '../paths';
 import { offlineProfile, offlineUuid } from './offline';
-import { PRISM_SCOPE, fetchProfile, refresh, signIn, toMinecraft } from './microsoft';
+import { CLIENT_ID, fetchProfile, refresh, signIn, toMinecraft } from './microsoft';
 
 /** Accounts stored before offline ones existed are all Microsoft ones. */
 const kindOf = account => account.kind ?? 'microsoft';
@@ -36,6 +36,7 @@ export const list = async () => {
 		...account,
 		kind: kindOf(account),
 		active: account.name === active,
+		...(kindOf(account) === 'microsoft' && !renewsHere(account) ? { signInOnce: true } : {}),
 	}));
 };
 
@@ -146,46 +147,44 @@ const renew = async account => {
 };
 
 /**
- * Take over the Microsoft accounts Prism signed in, so a player who moves from it needs no second sign in. Prism
- * records the client id each refresh token answers to; each account is renewed before it is kept, so one that no
- * longer works is said here rather than at launch. One replaces an account of the same name, as an offline stand-in
- * for the player usually is, and Prism's active account becomes the active one.
+ * The Microsoft accounts Prism signed in, each signed in once more through ender's own app: Prism's tokens answer to
+ * Prism's app registration, whose credentials are Prism's to use, not ender's. Each sign in is kept under the profile
+ * Minecraft reports, in place of an offline stand-in of that name, and Prism's active account becomes the active one.
+ * Nothing of Prism's is kept but the names, to ask for.
  */
-export const importPrism = async (file, { renewal = renew } = {}) => {
+export const importPrism = async (file, { signInOnce = add, asking = () => {} } = {}) => {
 	const prism = await readJson(file, undefined);
 
 	if (prism === undefined) throw new Error(`No Prism accounts at ${file}`);
 
-	const store = await readAccounts();
 	const results = [];
 
 	for (const entry of prism.accounts ?? []) {
 		const name = entry.profile?.name;
 
-		if (entry.type !== 'MSA' || !name || !entry.msa?.refresh_token || !entry['msa-client-id']) continue;
+		if (entry.type !== 'MSA' || !name) continue;
+
+		asking(name);
 
 		try {
-			store.accounts[name] = await renewal({
-				kind: 'microsoft',
-				name,
-				uuid: entry.profile.id,
-				clientId: entry['msa-client-id'],
-				refreshToken: entry.msa.refresh_token,
-				scope: PRISM_SCOPE,
-			});
+			const account = await signInOnce();
 
-			if (entry.active || store.active === undefined) store.active = name;
+			if (entry.active) await use(account.name);
 
-			results.push({ name });
+			results.push({ name, signedIn: account.name });
 		} catch (error) {
 			results.push({ name, error: error.message });
 		}
 	}
 
-	await writeAccounts(store);
-
 	return results;
 };
+
+/**
+ * Whether ender renews an account's sign in: only one made through its own app. One taken over from Prism, or made
+ * before ender had an app of its own, answers to another launcher's registration, which is not ender's to use.
+ */
+export const renewsHere = account => account.clientId === CLIENT_ID;
 
 /**
  * The account an instance plays as, with its Minecraft token renewed if it has gone stale.
@@ -206,6 +205,12 @@ export const resolveAccount = async wanted => {
 	if (kindOf(account) === 'offline') return account;
 
 	if (account.expiresAt > Date.now() + FRESH_FOR) return account;
+
+	if (!renewsHere(account)) {
+		throw new Error(
+			`${account.name} was signed in through another launcher's app, as one taken over from Prism was, and ender renews a sign in only through its own: sign in once with "ender account add", and ${account.name} is kept as it was`,
+		);
+	}
 
 	detail('auth', `renewing ${account.name}`);
 

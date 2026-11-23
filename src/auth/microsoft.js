@@ -19,9 +19,6 @@ const PROFILE = 'https://api.minecraftservices.com/minecraft/profile';
 
 const SCOPE = 'XboxLive.signin offline_access';
 
-/** What Prism asks for. A refresh token renews only for the scopes it was granted, so one taken from Prism keeps these. */
-export const PRISM_SCOPE = 'XboxLive.SignIn XboxLive.offline_access';
-
 const form = body => ({
 	method: 'POST',
 	headers: { 'content-type': 'application/x-www-form-urlencoded' },

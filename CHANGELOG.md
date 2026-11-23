@@ -11,6 +11,7 @@ Each release's notes, newest first. A release is published with its section here
 - **A source build's allowance covers the build scripts it was given for.** A later commit whose Gradle wrapper, scripts, properties or build logic changed is held, naming each file and printing the diff, until `ender add <repo> --build` allows it again. An allowance from 0.3 is asked for once more, since 0.3 did not keep which scripts it covered.
 - **A jar on the index's known-bad list is refused from any source**: Modrinth, CurseForge, a link or a pack. One listed after you installed it is taken out on the next sync.
 - **A server instance leaves out client-only jars**, as each jar's own metadata says, from any source.
+- **Accounts taken over from Prism need one sign in through ender's own app.** ender renews a sign in only through its app now, since Prism's tokens answer to Prism's registration; such an account plays until its token ends, then asks for `ender account add`, and `ender account` marks it. `ender account import` asks for that sign in for each of Prism's accounts.
 - **`instance.json`, its lock and `config.json` now name a `format`.** Files from 0.3 are read as they are, and an older ender ignores the new field.
 
 ### Packs

@@ -263,7 +263,7 @@ describe('adding an offline account', () => {
 	});
 });
 
-describe('accounts taken over from Prism', () => {
+describe('accounts Prism signed in', () => {
 	const prismFile = async accounts => {
 		const file = join(home, 'prism-accounts.json');
 
@@ -274,54 +274,62 @@ describe('accounts taken over from Prism', () => {
 	const msa = (name, extra = {}) => ({
 		type: 'MSA',
 		'msa-client-id': 'prism-cid',
-		msa: { refresh_token: `refresh-${name}` },
+		msa: { refresh_token: `prism-refresh-${name}` },
 		profile: { id: `uuid-${name}`, name },
 		...extra,
 	});
-	const renewal = async account => ({
-		...account,
-		refreshToken: `${account.refreshToken}-rotated`,
-		token: 't',
-		expiresAt: 1,
-	});
+	// What ender account add keeps for whoever Microsoft signs in, through ender's own app
+	const signingInAs = (accounts, name) => async () => {
+		const store = await accounts.readAccounts();
+
+		store.accounts[name] = {
+			kind: 'microsoft',
+			name,
+			uuid: `uuid-${name}`,
+			clientId: CLIENT_ID,
+			refreshToken: 'ender-refresh',
+			token: 't',
+			expiresAt: 1,
+		};
+		store.active ??= name;
+		await accounts.writeAccounts(store);
+
+		return store.accounts[name];
+	};
 
 	// The player played online through Prism and offline under the same name through ender: the sign in replaces the stand-in
-	test('replace the offline stand-in of the same name and become active', async () => {
+	test("are each signed in once more through ender's own app, in place of an offline stand-in, keeping none of Prism's tokens", async () => {
 		const accounts = await accountsModule();
+		const asked = [];
 
 		await accounts.addOffline('Ben');
 
 		const file = await prismFile([msa('Ben', { active: true }), { type: 'Offline', profile: { name: 'Local' } }]);
 
-		expect(await accounts.importPrism(file, { renewal })).toEqual([{ name: 'Ben' }]);
+		expect(
+			await accounts.importPrism(file, { signInOnce: signingInAs(accounts, 'Ben'), asking: name => asked.push(name) }),
+		).toEqual([{ name: 'Ben', signedIn: 'Ben' }]);
+		expect(asked).toEqual(['Ben']);
 
 		const { active, accounts: stored } = await accounts.readAccounts();
 
 		expect(active).toBe('Ben');
-		expect(stored.Ben).toEqual({
-			kind: 'microsoft',
-			name: 'Ben',
-			uuid: 'uuid-Ben',
-			clientId: 'prism-cid',
-			refreshToken: 'refresh-Ben-rotated',
-			scope: 'XboxLive.SignIn XboxLive.offline_access',
-			token: 't',
-			expiresAt: 1,
-		});
+		expect(stored.Ben).toMatchObject({ kind: 'microsoft', clientId: CLIENT_ID, refreshToken: 'ender-refresh' });
+		expect(JSON.stringify(stored)).not.toContain('prism');
 	});
 
-	test('keep nothing for one that no longer renews, and say why', async () => {
+	test('keep the offline stand-in when a sign in fails, and say why', async () => {
 		const accounts = await accountsModule();
 
 		await accounts.addOffline('Ben');
 
 		const file = await prismFile([msa('Ben', { active: true })]);
-		const refused = async () => {
-			throw new Error('Could not refresh the sign in (invalid_grant). Sign in again.');
+		const declined = async () => {
+			throw new Error('The sign in was declined.');
 		};
 
-		expect(await accounts.importPrism(file, { renewal: refused })).toEqual([
-			{ name: 'Ben', error: 'Could not refresh the sign in (invalid_grant). Sign in again.' },
+		expect(await accounts.importPrism(file, { signInOnce: declined })).toEqual([
+			{ name: 'Ben', error: 'The sign in was declined.' },
 		]);
 		expect((await accounts.readAccounts()).accounts.Ben.kind).toBe('offline');
 	});
@@ -329,7 +337,7 @@ describe('accounts taken over from Prism', () => {
 	test('names the file when Prism has none', async () => {
 		const accounts = await accountsModule();
 
-		await expect(accounts.importPrism(join(home, 'missing.json'), { renewal })).rejects.toThrow('missing.json');
+		await expect(accounts.importPrism(join(home, 'missing.json'))).rejects.toThrow('missing.json');
 	});
 });
 
@@ -347,7 +355,7 @@ describe('renewal before a launch', () => {
 					uuid: 'abc',
 					token: 'old',
 					expiresAt: Date.now() + 3600e3,
-					clientId: 'cid',
+					clientId: CLIENT_ID,
 				},
 			},
 		});
@@ -368,6 +376,46 @@ describe('renewal before a launch', () => {
 		}
 
 		expect(requested[0]).toContain('oauth2/v2.0/token');
+	});
+
+	test("never renews one signed in through another launcher's app, but asks for one sign in through ender's own", async () => {
+		const accounts = await accountsModule();
+		const account = clientId => ({
+			kind: 'microsoft',
+			name: 'Ben',
+			uuid: 'abc',
+			token: 'old',
+			clientId,
+			refreshToken: 'r',
+		});
+
+		await accounts.writeAccounts({ active: 'Ben', accounts: { Ben: { ...account('prism-cid'), expiresAt: 1 } } });
+
+		const requested = [];
+		const realFetch = globalThis.fetch;
+
+		globalThis.fetch = async url => {
+			requested.push(String(url));
+
+			return Response.json({}, { status: 400 });
+		};
+
+		try {
+			await expect(accounts.resolveAccount()).rejects.toThrow(
+				`Ben was signed in through another launcher's app, as one taken over from Prism was, and ender renews a sign in only through its own: sign in once with "ender account add", and Ben is kept as it was`,
+			);
+			expect(requested).toEqual([]);
+
+			// Its token goes on working until it ends, as it was minted already
+			await accounts.writeAccounts({
+				active: 'Ben',
+				accounts: { Ben: { ...account('prism-cid'), expiresAt: Date.now() + 864e5 } },
+			});
+
+			expect((await accounts.resolveAccount()).token).toBe('old');
+		} finally {
+			globalThis.fetch = realFetch;
+		}
 	});
 });
 
@@ -421,7 +469,17 @@ describe('who plays, as a script or a page reads it', () => {
 
 		await accounts.writeAccounts({
 			active: 'player',
-			accounts: { player: { kind: 'microsoft', name: 'player', uuid: 'abc', token: 'secret', refreshToken: 'secret' } },
+			accounts: {
+				player: {
+					kind: 'microsoft',
+					name: 'player',
+					uuid: 'abc',
+					token: 'secret',
+					refreshToken: 'secret',
+					clientId: CLIENT_ID,
+				},
+				prisms: { kind: 'microsoft', name: 'prisms', uuid: 'def', token: 'secret', clientId: 'prism-cid' },
+			},
 		});
 
 		const { ls } = await import('../src/commands/account');
@@ -439,7 +497,10 @@ describe('who plays, as a script or a page reads it', () => {
 		expect(lines.join('')).not.toContain('secret');
 		expect(JSON.parse(lines.join(''))).toEqual({
 			fallback: 'Player',
-			accounts: [{ name: 'player', kind: 'microsoft', uuid: 'abc', active: true }],
+			accounts: [
+				{ name: 'player', kind: 'microsoft', uuid: 'abc', active: true },
+				{ name: 'prisms', kind: 'microsoft', uuid: 'def', active: false, signInOnce: true },
+			],
 		});
 	});
 

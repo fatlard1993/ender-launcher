@@ -345,7 +345,7 @@ export const commands = {
 			ls: { summary: 'List accounts, online and offline', run: accountCommands.ls },
 			add: { summary: 'Sign in, or add an offline identity with --offline', run: accountCommands.add },
 			import: {
-				summary: 'Take over the Microsoft accounts Prism signed in, so they need no second sign in',
+				summary: "Sign in the Microsoft accounts Prism signed in, once each, through ender's own app",
 				run: accountCommands.importAccounts,
 			},
 			use: { summary: 'Choose which account instances play as', run: accountCommands.use },

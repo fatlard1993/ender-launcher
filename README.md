@@ -28,7 +28,7 @@ That is Linux and macOS; Windows, Homebrew and the double-click apps are in [Get
 - **Any modpack.** `ender import` takes a Modrinth `.mrpack`, a CurseForge zip, a packwiz pack, a Prism instance or an ender pack, from a file or a link, resource packs, shader packs and optional mods included. A packwiz pack's CurseForge mods come from Modrinth where it has the very same file, and `ender export --mrpack` writes a pack any launcher reads.
 - **A pack everyone follows.** An ender pack is one small file naming the mods chosen. `ender export --gist` publishes one, and publishing again updates the same gist; `ender follow` puts any instance on it, and `ender launch --update` reads it again before every launch, so every client in the house runs the same mods, packs, settings and servers without anyone copying jars.
 - **Servers.** A server instance is made and filled the same way, and `ender server start --update` takes new releases each time it starts.
-- **Accounts.** Microsoft sign-in, on this machine or from a phone by scanning a code, the accounts Prism already signed in, or offline identities; each instance plays as the account it is given.
+- **Accounts.** Microsoft sign-in, on this machine or from a phone by scanning a code, or offline identities; each instance plays as the account it is given.
 - **In the browser.** `ender web` opens the index with your instances beside it: install a mod with a button, make instances from what you collected or from a pack, watch an import or update as it runs, launch, publish a pack, sign in players, and update ender itself.
 - **The people who make them.** `ender support` says how to support the authors of an instance's mods, and `ender share` puts a screenshot and its story on the mods' pages in the index. A mod's author runs `ender submit gh:owner/repo` to have the index list it within minutes, rather than when its discovery finds it.
 - **No mirror to wait for.** ender reads Mojang's and the loaders' own metadata, so a snapshot plays the day it ships. Prism waits on a metadata service of its own, which takes days to take a new version in.
@@ -85,7 +85,7 @@ ender account import
 ender launch
 ```
 
-Import reads the version and loader out of `mmc-pack.json`, follows `.minecraft` to wherever it really points, and asks Modrinth to identify the jars already in `mods/`. What it recognizes becomes a declared mod. What it does not recognize is listed and then left exactly where it is. `ender account import` takes over the Microsoft accounts Prism signed in, renewed before they are kept, so there is no second sign in.
+Import reads the version and loader out of `mmc-pack.json`, follows `.minecraft` to wherever it really points, and asks Modrinth to identify the jars already in `mods/`. What it recognizes becomes a declared mod. What it does not recognize is listed and then left exactly where it is. `ender account import` names the Microsoft accounts Prism signed in and asks for one sign in each, through ender's own app: Prism's tokens answer to Prism's app registration, which is Prism's to use, so ender keeps none of them.
 
 To browse mods rather than name them, `ender web` opens the [index](https://fatlard1993.github.io/ender-index/) in your browser with your instances beside it: pick one, and each mod says whether it is installed, with a button to add or drop it. Its Instances page makes instances from a list of mods or from a pack, updates, launches and deletes them, and publishes one as a gist; what takes a while shows ender's progress as it goes, and a launch reports how the game ended. A release carries the index's pages inside it; the mods themselves load live. It serves `http://localhost:7460` (`--port` for another), and answers only pages it served itself. `--until-idle`, as the Ender icon runs it, stops once no page has been open for a while and nothing it started is running.
 
@@ -171,7 +171,7 @@ Only `minecraft`, `loader` and `mods` are needed.
 ender account                    who you can play as
 ender account add --offline Bob  an identity that needs no sign in
 ender account add                sign in to a Microsoft account
-ender account import             take over the Microsoft accounts Prism signed in
+ender account import             sign in Prism's Microsoft accounts, once each, through ender's app
 ender account use <name>         choose which one instances play as
 ender account assign <name>      bind one instance to one account
 ender account remove <name>      forget one
@@ -179,7 +179,7 @@ ender account remove <name>      forget one
 
 Who plays is always an account, either offline or Microsoft, and the two sit in one list and switch the same way. An offline one is a name and the uuid vanilla derives from it, so it is the player that name has always been, only one you can keep several of and move between. A username set the older way, `ender config username` or `ender set username` on an instance, becomes the offline account of that name the first time ender runs, and setting one still works the same way. `ender web` lists, adds and switches accounts too, and gives each instance its own. That is what makes testing your own multiplayer worth doing locally: two instances, two names, two uuids, one `online-mode=false` server.
 
-Sign in is the Microsoft device code flow, through ender's own app registration, so there is nothing to set up first. ender shows a short code and a scannable square that opens Microsoft's page on a phone (`--no-qr` leaves the square out); you type the code into that page, and the tokens live in `accounts.json` with owner-only permissions. A Minecraft token lasts a day and is renewed from the Microsoft one when it goes stale, so signing in is a thing you do once.
+Sign in is the Microsoft device code flow, through ender's own app registration, so there is nothing to set up first. ender renews a sign in only through that app: an account signed in through another launcher's, such as one an older ender took over from Prism, plays until its token ends, and then asks for one sign in with `ender account add`; `ender account` marks it. ender shows a short code and a scannable square that opens Microsoft's page on a phone (`--no-qr` leaves the square out); you type the code into that page, and the tokens live in `accounts.json` with owner-only permissions. A Minecraft token lasts a day and is renewed from the Microsoft one when it goes stale, so signing in is a thing you do once.
 
 Without an account, instances launch offline as `Player`. An offline player's UUID is derived from the name the way vanilla derives it, so worlds and inventories follow the name and a save made under an online account still knows you. A failed sign in is an error rather than a silent downgrade: a token that cannot be renewed is worth hearing about, not quietly swapping you into a game that cannot join anything.
 
