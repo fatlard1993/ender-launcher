@@ -850,3 +850,12 @@ describe("the index's data shape", () => {
 		}
 	});
 });
+
+test('weighs a repository that declares a mod with no id as providing nothing by it, rather than failing', () => {
+	const entries = [
+		entry('a/lib', [mod('lib-core', { provides: ['lib-api'] }), mod(undefined, { provides: ['lib-api'] })]),
+		entry('b/other', [{ loader: 'fabric', name: 'Nameless', provides: ['lib-api'] }], { stars: 900 }),
+	];
+
+	expect(claimantsOf('lib-api', entries).map(found => found.repo)).toEqual(['a/lib']);
+});

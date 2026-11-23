@@ -295,7 +295,8 @@ export const claimantsOf = (id, entries, fits = {}) => {
 			entry =>
 				!own.includes(entry) &&
 				entry.latest?.provides?.includes(id) &&
-				entry.latest.mods.some(mod => namespaceOf(mod.id) === namespaceOf(id)) &&
+				// A jar can declare a mod with no id at all, which shares no namespace with anything
+				entry.latest.mods.some(mod => mod.id !== undefined && namespaceOf(mod.id) === namespaceOf(id)) &&
 				fitting(entry),
 		)
 		.sort((a, b) => b.latest.provides.length - a.latest.provides.length || byStars(a, b));
