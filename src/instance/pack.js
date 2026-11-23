@@ -4,8 +4,9 @@ import { basename, dirname, extname, isAbsolute, join, normalize, relative } fro
 import { extractArchive, listEntries, readEntry, readEntryJson } from '../archive';
 import { kindOfPath } from '../mods/assets';
 import { versionsByHash } from '../mods/modrinth';
+import { sayIfNewer } from '../format';
 import { detail, plural, step, warn } from '../out';
-import { ENDER_PACK, GAME_FILES, parseEnderPack } from './enderPack';
+import { ENDER_PACK, GAME_FILES, PACK_FORMAT, parseEnderPack } from './enderPack';
 import { packwizMetafiles, packwizMod, packwizPack } from './packwiz';
 
 const MRPACK_INDEX = 'modrinth.index.json';
@@ -207,6 +208,8 @@ const fromEnder = async (path, { name }) => {
 	const file = alone ? undefined : enderPackIn(await listEntries(path));
 	const source = alone ? await Bun.file(path).text() : (await readEntry(path, file)).toString('utf8');
 	const pack = parseEnderPack(source, { file: alone ? basename(path) : `${basename(path)}!${file}` });
+
+	sayIfNewer({ file: basename(path), kind: 'pack', format: pack.format, reads: PACK_FORMAT });
 
 	return {
 		manifest: {

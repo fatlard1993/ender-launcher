@@ -123,6 +123,7 @@ An instance imported from a packwiz pack follows it the same way, from a reposit
 
 ```json
 {
+	"format": 1,
 	"name": "Family",
 	"version": "3",
 	"author": "Ada",
@@ -144,6 +145,7 @@ An instance imported from a packwiz pack follows it the same way, from a reposit
 
 Only `minecraft`, `loader` and `mods` are needed.
 
+- **`format`** is the version of this format, which ender writes; a pack without one is format 1. New fields are added without raising it, and an ender that does not know a field passes over it. It goes up only for a change an older ender would misread, which reads the pack anyway and says to upgrade.
 - **`mods`** are specs as `ender add` takes them, each a string or `{ "spec", "version" }` to pin one, naming where a mod is published: never a jar or a gradle project on the machine that made the pack, which another machine has not got. What they need is resolved where the pack is installed, from the index.
 - **`resourcepacks` and `shaderpacks`** are Modrinth (`mr:`) or CurseForge (`cf:`) projects, or https links. They go into their own folders, and ones new to an instance are turned on: in `options.txt`, and for Iris when it has no settings yet.
 - **`optional`** makes any entry a choice for the player, with a `description` of what it adds; `default: true` has it on until they turn it off.

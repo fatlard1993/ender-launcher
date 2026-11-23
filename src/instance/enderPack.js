@@ -7,6 +7,12 @@ const entryKey = entry => `${entry.source}:${entry.id ?? entry.path ?? entry.url
 /** The file a pack is: at the root of a repository or a zip, or anywhere by itself. */
 export const ENDER_PACK = 'ender.pack.json';
 
+/**
+ * The version of the pack format this ender writes and reads. Fields are added without changing it; it goes up only
+ * for a change an older ender would misread. A pack that names none is format 1, as every pack before it was.
+ */
+export const PACK_FORMAT = 1;
+
 const LOADERS = new Set(['fabric', 'quilt', 'forge', 'neoforge', 'vanilla']);
 
 /**
@@ -144,6 +150,9 @@ export const parseEnderPack = (json, { file = ENDER_PACK } = {}) => {
 
 	const text = key => (typeof pack?.[key] === 'string' && pack[key].trim() !== '' ? pack[key].trim() : undefined);
 
+	if (pack?.format !== undefined && !(Number.isInteger(pack.format) && pack.format >= 1))
+		problems.push('"format" is not a whole number from 1');
+
 	if (pack?.loaderVersion !== undefined && text('loaderVersion') === undefined)
 		problems.push('"loaderVersion" is not a version');
 	if (pack?.loaderVersion !== undefined && pack?.loader === 'vanilla')
@@ -158,6 +167,7 @@ export const parseEnderPack = (json, { file = ENDER_PACK } = {}) => {
 	if (problems.length > 0) throw new Error(`${file} ${problems.join('; ')}`);
 
 	return {
+		format: pack.format ?? 1,
 		...(typeof pack.name === 'string' ? { name: pack.name } : {}),
 		...(typeof pack.summary === 'string' ? { summary: pack.summary } : {}),
 		...(text('version') ? { version: text('version') } : {}),
@@ -198,6 +208,7 @@ export const packFrom = (manifest, { pinLoader = false, version, author, servers
 
 	return {
 		pack: {
+			format: PACK_FORMAT,
 			name: manifest.name,
 			...((version ?? manifest.pack?.version) ? { version: version ?? manifest.pack.version } : {}),
 			...((author ?? manifest.pack?.author) ? { author: author ?? manifest.pack.author } : {}),

@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 
 import { listEntries, readEntryJson } from '../src/archive';
 import { packFrom, parseEnderPack } from '../src/instance/enderPack';
@@ -220,6 +220,7 @@ describe('an ender pack', () => {
 		});
 
 		expect(written).toEqual({
+			format: 1,
 			name: 'Ship Life',
 			minecraft: '26.3',
 			loader: 'fabric',
@@ -601,6 +602,26 @@ describe("a pack's pins and its byline", () => {
 		}
 	});
 
+	test('names its format, 1 when it names none, and reads a newer one, saying this ender may misread it', async () => {
+		expect(parseEnderPack(pack()).format).toBe(1);
+		expect(parseEnderPack(pack({ format: 2 })).format).toBe(2);
+
+		for (const format of [0, '1', 1.5]) expect(() => parseEnderPack(pack({ format }))).toThrow('"format"');
+
+		const path = join(directory, 'newer.ender.pack.json');
+		await writeFile(path, pack({ format: 2 }));
+		const warned = spyOn(console, 'warn').mockImplementation(() => {});
+
+		try {
+			expect((await readPack(path)).manifest.minecraft).toBe('26.3');
+			expect(warned.mock.calls.map(([line]) => line)).toContain(
+				'!! newer.ender.pack.json is pack format 2, and this ender reads format 1: ender upgrade reads it as it was meant',
+			);
+		} finally {
+			warned.mockRestore();
+		}
+	});
+
 	test('writes the loader version only when asked to pin it, and the memory an instance asks for', () => {
 		const manifest = {
 			name: 'P',
@@ -612,6 +633,7 @@ describe("a pack's pins and its byline", () => {
 		};
 
 		expect(packFrom(manifest).pack).toEqual({
+			format: 1,
 			name: 'P',
 			version: '2',
 			author: 'Ada',
