@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 
-import { CLIENT_ID, printSignIn, signIn, signInLines } from '../src/auth/microsoft';
+import { CLIENT_ID, printSignIn, signIn, signInLines, toMinecraft } from '../src/auth/microsoft';
 import { offlineUuid } from '../src/auth/offline';
 
 let home;
@@ -518,6 +518,56 @@ describe("ender's own app registration", () => {
 		}
 
 		expect(asked[0]).toBe(CLIENT_ID);
+	});
+
+	// Xbox signs in, then Minecraft answers as given
+	const refusedBy = async (status, body, clientId) => {
+		const real = globalThis.fetch;
+
+		globalThis.fetch = async url => {
+			if (url.includes('user.auth.xboxlive.com')) return Response.json({ Token: 'x' });
+			if (url.includes('xsts.auth.xboxlive.com'))
+				return Response.json({ Token: 'y', DisplayClaims: { xui: [{ uhs: 'h' }] } });
+
+			return new Response(body === undefined ? '' : JSON.stringify(body), { status });
+		};
+
+		try {
+			return await toMinecraft('token', clientId).then(
+				() => 'signed in',
+				error => error.message,
+			);
+		} finally {
+			globalThis.fetch = real;
+		}
+	};
+
+	test('refused by Minecraft, says what Minecraft said and what to do, by whose app it was', async () => {
+		const unapproved = {
+			path: '/authentication/login_with_xbox',
+			errorMessage: 'Invalid app registration, see https://aka.ms/AppRegInfo for more information',
+		};
+		const ours = await refusedBy(403, unapproved, CLIENT_ID);
+
+		expect(ours).toStartWith('Minecraft refused this sign in: its Azure app is not approved for Minecraft.');
+		expect(ours).toContain(
+			'Minecraft said: Invalid app registration, see https://aka.ms/AppRegInfo for more information',
+		);
+		expect(ours).toContain("This is ender's own app, which Mojang approved; it may have been withdrawn.");
+		expect(ours).toContain('Instances still launch offline.');
+
+		const prisms = await refusedBy(403, unapproved, 'c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb');
+
+		expect(prisms).toContain('Azure app: c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb');
+		expect(prisms).toContain("ender account add signs it in through ender's own, in its place.");
+
+		expect(await refusedBy(403, undefined, CLIENT_ID)).toStartWith(
+			'Minecraft refused this sign in: its Azure app is not approved',
+		);
+		expect(await refusedBy(403, { errorMessage: 'Too many sign ins from this address' }, CLIENT_ID)).toBe(
+			'Minecraft refused the sign in (403: Too many sign ins from this address).',
+		);
+		expect(await refusedBy(503, undefined, CLIENT_ID)).toBe('Minecraft refused the sign in (503).');
 	});
 
 	test('leaves no client id to configure, even one an older config still holds', async () => {

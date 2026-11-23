@@ -38,20 +38,32 @@ const json = body => ({
 export const CLIENT_ID = '9e6c7319-cc03-4540-822c-1ed114a056bc';
 
 /**
- * Minecraft refuses a token from an app registration it has not approved with a bare 403, so it is named here rather
- * than left to read as a network problem.
+ * Minecraft refuses a token from an app registration it has not approved with a 403, saying "Invalid app
+ * registration" or nothing at all, so it is named here, with what to do, rather than left to read as a network problem.
  */
 class NotApprovedError extends Error {
-	constructor(clientId) {
+	constructor(clientId, said) {
 		super(
 			[
 				'Minecraft refused this sign in: its Azure app is not approved for Minecraft.',
+				...(said ? [`  Minecraft said: ${said}`] : []),
 				`  Azure app: ${clientId}`,
+				clientId === CLIENT_ID
+					? "  This is ender's own app, which Mojang approved; it may have been withdrawn. ender upgrade, or github.com/fatlard1993/ender-launcher/issues, will say."
+					: "  This account signs in through another launcher's app, as it was taken over from it; ender account add signs it in through ender's own, in its place.",
 				'  Instances still launch offline.',
 			].join('\n'),
 		);
 	}
 }
+
+/** What Minecraft's services said in refusing: their error bodies name it as errorMessage, or only as error. */
+const refusalOf = async response => {
+	const body = await response.json().catch(() => ({}));
+	const said = body?.errorMessage ?? body?.developerMessage ?? body?.error;
+
+	return typeof said === 'string' && said.trim() !== '' ? said.trim() : undefined;
+};
 
 /**
  * The lines a script or the page reads the sign in from: Microsoft's page as it gave it, and the code to type there.
@@ -175,8 +187,15 @@ export const toMinecraft = async (accessToken, clientId) => {
 
 	const loginResponse = await fetch(MINECRAFT_LOGIN, json({ identityToken: `XBL3.0 x=${userHash};${xsts.Token}` }));
 
-	if (loginResponse.status === 403) throw new NotApprovedError(clientId);
-	if (!loginResponse.ok) throw new Error(`Minecraft refused the sign in (${loginResponse.status}).`);
+	if (!loginResponse.ok) {
+		const said = await refusalOf(loginResponse);
+
+		if (loginResponse.status === 403 && (said === undefined || /app registration/i.test(said))) {
+			throw new NotApprovedError(clientId, said);
+		}
+
+		throw new Error(`Minecraft refused the sign in (${loginResponse.status}${said ? `: ${said}` : ''}).`);
+	}
 
 	const minecraft = await loginResponse.json();
 
