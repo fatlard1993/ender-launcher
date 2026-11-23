@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { adoptiumQuery, jdkHomeIn } from '../src/jdk';
 import { resolveFromSource } from '../src/mods/indexed';
 import { updateConfig } from '../src/config';
+import { paths } from '../src/paths';
 import {
 	SOURCE_ZIPS,
 	ScriptsChanged,
@@ -154,11 +155,14 @@ describe("building a repository's source", () => {
 		expect(await allowHeldScripts('github:a/b', 'beef000000')).toBe(false);
 	});
 
-	test('an allowance given before ender kept its scripts is asked for again', async () => {
-		await updateConfig({ builds: ['github:a/b'] });
+	test('an allowance from ender 0.3, a list, is asked for again, and allowing one keeps the others', async () => {
+		await writeFile(
+			paths.config,
+			JSON.stringify({ activeInstance: 'suite', clientId: 'x', builds: ['github:a/b', 'github:c/d'] }),
+		);
 		await sourceAt('beef000000', project);
 
-		expect(await allowanceOf('github:a/b')).toEqual({ scripts: undefined });
+		expect(await allowanceOf('github:a/b')).toEqual({});
 		expect(await allowanceOf('github:a/c')).toBeUndefined();
 		await expect(
 			buildFromSource({
@@ -168,6 +172,14 @@ describe("building a repository's source", () => {
 				allowance: await allowanceOf('github:a/b'),
 			}),
 		).rejects.toThrow('was allowed to build before ender kept which build scripts an allowance covers');
+		expect(await allowHeldScripts('github:a/b', 'beef000000')).toBe(true);
+		expect(await allowanceOf('github:c/d')).toEqual({});
+		expect(await Bun.file(paths.config).json()).toMatchObject({
+			format: 1,
+			activeInstance: 'suite',
+			builds: { 'github:c/d': {} },
+		});
+		expect(await Bun.file(paths.config).json()).not.toHaveProperty('clientId');
 	});
 
 	test('is never started without an allowance', async () => {

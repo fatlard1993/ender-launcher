@@ -2,6 +2,7 @@ import { mkdir, readdir, rename, rm, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, relative } from 'node:path';
 
+import { sayIfNewer } from '../format';
 import { readJson, writeJson } from '../json';
 import { instanceDir, lockPath, manifestPath, paths } from '../paths';
 
@@ -50,7 +51,15 @@ export const defaultDonors = async () => {
 	return donors;
 };
 
+/**
+ * The version of an instance's files, instance.json and its lock, kept in instance.json. Fields are added without
+ * raising it; it goes up only for a change an older ender would misread. An instance that names none is from ender 0.3
+ * or before, which wrote them as this one reads them.
+ */
+export const INSTANCE_FORMAT = 1;
+
 export const defaults = name => ({
+	format: INSTANCE_FORMAT,
 	name,
 	type: 'client',
 	minecraft: 'release',
@@ -79,6 +88,8 @@ export const read = async name => {
 
 	if (manifest === undefined) throw new Error(`No instance named "${name}"`);
 	if (manifest.username !== undefined) await adoptInstanceName(manifest, name);
+
+	sayIfNewer({ file: `The instance ${name}`, kind: 'instance', format: manifest.format, reads: INSTANCE_FORMAT });
 
 	return { ...defaults(name), ...manifest, name };
 };

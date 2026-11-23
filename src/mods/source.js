@@ -88,19 +88,12 @@ const allowedCopy = key => join(dataRoot(), 'builds-allowed', ...key.split(':'))
  * The player's allowance to build a repository: the commit and build scripts it was given for. One given before ender
  * kept which scripts it covered holds none, and is asked for again. Undefined when building it was never allowed.
  */
-export const allowanceOf = async key => {
-	const { builds } = await readConfig();
-
-	if (Array.isArray(builds)) return builds.includes(key) ? { scripts: undefined } : undefined;
-
-	return builds?.[key];
-};
+export const allowanceOf = async key => (await readConfig()).builds?.[key];
 
 const keepAllowance = async (key, allowance) => {
 	const { builds } = await readConfig();
-	const kept = Array.isArray(builds) ? {} : { ...builds };
 
-	await updateConfig({ builds: { ...kept, [key]: allowance } });
+	await updateConfig({ builds: { ...builds, [key]: allowance } });
 };
 
 /** Copy a project's build scripts out of its source, to show beside a later commit's. */

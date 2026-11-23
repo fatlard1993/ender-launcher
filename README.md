@@ -283,6 +283,7 @@ The manifest is the file, and `ender add` is only a way of editing it. Instance 
 
 ```json
 {
+	"format": 1,
 	"name": "suite",
 	"minecraft": "26.3",
 	"loader": { "type": "fabric", "version": "0.19.5" },
@@ -296,7 +297,7 @@ The manifest is the file, and `ender add` is only a way of editing it. Instance 
 }
 ```
 
-Edit it by hand and run `ender sync`. An entry without a `version` floats; one with a version stays put until `ender update` releases it.
+Edit it by hand and run `ender sync`. `format` is the version of the instance's files, this one and its lock below, as `config.json` names its own: fields are added without raising it, an instance from ender 0.3 or before has none and is read as it is, and one a newer ender wrote is read with a line saying to upgrade. An entry without a `version` floats; one with a version stays put until `ender update` releases it.
 
 Floating means the newest **release** built for the instance's game version and loader, not simply whatever the source listed first. A stable release wins over a newer alpha, because "latest" almost never means the prerelease that landed this morning. When a version is new enough that nobody has cut a release yet, the best channel actually published is used, so a fresh snapshot still resolves. `--pre` on `add`, `new`, `sync` or `update` drops that preference and takes the newest of anything, and naming a version explicitly always wins outright.
 

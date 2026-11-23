@@ -1,9 +1,10 @@
 import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 
 import { clone } from '../src/commands/instances';
+import { packFrom } from '../src/instance/enderPack';
 import * as kept from '../src/commands/kept';
 import * as instances from '../src/instance';
 import { paths } from '../src/paths';
@@ -129,6 +130,87 @@ describe('what deleting kept', () => {
 		);
 		await quietly(() => kept.remove({ positionals: [], flags: { all: true, yes: true } }));
 		expect(await kept.keptFolders()).toEqual([]);
+	});
+});
+
+describe('an instance from ender 0.3', () => {
+	// instance.json and its lock as 0.3 wrote them: no format, and none of the fields added since
+	const made = async (name, extra = {}) => {
+		const directory = join(home, 'instances', name);
+
+		await mkdir(join(directory, 'game', 'mods'), { recursive: true });
+		await writeFile(
+			join(directory, 'instance.json'),
+			JSON.stringify({
+				name,
+				type: 'client',
+				minecraft: '1.21.1',
+				loader: { type: 'fabric', version: '0.16.9' },
+				gameDir: join(directory, 'game'),
+				memory: { min: 512, max: 6144 },
+				jvmArgs: [],
+				env: {},
+				mods: [
+					{ source: 'modrinth', id: 'sodium' },
+					{ source: 'github', id: 'fatlard1993/big-boats' },
+				],
+				...extra,
+			}),
+		);
+		await writeFile(
+			join(directory, 'instance.lock.json'),
+			JSON.stringify({
+				mods: [
+					{
+						key: 'modrinth:sodium',
+						source: 'modrinth',
+						id: 'sodium',
+						name: 'Sodium',
+						version: '0.6.0',
+						filename: 'sodium.jar',
+						url: 'https://cdn.modrinth.com/sodium.jar',
+						checksum: { algo: 'sha1', value: 'a' },
+						requested: true,
+					},
+				],
+			}),
+		);
+	};
+
+	test('is read, listed and exported as it was, and names its format once it is written again', async () => {
+		await made('old');
+
+		const manifest = await instances.read('old');
+
+		expect(manifest).toMatchObject({ format: 1, minecraft: '1.21.1', memory: { min: 512, max: 6144 } });
+		expect(manifest.mods).toHaveLength(2);
+		expect((await instances.list()).map(({ name }) => name)).toEqual(['old']);
+		expect((await instances.readLock('old')).mods[0].filename).toBe('sodium.jar');
+		expect(packFrom(manifest).pack).toMatchObject({ format: 1, minecraft: '1.21.1', loader: 'fabric' });
+
+		await instances.write({ ...manifest, memory: { min: 512, max: 8192 } });
+
+		expect(await Bun.file(join(home, 'instances', 'old', 'instance.json')).json()).toMatchObject({
+			format: 1,
+			loader: { type: 'fabric', version: '0.16.9' },
+			memory: { min: 512, max: 8192 },
+		});
+	});
+
+	test('one a newer ender wrote is read as it is, and says so once', async () => {
+		await made('newer', { format: 2, bowls: 'soup' });
+
+		const warned = spyOn(console, 'warn').mockImplementation(() => {});
+
+		try {
+			expect(await instances.read('newer')).toMatchObject({ format: 2, bowls: 'soup' });
+			await instances.list();
+			expect(warned.mock.calls.map(([line]) => line)).toEqual([
+				'!! The instance newer is instance format 2, and this ender reads format 1: ender upgrade reads it as it was meant',
+			]);
+		} finally {
+			warned.mockRestore();
+		}
 	});
 });
 
