@@ -8,6 +8,7 @@ Each release's notes, newest first. A release is published with its section here
 
 - A record is read as its releases alone where the index publishes them, a third of its size: an update downloads a third of what it did for each mod whose releases changed, and a new instance a third for each of its mods.
 - An update no longer refreshes `providers.json` every day for an instance requiring something nothing can place: an id a table a day old could not place is remembered for the week the table is kept. Adding mods still asks the newest table, as a library may be as new as the mod.
+- Together, for a 100-mod instance, the day's first update went from 0.4 to 1.5 MB to about 0.25 MB, and a new instance's first from 2.3 to 1.6 MB.
 
 ## 0.4.0
 
