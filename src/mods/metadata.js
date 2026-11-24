@@ -65,6 +65,16 @@ const relations = ({ suggests = [], breaks = [], conflicts = [] }) => ({
 
 const ranged = declared => Object.entries(declared ?? {}).map(([id, versions]) => [id, rangeOf(versions)]);
 
+/**
+ * The versions a mod needs of what it requires, by id, listed only where it narrows them: `{"pandorical": ">=15.36.0"}`
+ * is a jar the loader refuses to start beside Pandorical 15.35.
+ */
+const needs = required => {
+	const narrowed = required.filter(([, range]) => range !== '*');
+
+	return narrowed.length > 0 ? { dependsVersions: Object.fromEntries(narrowed) } : {};
+};
+
 const fabric = (json, loader = 'fabric', bundled = []) => ({
 	loader,
 	id: json.id,
@@ -74,6 +84,7 @@ const fabric = (json, loader = 'fabric', bundled = []) => ({
 	minecraft: [json.depends?.minecraft].flat().filter(Boolean).join(' || ') || undefined,
 	environment: environmentOf(json.environment),
 	depends: Object.keys(json.depends ?? {}),
+	...needs(ranged(json.depends)),
 	provides: [...(json.provides ?? []), ...bundled],
 	...relations({
 		suggests: [...Object.keys(json.recommends ?? {}), ...Object.keys(json.suggests ?? {})],
@@ -99,6 +110,9 @@ const quilt = (json, bundled = []) => {
 			undefined,
 		environment: environmentOf(json.minecraft?.environment),
 		depends: depends.filter(dependency => !dependency.optional).map(dependency => dependency.id),
+		...needs(
+			depends.filter(dependency => !dependency.optional).map(dependency => [dependency.id, rangeOf(dependency.versions)]),
+		),
 		provides: [...(loader.provides ?? []).map(provided => provided.id ?? provided), ...bundled],
 		...relations({
 			suggests: depends.filter(dependency => dependency.optional).map(dependency => dependency.id),
@@ -177,6 +191,11 @@ const toml = (source, loader, manifest) => {
 			minecraft: minecraft?.versionRange,
 			environment: minecraft?.side?.toLowerCase() === 'client' ? 'client' : '*',
 			depends: dependencies.filter(dependency => kindOf(dependency) === 'required').map(dependency => dependency.modId),
+			...needs(
+				dependencies
+					.filter(dependency => kindOf(dependency) === 'required')
+					.map(dependency => [dependency.modId, rangeOf(dependency.versionRange)]),
+			),
 			...relations({
 				suggests: dependencies
 					.filter(dependency => kindOf(dependency) === 'optional')

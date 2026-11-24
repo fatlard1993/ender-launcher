@@ -12,6 +12,7 @@ import * as github from './github';
 import * as gradle from './gradle';
 import * as indexed from './indexed';
 import { readMods } from './metadata';
+import { meetRequirements, unmetMessage } from './requirements';
 import * as modrinth from './modrinth';
 
 /** Sources that can be searched. A gradle project is found on disk, not looked up. */
@@ -609,6 +610,28 @@ export const syncMods = async ({
 
 	for (const { resolution } of late) await unlink(join(modsDir, resolution.file.filename)).catch(() => {});
 
+	if (withDependencies) {
+		const unmet = await meetRequirements(kept, {
+			modsDir,
+			context,
+			known: knownIds,
+			readMods,
+			install,
+			resolveLive: github.resolveLive,
+			onLearned: () => modIdCache && writeJson(modIdCache, knownIds),
+		});
+
+		// Left out like a build that did not arrive, so a previous build of it is kept and the game still starts.
+		for (const item of unmet) {
+			failures.push({ resolution: item.dependent, error: new Error(unmetMessage(item)) });
+
+			if (kept.includes(item.dependent)) {
+				kept.splice(kept.indexOf(item.dependent), 1);
+				await unlink(join(modsDir, item.dependent.file.filename)).catch(() => {});
+			}
+		}
+	}
+
 	if (modIdCache) {
 		let learned = false;
 
@@ -716,6 +739,10 @@ export const reportSync = ({
 	}
 
 	step(`${plural(resolved.length, 'mod')} in place${removed.length > 0 ? `, ${removed.length} removed` : ''}`);
+
+	for (const { source, id, version, ahead } of resolved.filter(resolution => resolution.ahead)) {
+		step(`${source}:${id} ${version} came from GitHub, ahead of the index's ${ahead.of}, because ${ahead.because.join(', ')} requires it`);
+	}
 
 	if (unmanaged.length > 0) warn(`Left alone (not in the manifest): ${unmanaged.join(', ')}`);
 

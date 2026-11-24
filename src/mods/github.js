@@ -150,6 +150,12 @@ const resolveFromApi = async (entry, { minecraft, loader, githubToken, allowPrer
 };
 
 /**
+ * The newest release GitHub itself has, past the index: the index crawls nightly, so a release from today is not in it
+ * yet, and a mod published beside it today can already require it.
+ */
+export const resolveLive = (entry, context = {}) => resolveFromApi(entry, context);
+
+/**
  * A repository the index has crawled resolves from its record: the build fits by what its jar
  * declares, carries the hash the index computed, and brings its dependencies. One the index has not
  * crawled, or whose watched releases do not fit, resolves from the GitHub API by asset name.

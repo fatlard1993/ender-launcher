@@ -49,6 +49,7 @@ describe('mods declared in a built jar', () => {
 				minecraft: '1.21.1 || 1.21.2',
 				environment: 'client',
 				depends: ['fabricloader', 'minecraft'],
+				dependsVersions: { fabricloader: '>=0.19.2', minecraft: '1.21.1 || 1.21.2' },
 				provides: [],
 			},
 		]);
@@ -121,6 +122,7 @@ describe('mods declared in a built jar', () => {
 				minecraft: '[1.21.1,1.21.2)',
 				environment: '*',
 				depends: ['minecraft'],
+				dependsVersions: { minecraft: '[1.21.1,1.21.2)' },
 				suggests: ['jei'],
 			},
 		]);
