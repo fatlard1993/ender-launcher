@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 
 import { syncMods } from '../src/mods';
@@ -66,7 +66,7 @@ describe('meeting a requirement the index is behind on', () => {
 	const options = (releases, extra = {}) => ({
 		modsDir,
 		context: {},
-		readMods: async path => releases[path.split('/').at(-1)] ?? [],
+		readMods: async path => releases[basename(path)] ?? [],
 		install: async () => {},
 		...extra,
 	});
