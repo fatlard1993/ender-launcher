@@ -2,7 +2,12 @@
 
 Each release's notes, newest first. A release is published with its section here as its notes.
 
-## Unreleased
+## 0.4.2
+
+### Requirements
+
+- A mod needing a newer release of another than the index has crawled yet takes it from GitHub, when the other comes from a GitHub repository, and the sync says it came ahead of the index. When GitHub has nothing that meets it either, the mod is left out and the sync says why, so the game still starts, rather than installing a set the loader refuses whole.
+- A requirement answered by a jar under another name, as `mr:geyser`'s jar is `geyser-fabric`, no longer warns on every sync, and no longer refuses `ender add` and `ender new`.
 
 ### ender web
 
