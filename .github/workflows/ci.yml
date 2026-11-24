@@ -24,10 +24,18 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
-      # The tests build their jar and pack fixtures with zip, which Windows runners do not have
+      # The tests build their jar and pack fixtures with zip, which Windows runners do not have. Chocolatey's feed fails
+      # now and then and the install still exits 0, so the step tries again and fails only when zip never arrived.
       - name: zip on Windows
         if: runner.os == 'Windows'
-        run: choco install zip --no-progress -y
+        run: |
+          foreach ($try in 1..3) {
+            choco install zip --no-progress -y
+            if (Get-Command zip -ErrorAction SilentlyContinue) { exit 0 }
+            Start-Sleep -Seconds 20
+          }
+          Write-Error 'zip did not install: Chocolatey could not fetch it three times over'
+          exit 1
       - run: bun install
       - run: bun run lint
         if: runner.os == 'Linux'
