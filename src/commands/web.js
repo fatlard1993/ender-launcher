@@ -95,6 +95,19 @@ export const installedWhere = () => ({
 	data: dataRoot(),
 });
 
+/** The commit a checkout is at and the version its package.json names, read now; undefined where git cannot say. */
+export const checkoutNow = async (folder = join(import.meta.dir, '..', '..')) => {
+	try {
+		const { code, stdout } = await collect(['git', '-C', folder, 'rev-parse', 'HEAD']);
+
+		if (code !== 0) return undefined;
+
+		return { commit: stdout, version: (await Bun.file(join(folder, 'package.json')).json()).version };
+	} catch {
+		return undefined;
+	}
+};
+
 /** The binary of the app bundle this ender runs as, the one a Mac's Terminal can be given; undefined outside one. */
 const bundledBinary = () => (appBundleOf() ? process.execPath : undefined);
 
@@ -204,6 +217,10 @@ export const webApi = ({
 	newest = cached(async () => (await latestRelease()).version, 10 * 60_000),
 	upgradedBy = whoUpgrades,
 	restart = async () => {},
+	// The checkout a checkout's ender started from, to tell the page once its folder holds something else
+	startedFrom,
+	checkout = checkoutNow,
+	started = new Date().toISOString(),
 	where = installedWhere,
 	terminal = () => terminalStatus(bundledBinary()),
 	linkTerminal = () => linkForTerminal(bundledBinary()),
@@ -268,7 +285,7 @@ export const webApi = ({
 
 		if (rest.length > 0) return json({ error: 'Not found' }, 404);
 		if (area === 'ender' && name === undefined && method === 'GET')
-			return json({ version, ...where(), terminal: await terminal() });
+			return json({ version, started, ...where(), terminal: await terminal() });
 
 		if (area === 'terminal' && name === undefined && method === 'POST') {
 			try {
@@ -415,11 +432,15 @@ export const webApi = ({
 
 		if (area === 'upgrade' && name === undefined && method === 'GET') {
 			const how = upgradedBy();
+			const now = how === 'checkout' && startedFrom ? await checkout() : undefined;
+			const folder = now
+				? { checkout: { changed: now.commit !== startedFrom.commit || now.version !== version, version: now.version } }
+				: {};
 
 			try {
-				return json({ current: version, latest: await newest({ again: searchParams.has('again') }), how });
+				return json({ current: version, latest: await newest({ again: searchParams.has('again') }), how, ...folder });
 			} catch (error) {
-				return json({ current: version, how, error: error.message });
+				return json({ current: version, how, ...folder, error: error.message });
 			}
 		}
 
@@ -704,10 +725,14 @@ export const web = async ({ flags }) => {
 		await server.stop(true);
 		await mkdir(paths.cache, { recursive: true });
 		detach(selfCommand(['web', '--port', String(port), '--no-open', '--until-idle']), join(paths.cache, 'web.log'));
-		info(`ender web moved to the background, as the upgraded ender; it stops once its page is closed`);
+		info(`ender web moved to the background, as the ender now installed; it stops once its page is closed`);
 		setTimeout(() => process.exit(0), 200);
 	};
-	const answer = webApi({ jobs, restart });
+	const answer = webApi({
+		jobs,
+		restart,
+		...(whoUpgrades() === 'checkout' ? { startedFrom: await checkoutNow() } : {}),
+	});
 	const watch = idleWatch({ busy: jobs.busy });
 
 	try {

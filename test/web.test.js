@@ -180,11 +180,13 @@ describe('ender web', () => {
 		const api = webApi({
 			run: () => expect.unreachable(),
 			where: () => ({ installed: '/Applications/Ender.app', data: '/d' }),
+			started: '2026-11-24T09:00:00.000Z',
 		});
 		const { version } = await import('../package.json');
 
 		expect(await (await api(request('/api/ender'))).json()).toEqual({
 			version,
+			started: '2026-11-24T09:00:00.000Z',
 			installed: '/Applications/Ender.app',
 			data: '/d',
 		});
@@ -1307,6 +1309,63 @@ describe('bringing ender up to date from the page', () => {
 
 		expect(refused.status).toBe(409);
 		expect((await refused.json()).error).toContain('brew upgrade ender');
+	});
+
+	test("says when a checkout's folder holds another commit or version than the one it started from", async () => {
+		const { version } = await import('../package.json');
+		let now = { commit: 'aaa', version };
+		const api = webApi({
+			newest: async () => '9.9.9',
+			upgradedBy: () => 'checkout',
+			startedFrom: { commit: 'aaa', version },
+			checkout: async () => now,
+		});
+		const asked = async () => (await api(request('/api/upgrade'))).json();
+
+		expect((await asked()).checkout).toEqual({ changed: false, version });
+
+		now = { commit: 'bbb', version };
+		expect((await asked()).checkout).toEqual({ changed: true, version });
+
+		now = { commit: 'aaa', version: '9.9.9' };
+		expect(await asked()).toEqual({
+			current: version,
+			latest: '9.9.9',
+			how: 'checkout',
+			checkout: { changed: true, version: '9.9.9' },
+		});
+	});
+
+	test('says nothing of a checkout for an installed ender, or when git could not say where it started', async () => {
+		const installed = webApi({
+			newest: async () => '9.9.9',
+			upgradedBy: () => 'self',
+			checkout: () => expect.unreachable(),
+		});
+		const unknown = webApi({
+			newest: async () => '9.9.9',
+			upgradedBy: () => 'checkout',
+			checkout: () => expect.unreachable(),
+		});
+
+		expect((await (await installed(request('/api/upgrade'))).json()).checkout).toBeUndefined();
+		expect((await (await unknown(request('/api/upgrade'))).json()).checkout).toBeUndefined();
+	});
+
+	test("reads a checkout's commit and version, and nothing from a folder git does not know", async () => {
+		const { checkoutNow } = await import('../src/commands/web');
+		const { version } = await import('../package.json');
+		const here = await checkoutNow();
+
+		expect(here.commit).toMatch(/^[0-9a-f]{40}$/);
+		expect(here.version).toBe(version);
+		const elsewhere = await mkdtemp(join(tmpdir(), 'ender-not-a-checkout-'));
+
+		try {
+			expect(await checkoutNow(elsewhere)).toBeUndefined();
+		} finally {
+			await rm(elsewhere, { recursive: true, force: true });
+		}
 	});
 
 	test('restarts as the new ender only once nothing the page started is running', async () => {
