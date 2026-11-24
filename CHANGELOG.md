@@ -2,6 +2,16 @@
 
 Each release's notes, newest first. A release is published with its section here as its notes.
 
+## 0.4.3
+
+### Requirements
+
+- A requirement on a module Fabric API carries inside it, as Sodium's on `fabric-rendering-fluids-v1`, is checked against that module's own version rather than Fabric API's. 0.4.2 compared Fabric API's, found it short, and left Sodium out, so a pack with Iris turned on would not start.
+
+### ender web
+
+- `ender web` run from a checkout tells the page when its folder holds another commit or version than it started from, and every `ender web` says when it started, so the page can offer a restart and know when the restarted one answers.
+
 ## 0.4.2
 
 ### Requirements
