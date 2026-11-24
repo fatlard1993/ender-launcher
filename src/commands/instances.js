@@ -155,8 +155,18 @@ export const info_ = async ({ positionals, flags }) => {
 	const lock = await instances.readLock(manifest.name);
 
 	if (flags.json) {
+		// What a page showing the instance needs besides its mods: which optional entries are on, its resource and
+		// shader packs, and the pack it follows with the mods that came from it
 		info(
-			JSON.stringify({ ...instanceSummary(manifest, await readConfig()), mods: manifest.mods, installed: lock.mods }),
+			JSON.stringify({
+				...instanceSummary(manifest, await readConfig()),
+				mods: manifest.mods,
+				installed: lock.mods,
+				chosen: manifest.chosen ?? [],
+				resourcepacks: manifest.resourcepacks ?? [],
+				shaderpacks: manifest.shaderpacks ?? [],
+				...(manifest.pack ? { pack: manifest.pack } : {}),
+			}),
 		);
 
 		return 0;

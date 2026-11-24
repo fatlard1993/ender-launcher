@@ -214,6 +214,40 @@ describe('an instance from ender 0.3', () => {
 	});
 });
 
+describe('an instance as a page reads it', () => {
+	test('says which optional entries are on, its resource and shader packs, and the pack it follows', async () => {
+		const { info_ } = await import('../src/commands/instances');
+
+		await instances.create('packed', {
+			mods: [{ source: 'modrinth', id: 'zoomify', optional: true, description: 'Zoom with C' }],
+			chosen: ['modrinth:zoomify'],
+			resourcepacks: [{ source: 'modrinth', id: 'faithful-32x' }],
+			pack: { source: 'gh:me/pack', mods: ['modrinth:zoomify'] },
+		});
+
+		const lines = [];
+		const real = console.log;
+
+		console.log = line => lines.push(line);
+
+		try {
+			await info_({ positionals: ['packed'], flags: { json: true } });
+		} finally {
+			console.log = real;
+		}
+
+		expect(JSON.parse(lines.join(''))).toMatchObject({
+			name: 'packed',
+			mods: [{ source: 'modrinth', id: 'zoomify', optional: true, description: 'Zoom with C' }],
+			installed: [],
+			chosen: ['modrinth:zoomify'],
+			resourcepacks: [{ source: 'modrinth', id: 'faithful-32x' }],
+			shaderpacks: [],
+			pack: { source: 'gh:me/pack', mods: ['modrinth:zoomify'] },
+		});
+	});
+});
+
 describe('settings', () => {
 	test('a window size set on an instance is kept where the launch reads it, as numbers', async () => {
 		const { set } = await import('../src/commands/instances');

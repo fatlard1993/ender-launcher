@@ -2,6 +2,17 @@
 
 Each release's notes, newest first. A release is published with its section here as its notes.
 
+## Unreleased
+
+### ender web
+
+- An instance's card lists everything it installs, grouped and counted: what its pack brings, what was added to it, what its pack offers as optional with a switch for each, its resource and shader packs, and what came in for the rest to work. Each has its picture, name and description, from the index or, for a Modrinth mod, from Modrinth; its version, where it comes from, and a link to read more. Optional entries used to show as off whatever their state, and resource and shader packs not at all.
+- A pack's mods the index has not got show as cards with Modrinth's picture, name and description, beside the ones it has.
+
+### For scripts
+
+- `ender info --json` also gives `chosen`, the optional entries turned on; `resourcepacks` and `shaderpacks`; and `pack`, the pack the instance follows with the mods it brought.
+
 ## 0.4.1
 
 ### The index
