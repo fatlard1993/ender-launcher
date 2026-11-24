@@ -75,7 +75,7 @@ const needs = required => {
 	return narrowed.length > 0 ? { dependsVersions: Object.fromEntries(narrowed) } : {};
 };
 
-const fabric = (json, loader = 'fabric', bundled = []) => ({
+const fabric = (json, loader = 'fabric', bundled = {}) => ({
 	loader,
 	id: json.id,
 	version: json.version,
@@ -85,7 +85,8 @@ const fabric = (json, loader = 'fabric', bundled = []) => ({
 	environment: environmentOf(json.environment),
 	depends: Object.keys(json.depends ?? {}),
 	...needs(ranged(json.depends)),
-	provides: [...(json.provides ?? []), ...bundled],
+	provides: [...(json.provides ?? []), ...Object.keys(bundled)],
+	...(Object.keys(bundled).length > 0 ? { bundled } : {}),
 	...relations({
 		suggests: [...Object.keys(json.recommends ?? {}), ...Object.keys(json.suggests ?? {})],
 		breaks: ranged(json.breaks),
@@ -93,7 +94,7 @@ const fabric = (json, loader = 'fabric', bundled = []) => ({
 	}),
 });
 
-const quilt = (json, bundled = []) => {
+const quilt = (json, bundled = {}) => {
 	const loader = json.quilt_loader ?? {};
 	const listed = dependencies =>
 		(dependencies ?? []).map(dependency => (typeof dependency === 'string' ? { id: dependency } : dependency));
@@ -113,7 +114,8 @@ const quilt = (json, bundled = []) => {
 		...needs(
 			depends.filter(dependency => !dependency.optional).map(dependency => [dependency.id, rangeOf(dependency.versions)]),
 		),
-		provides: [...(loader.provides ?? []).map(provided => provided.id ?? provided), ...bundled],
+		provides: [...(loader.provides ?? []).map(provided => provided.id ?? provided), ...Object.keys(bundled)],
+		...(Object.keys(bundled).length > 0 ? { bundled } : {}),
 		...relations({
 			suggests: depends.filter(dependency => dependency.optional).map(dependency => dependency.id),
 			breaks: listed(loader.breaks).map(dependency => [dependency.id, rangeOf(dependency.versions)]),
@@ -124,27 +126,35 @@ const quilt = (json, bundled = []) => {
 const NESTED_LIMIT = 64 * 1024 * 1024;
 
 /**
- * The mod ids of the jars Fabric and Quilt load from inside this one. Fabric API is one release jar
- * holding dozens of modules, and other mods depend on those modules by their own ids.
+ * The mods Fabric and Quilt load from inside this jar, each id with its own version. Fabric API is one release jar
+ * holding dozens of modules, and other mods depend on those modules by their own ids and versions.
  */
-const bundledIds = files => {
-	const ids = [];
+const bundledMods = files => {
+	const found = [];
 
 	for (const [name, file] of files) {
 		if (!name.startsWith('META-INF/jars/') || !name.endsWith('.jar')) continue;
 
 		try {
 			for (const entry of zipEntries(file.read())) {
-				if (entry.name === 'fabric.mod.json') ids.push(parseLeniently(entry.read(NESTED_LIMIT).toString('utf8')).id);
-				if (entry.name === 'quilt.mod.json')
-					ids.push(parseLeniently(entry.read(NESTED_LIMIT).toString('utf8')).quilt_loader?.id);
+				if (entry.name === 'fabric.mod.json') {
+					const { id, version } = parseLeniently(entry.read(NESTED_LIMIT).toString('utf8'));
+
+					found.push([id, version]);
+				}
+
+				if (entry.name === 'quilt.mod.json') {
+					const { id, version } = parseLeniently(entry.read(NESTED_LIMIT).toString('utf8')).quilt_loader ?? {};
+
+					found.push([id, version]);
+				}
 			}
 		} catch {
 			// A nested jar that cannot be read provides nothing that can be named; the scan reports it as unreadable.
 		}
 	}
 
-	return ids.filter(Boolean);
+	return Object.fromEntries(found.filter(([id]) => id).map(([id, version]) => [id, version ?? null]));
 };
 
 /** NeoForge names a dependency's kind; Forge before it said only whether one was mandatory. */
@@ -224,7 +234,7 @@ export const readMods = async jar => {
 
 	const read = name => files.get(name).read().toString('utf8');
 	const manifest = files.has('META-INF/MANIFEST.MF') ? read('META-INF/MANIFEST.MF') : undefined;
-	const bundled = bundledIds(files);
+	const bundled = bundledMods(files);
 	const mods = [];
 
 	if (files.has('fabric.mod.json')) mods.push(fabric(parseLeniently(read('fabric.mod.json')), 'fabric', bundled));

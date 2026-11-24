@@ -54,6 +54,28 @@ describe('a requirement narrowed to versions the provider is not', () => {
 		expect(unmetRequirements([webs, odd])).toEqual([]);
 	});
 
+	test('compares a module nested in a jar by its own version, not the jar it ships in', () => {
+		const api = installed('modrinth', 'fabric-api', [
+			{
+				id: 'fabric-api',
+				version: '0.167.0+26.3',
+				provides: ['fabric-rendering-fluids-v1'],
+				bundled: { 'fabric-rendering-fluids-v1': '6.0.7+3434d6d95d' },
+			},
+		]);
+		const sodium = installed('modrinth', 'sodium', [
+			{ id: 'sodium', version: '0.9.2+mc26.3', provides: [], dependsVersions: { 'fabric-rendering-fluids-v1': '>=2.0.0' } },
+		]);
+		const tooNew = installed('local', 'mine', [
+			{ id: 'mine', version: '1', provides: [], dependsVersions: { 'fabric-rendering-fluids-v1': '>=7.0.0' } },
+		]);
+
+		expect(unmetRequirements([sodium, api])).toEqual([]);
+		expect(unmetRequirements([tooNew, api]).map(({ modId, have }) => [modId, have])).toEqual([
+			['fabric-rendering-fluids-v1', '6.0.7+3434d6d95d'],
+		]);
+	});
+
 	test('ignores build metadata, as the loader does', () => {
 		const api = installed('github', 'FabricMC/fabric', [{ id: 'fabric-api', version: '0.160.6+26.3', provides: [] }]);
 		const needsApi = installed('local', 'mine', [{ id: 'mine', version: '1', provides: [], dependsVersions: { 'fabric-api': '>=0.160.6' } }]);

@@ -57,15 +57,16 @@ describe('mods declared in a built jar', () => {
 
 	// Fabric API ships its modules as nested jars, and mods depend on the modules by name.
 	test('a fabric jar provides the mods nested inside it, and what it declares it provides', async () => {
-		const module = await jar({ 'fabric.mod.json': JSON.stringify({ id: 'fabric-screen-api-v1', version: '1' }) });
+		const module = await jar({ 'fabric.mod.json': JSON.stringify({ id: 'fabric-screen-api-v1', version: '6.0.7' }) });
 		const path = await jar({
-			'fabric.mod.json': JSON.stringify({ id: 'fabric-api', version: '1', provides: ['fabric'] }),
+			'fabric.mod.json': JSON.stringify({ id: 'fabric-api', version: '0.167.0+26.3', provides: ['fabric'] }),
 			'META-INF/jars/fabric-screen-api-v1.jar': await Bun.file(module).bytes(),
 			'META-INF/jars/broken.jar': 'not a jar',
 		});
 		const [mod] = await readMods(path);
 
 		expect(mod.provides).toEqual(['fabric', 'fabric-screen-api-v1']);
+		expect(mod.bundled).toEqual({ 'fabric-screen-api-v1': '6.0.7' });
 	});
 
 	test('quilt', async () => {

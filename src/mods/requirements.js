@@ -12,6 +12,9 @@ const comparable = version => String(version ?? '').replace(/\+.*$/, '');
 
 const provides = (mod, modId) => mod.id === modId || (mod.provides ?? []).includes(modId);
 
+/** The version a mod offers of what it provides: a jar nested inside it has its own, an alias it declares has the mod's. */
+const versionOf = (mod, modId) => (mod.id !== modId && mod.bundled?.[modId]) || mod.version;
+
 /**
  * The requirements an installed jar narrows to versions the jar providing them is not: Better Webs needing Pandorical
  * 15.36.0 or later beside Pandorical 15.35.4, which the loader refuses to start. A requirement nothing installed
@@ -33,13 +36,14 @@ export const unmetRequirements = installed =>
 					const met = providers.some(provider =>
 						provider.mods
 							.filter(other => provides(other, modId))
-							.some(other => satisfies(comparable(other.version), range) !== false),
+							.some(other => satisfies(comparable(versionOf(other, modId)), range) !== false),
 					);
 
 					if (met) return [];
 
 					const provider = providers[0];
-					const have = provider.mods.find(other => provides(other, modId))?.version;
+					const offering = provider.mods.find(other => provides(other, modId));
+					const have = offering && versionOf(offering, modId);
 
 					return [{ dependent, modId, range, provider, have }];
 				}),
@@ -49,7 +53,7 @@ export const unmetRequirements = installed =>
 /** Whether these mods, one jar's, meet every requirement asked of the provider they would replace. */
 export const meetsAll = (mods, wants) =>
 	wants.every(({ modId, range }) =>
-		mods.filter(mod => provides(mod, modId)).some(mod => satisfies(comparable(mod.version), range) !== false),
+		mods.filter(mod => provides(mod, modId)).some(mod => satisfies(comparable(versionOf(mod, modId)), range) !== false),
 	);
 
 /** Why a mod was left out of the instance, one line each, for whoever asked for the sync. */
@@ -64,7 +68,7 @@ export const unmetMessage = ({ dependent, modId, range, provider, have, tried })
  */
 const modsOf = async (resolution, modsDir, known, readMods) => {
 	const checksum = checksumText(resolution.file.checksum);
-	const key = checksum && `mods:${checksum}`;
+	const key = checksum && `mods-bundled:${checksum}`;
 
 	if (key && known[key]) return { mods: known[key], learned: false };
 
@@ -72,6 +76,7 @@ const modsOf = async (resolution, modsDir, known, readMods) => {
 		id: mod.id,
 		version: mod.version,
 		provides: mod.provides ?? [],
+		...(mod.bundled ? { bundled: mod.bundled } : {}),
 		...(mod.dependsVersions ? { dependsVersions: mod.dependsVersions } : {}),
 	}));
 
