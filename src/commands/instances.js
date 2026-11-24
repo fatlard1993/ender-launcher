@@ -99,7 +99,7 @@ export const create = async ({ positionals, flags }) => {
 	};
 
 	if (mods.length > 0) {
-		refuseUnplaced(
+		await refuseUnplaced(
 			await resolveAll(mods, context, { withDependencies: false }),
 			mods,
 			flags,

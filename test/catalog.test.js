@@ -25,6 +25,7 @@ import { standing } from '../src/mods/rank';
 import { hosted, resolveFromRecord, search } from '../src/mods/indexed';
 import { rank } from '../src/mods/rank';
 import { authorsOf, readAhead, refuseUnplaced } from '../src/commands/mods';
+import { jar as jarIn } from './jars';
 
 const mod = (id, extra) => ({
 	loader: 'fabric',
@@ -820,14 +821,15 @@ describe("the support an instance's authors take", () => {
 });
 
 describe('a mod whose requirement nothing installs', () => {
+	const idsCache = join(tmpdir(), `ender-ids-${process.pid}.json`);
 	const resolution = {
 		source: 'github',
 		id: 'IrisShaders/Iris',
 		unplaced: [{ modId: 'sodium', claimants: [{ host: 'github', repo: 'someone/sodium-fork', stars: 3 }] }],
 	};
 
-	test('is refused with a line for each claimant, and nothing declared', () => {
-		expect(() => refuseUnplaced([resolution], [], {}, 'ender add iris')).toThrow(
+	test('is refused with a line for each claimant, and nothing declared', async () => {
+		await expect(refuseUnplaced([resolution], [], {}, 'ender add iris', idsCache)).rejects.toThrow(
 			[
 				'github:IrisShaders/Iris requires "sodium", and no repository claiming it is established enough to install unasked. Name the one you trust beside it, or its own source:',
 				'  ender add iris gh:someone/sodium-fork   3 stars',
@@ -836,17 +838,27 @@ describe('a mod whose requirement nothing installs', () => {
 		);
 	});
 
-	test('goes in once the requirement is named beside it, by its id or by a claimant', () => {
-		expect(() =>
-			refuseUnplaced([resolution], [{ source: 'modrinth', id: 'sodium' }], {}, 'ender add iris'),
-		).not.toThrow();
-		expect(() =>
-			refuseUnplaced([resolution], [{ source: 'github', id: 'someone/sodium-fork' }], {}, 'ender add iris'),
-		).not.toThrow();
+	test('goes in once the requirement is named beside it, by its id or by a claimant', async () => {
+		await refuseUnplaced([resolution], [{ source: 'modrinth', id: 'sodium' }], {}, 'ender add iris', idsCache);
+		await refuseUnplaced([resolution], [{ source: 'github', id: 'someone/sodium-fork' }], {}, 'ender add iris', idsCache);
 	});
 
-	test('goes in alone with --no-deps', () => {
-		expect(() => refuseUnplaced([resolution], [], { deps: false }, 'ender add iris')).not.toThrow();
+	test('goes in alone with --no-deps', async () => {
+		await refuseUnplaced([resolution], [], { deps: false }, 'ender add iris', idsCache);
+	});
+
+	test('goes in beside a jar that declares the requirement, whatever its entry is called', async () => {
+		const scratch = await mkdtemp(join(tmpdir(), 'ender-ids-'));
+		const sodium = await jarIn(scratch, { 'fabric.mod.json': JSON.stringify({ id: 'sodium', version: '1' }) });
+		const beside = { source: 'modrinth', id: 'embeddium-fabric', file: { filename: 'e.jar', localPath: sodium } };
+		const cache = join(scratch, 'ids.json');
+
+		try {
+			await refuseUnplaced([resolution, beside], [{ source: 'modrinth', id: 'embeddium-fabric' }], {}, 'ender add iris', cache);
+			await expect(refuseUnplaced([resolution], [], {}, 'ender add iris', cache)).rejects.toThrow('requires "sodium"');
+		} finally {
+			await rm(scratch, { recursive: true, force: true });
+		}
 	});
 });
 

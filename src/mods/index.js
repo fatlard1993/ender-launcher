@@ -119,10 +119,15 @@ const lastSegment = id =>
 
 /**
  * The required mod ids the index could not place for these resolutions, less those an entry in `declared` already
- * answers: one naming the id itself, as mr:mixinextras does, or one of the repositories claiming it.
+ * answers: one naming the id itself, as mr:mixinextras does, or one of the repositories claiming it; and less the ids
+ * in `provided`, which jars already installed declare whatever their entries are called: mr:geyser's jar is
+ * geyser-fabric.
  */
-export const unplacedOf = (resolutions, declared) => {
-	const named = new Set(declared.map(entry => lastSegment(entry.id)));
+export const unplacedOf = (resolutions, declared, provided = []) => {
+	const named = new Set([
+		...declared.map(entry => lastSegment(entry.id)),
+		...provided.map(id => String(id).toLowerCase()),
+	]);
 	const keys = new Set(declared.map(entryKey));
 
 	return resolutions.flatMap(resolution =>
@@ -207,10 +212,6 @@ export const resolveAll = async (entries, context, { withDependencies = true } =
 			resolved.set(key, { ...resolution, key, requested });
 
 			if (!withDependencies) continue;
-
-			const missing = unplacedOf([resolution], entries);
-
-			if (missing.length > 0) warn(unplacedMessage(missing, 'ender add'));
 
 			for (const dependency of resolution.dependencies ?? []) {
 				if (!resolved.has(entryKey(dependency))) wave.push({ entry: dependency, requested: false });
@@ -651,6 +652,17 @@ export const syncMods = async ({
 
 	installed = cleared;
 	failures.push(...refused);
+
+	// Asked once the jars are in and their ids read: what an entry is called says nothing of the mod id its jar declares.
+	if (withDependencies) {
+		const missing = unplacedOf(
+			all,
+			entries,
+			installed.flatMap(resolution => resolution.modIds ?? []),
+		);
+
+		if (missing.length > 0) warn(unplacedMessage(missing, 'ender add'));
+	}
 
 	const { gained, notCompared } = await compareReplacements(installed, baselines, modsDir, scanCache);
 	const wanted = new Set(installed.map(resolution => resolution.file.filename));

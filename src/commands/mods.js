@@ -1,10 +1,14 @@
-import { mkdir, readdir } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 
 import { readConfig } from '../config';
+import { checksumText, ensureFile, pool } from '../download';
+import { readJson, writeJson } from '../json';
 import { fileIndexIssue, modLink } from '../indexIssues';
 import * as instances from '../instance';
 import { scanJar } from '../mods/capabilities';
+import { readMods } from '../mods/metadata';
 import { checkShape, explanations, knownBad, listing, providers } from '../mods/catalog';
 import { ownerName, supportOf } from '../mods/support';
 import {
@@ -116,11 +120,59 @@ export const sync = async ({ positionals, flags }) => {
 	return failures.length > 0 ? 1 : 0;
 };
 
+/**
+ * The mod ids the jars these resolve to declare, which is what answers a requirement, not what their entries are
+ * called: mr:geyser's jar is geyser-fabric. Read from the ids a sync already keeps by checksum, and otherwise from the
+ * jar, fetched to a scratch folder and kept by checksum for the sync that follows.
+ */
+export const providedBy = async (resolutions, cache = join(paths.cache, 'mod-ids.json')) => {
+	const known = await readJson(cache, {});
+	const keyOf = resolution => checksumText(resolution.file?.checksum);
+	const unread = resolutions.filter(
+		resolution => (resolution.file?.url || resolution.file?.localPath) && known[keyOf(resolution)] === undefined,
+	);
+	const read = new Map();
+
+	if (unread.length > 0) {
+		step(`Reading ${plural(unread.length, 'jar')} for the mod ids they declare`);
+
+		const scratch = await mkdtemp(join(tmpdir(), 'ender-ids-'));
+
+		try {
+			await pool(
+				unread,
+				async resolution => {
+					const path = resolution.file.localPath ?? join(scratch, basename(resolution.file.filename));
+
+					if (!resolution.file.localPath) {
+						await ensureFile({ url: resolution.file.url, path, checksum: resolution.file.checksum, size: resolution.file.size });
+					}
+
+					const ids = [...new Set((await readMods(path).catch(() => [])).map(mod => mod.id).filter(Boolean))];
+
+					read.set(resolution, ids);
+					if (keyOf(resolution) !== undefined) known[keyOf(resolution)] = ids;
+				},
+				{ concurrency: 6 },
+			);
+		} finally {
+			await rm(scratch, { recursive: true, force: true });
+		}
+
+		await writeJson(cache, known);
+	}
+
+	return resolutions.flatMap(resolution => read.get(resolution) ?? known[keyOf(resolution)] ?? []);
+};
+
 /** A mod the game would refuse to load for want of what it requires is not declared; --no-deps declares it alone. */
-export const refuseUnplaced = (resolutions, declared, flags, command) => {
+export const refuseUnplaced = async (resolutions, declared, flags, command, cache) => {
 	if (flags.deps === false) return;
 
-	const missing = unplacedOf(resolutions, declared);
+	let missing = unplacedOf(resolutions, declared);
+
+	// Only fetched when the names alone leave something unanswered, which is rare.
+	if (missing.length > 0) missing = unplacedOf(resolutions, declared, await providedBy(resolutions, cache));
 
 	if (missing.length === 0) return;
 
@@ -162,7 +214,7 @@ export const add = async ({ positionals, flags }) => {
 	// every later mod command on this instance fails on a typo nothing will show you.
 	const resolutions = await resolveAll(added, contextFor(manifest, config, flags), { withDependencies: false });
 
-	refuseUnplaced(resolutions, [...manifest.mods, ...added], flags, `ender add ${positionals.join(' ')}`);
+	await refuseUnplaced(resolutions, [...manifest.mods, ...added], flags, `ender add ${positionals.join(' ')}`);
 
 	manifest.mods.push(...added);
 
