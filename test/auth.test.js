@@ -570,7 +570,7 @@ describe("ender's own app registration", () => {
 		globalThis.fetch = async (url, options) => {
 			asked.push(new URLSearchParams(options.body).get('client_id'));
 
-			throw new Error('stop here');
+			return new Response('', { status: 400 });
 		};
 
 		try {
