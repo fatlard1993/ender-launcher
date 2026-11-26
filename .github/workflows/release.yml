@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
         with:
           bun-download-url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.0/bun-linux-x64.zip
@@ -28,11 +28,11 @@ jobs:
       - run: bun test
       # The index's pages for ender web, built from its newest code against this ender: ender-index finds ender at
       # ../ender-launcher, so this release is checked out again beside it
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           path: site/ender-launcher
           persist-credentials: false
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           repository: fatlard1993/ender-index
           path: site/ender-index
@@ -67,7 +67,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
@@ -100,7 +100,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/download-artifact@v4
         with:
           name: binaries
@@ -126,7 +126,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
         with:
           bun-download-url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.0/bun-linux-x64.zip
