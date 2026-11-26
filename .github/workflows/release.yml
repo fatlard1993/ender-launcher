@@ -50,12 +50,12 @@ jobs:
             suffix=''; [ "${target%%-*}" = windows ] && suffix='.exe'
             bun build --compile --minify --target="bun-$target" index.js --outfile "dist/ender-$target$suffix"
           done
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: binaries
           path: dist/
       - run: echo "$INDEX_COMMIT" > index-commit
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: index-commit
           path: index-commit
@@ -71,7 +71,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: binaries
           path: dist/
@@ -89,7 +89,7 @@ jobs:
               -ov -format UDZO "out/Ender-mac-$chip.dmg"
             hdiutil verify "out/Ender-mac-$chip.dmg"
           done
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: macos
           path: out/
@@ -101,7 +101,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: binaries
           path: dist/
@@ -115,7 +115,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           New-Item -ItemType Directory out | Out-Null
           Move-Item dist\Ender-Setup.exe out\Ender-Setup.exe
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows
           path: out/
@@ -130,7 +130,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-download-url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.0/bun-linux-x64.zip
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts/
       - name: gather
